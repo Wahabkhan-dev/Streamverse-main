@@ -1,0 +1,1394 @@
+// StreamVerse database schema.
+// Phase 1 only sets up the datasource, the client and the shared enums. Models arrive with their phases
+// (User/Auth in Phase 2, Content in Phase 3, ...) and each one ships with a Prisma migration.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Only two roles exist. There is no publisher, moderator or super admin.
+enum Role {
+  USER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum ContentType {
+  MOVIE
+  EBOOK
+  AUDIOBOOK
+}
+
+enum ContentStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  UNPUBLISHED
+  ARCHIVED
+  PROCESSING
+  PROCESSING_FAILED
+}
+
+enum Visibility {
+  PUBLIC
+  SUBSCRIBERS_ONLY
+  HIDDEN
+}
+
+/// One authentication strategy: a short-lived JWT access token (returned in the response body, sent as
+/// Authorization: Bearer ...) plus a rotating refresh token kept in an httpOnly cookie. Each refresh token
+/// is one row here, found by the SHA-256 hash of the raw token — the raw value is never stored.
+model User {
+  id             String     @id @default(cuid())
+  email          String     @unique
+  passwordHash   String
+  fullName       String
+  avatarUrl      String?
+  role           Role       @default(USER)
+  status         UserStatus @default(ACTIVE)
+  emailVerified  Boolean    @default(false)
+
+  country            String?
+  preferredLanguage  String?
+  subtitleLanguage   String?
+  audioLanguage      String?
+  videoQuality       String?
+  audiobookSpeed     Float?
+
+  /// Phase 7 (Section 5/6): lazily created on first billing action (`getOrCreateStripeCustomer`) — never
+  /// more than one Stripe Customer per account.
+  stripeCustomerId String? @unique
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  lastLoginAt DateTime?
+  deletedAt   DateTime?
+
+  sessions       AuthSession[]
+  passwordResets PasswordResetToken[]
+
+  /// Phase 3: content/legal/settings this account created or last touched. ADMIN-only in practice today.
+  contentCreated      Content[]
+  legalVersionsWritten LegalDocumentVersion[]
+  settingsUpdated     AppSetting[]
+  auditLogs           AuditLog[]
+
+  /// Phase 5: this account's own saved/consumption data.
+  savedContent     UserSavedContent[]
+  libraryItems     LibraryItem[]
+  movieProgress    MovieProgress[]
+  ebookProgress    EbookProgress[]
+  audiobookProgress AudiobookProgress[]
+  history          UserHistory[]
+  ebookBookmarks   EbookBookmark[]
+  notifications    Notification[]
+
+  /// Phase 6: uploads this account initiated (Section 6/49) — admin-only in practice today.
+  mediaAssetsCreated MediaAsset[] @relation("MediaAssetCreatedBy")
+
+  /// Phase 7: billing (Section 13/24/57). One Subscription row per account (Section 76 — "one current
+  /// subscription per user", updated in place across its lifecycle rather than replaced).
+  subscription      Subscription?
+  payments          Payment[]
+  refundsIssued     Refund[]        @relation("RefundIssuedBy")
+
+  /// Phase 8: proper age verification record (replaces the Phase 5 `ageVerifiedAt` placeholder).
+  ageVerification   UserAgeVerification?
+
+  devices          Device[]
+  playbackSessions PlaybackSession[]
+
+  @@index([role])
+  @@index([status])
+}
+
+/// One row per issued refresh token. Rotation revokes the row used and inserts a new one; a revoked row is
+/// kept (not deleted) so a reused, already-rotated token can be detected as theft.
+model AuthSession {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  ip         String?
+  userAgent  String?
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// One row per requested password reset. Single-use: `usedAt` is set on a successful reset and the token
+/// is rejected afterwards. Only the hash of the raw token is stored.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/* ================================================================== Phase 3: core content database
+ * One Content row per title (movie, eBook or audiobook), holding everything every later phase (homepage,
+ * collections, banners, My List, search, ...) can reference by Content.id. The type-specific tables
+ * (Movie/Ebook/Audiobook) hold only what that medium alone needs; everything shared lives on Content once.
+ */
+
+enum CrewRole {
+  DIRECTOR
+  PRODUCER
+  WRITER
+  CINEMATOGRAPHER
+  COMPOSER
+  EDITOR
+  OTHER
+}
+
+enum CaptionType {
+  SUBTITLE
+  CLOSED_CAPTION
+  SDH
+}
+
+/// For MovieCaption / MovieAudioTrack rows: whether the metadata row has a ready media file behind it yet.
+/// Deliberately smaller than MediaAssetStatus (no UPLOADED/MISSING) - those two describe the asset itself.
+enum AssetLinkStatus {
+  PENDING
+  READY
+  FAILED
+}
+
+enum DeliveryMode {
+  SINGLE_FILE
+  CHAPTER_FILES
+}
+
+enum LanguageRole {
+  PRIMARY
+  ORIGINAL
+  ADDITIONAL_AUDIO
+  TRANSLATION
+}
+
+enum TerritoryMode {
+  WORLDWIDE
+  INCLUDE
+  EXCLUDE
+}
+
+enum MediaAssetType {
+  MOVIE_MASTER
+  POSTER
+  BACKDROP
+  THUMBNAIL
+  NORMAL_BANNER
+  HERO_BANNER
+  LATEST_RELEASE_BANNER
+  MOBILE_BANNER
+  TRAILER
+  TEASER
+  CAPTION
+  AUDIO_TRACK
+  EBOOK_EPUB
+  EBOOK_PDF
+  EBOOK_SAMPLE
+  EBOOK_FRONT_COVER
+  EBOOK_BACK_COVER
+  EBOOK_SPINE
+  EBOOK_FULL_WRAP
+  AUDIOBOOK_FILE
+  AUDIOBOOK_PREVIEW
+  AUDIOBOOK_COVER
+  AUDIOBOOK_CHAPTER
+  NARRATOR_IMAGE
+}
+
+enum MediaAssetStatus {
+  PENDING
+  UPLOADING
+  UPLOADED
+  PROCESSING
+  READY
+  FAILED
+  MISSING
+  DELETED
+}
+
+enum LegalDocType {
+  PRIVACY_POLICY
+  TERMS_AND_CONDITIONS
+  REFUND_POLICY
+}
+
+enum LegalStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum CollectionStatus {
+  DRAFT
+  PUBLISHED
+  UNPUBLISHED
+  ARCHIVED
+}
+
+enum BannerType {
+  HERO
+  NORMAL
+  LATEST_RELEASE
+  PROMOTIONAL
+}
+
+enum SettingValueType {
+  BOOLEAN
+  STRING
+  NUMBER
+  JSON
+}
+
+/// The only place MOV-000001 / EBK-000001 / AUD-000001 numbers come from. One row per ContentType; the
+/// counter only ever goes up (see ContentCodeService) - a deleted title's number is never handed out again.
+model ContentSequence {
+  type      ContentType @id
+  lastValue Int         @default(0)
+}
+
+/// Shared fields for every title, of any type. Movie/Ebook/Audiobook hold only what is specific to that
+/// medium; every relationship elsewhere in the system (genres, tags, homepage, collections, banners, My
+/// List/Library/History in later phases) points at Content.id - never at a slug, and never a copy of the
+/// title/cover. Soft-deleted via `deletedAt`; the row (and its contentCode/slug) is kept, not reused.
+model Content {
+  id          String        @id @default(cuid())
+  /// MOV-000001 / EBK-000001 / AUD-000001 - permanent, never reused (see ContentSequence).
+  contentCode String        @unique
+  type        ContentType
+  title       String
+  /// Editable later (Admin), but nothing else stores a copy of it - see the slug service.
+  slug        String        @unique
+  summary     String?
+  description String?
+
+  status     ContentStatus @default(DRAFT)
+  visibility Visibility    @default(PUBLIC)
+
+  ageRating     String?
+  ageRestricted Boolean @default(false)
+  /// Required by domain validation when ageRestricted = true; ignored (should be null) when false - see
+  /// validators/contentAge.validator.ts. Not enforced as a DB CHECK constraint, so drafts can leave it unset.
+  minimumAge    Int?
+
+  territoryMode TerritoryMode @default(WORLDWIDE)
+
+  releaseDate    DateTime?
+  /// Set the moment Publish actually happens.
+  publishedAt    DateTime?
+  /// For status = SCHEDULED: when it is due to go live. Display/worker-driven; no browser timer involved.
+  publishAt      DateTime?
+  availableFrom  DateTime?
+  availableUntil DateTime?
+
+  /// Admin-curated homepage/section promotion flags. Not a recommendation engine.
+  featured   Boolean @default(false)
+  trending   Boolean @default(false)
+  popular    Boolean @default(false)
+  newRelease Boolean @default(false)
+
+  seoTitle       String?
+  seoDescription String?
+  seoKeywords    String[] @default([])
+
+  createdById String?
+  createdBy   User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  movie     Movie?
+  ebook     Ebook?
+  audiobook Audiobook?
+
+  languages   ContentLanguage[]
+  genres      ContentGenre[]
+  tags        ContentTag[]
+  warnings    ContentWarning[]
+  territories ContentTerritory[]
+  mediaAssets MediaAsset[]
+
+  homepageItems   HomepageSectionItem[]
+  collectionItems CollectionItem[]
+  linkedByBanners Banner[]
+
+  savedByUsers UserSavedContent[]
+  libraryOf    LibraryItem[]
+  historyOf    UserHistory[]
+
+  @@index([contentCode])
+  @@index([slug])
+  @@index([type])
+  @@index([status])
+  @@index([visibility])
+  @@index([publishedAt])
+  @@index([releaseDate])
+  @@index([deletedAt])
+}
+
+/// Movie-only metadata. One-to-one with Content; cascades with it (meaningless on its own).
+model Movie {
+  contentId String  @id
+  content   Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  runtimeMinutes   Int?
+  productionStudio String?
+  countryOfOrigin  String?
+  copyrightOwner   String?
+  copyrightYear    Int?
+  rightsNotes      String?
+
+  /// Phase 4: the named asset slots Admin attaches an existing MediaAsset id to (Section 56); publish
+  /// readiness checks these specific fields, not just "any asset of this type exists somewhere".
+  posterAssetId    String?     @unique
+  posterAsset      MediaAsset? @relation("MoviePoster", fields: [posterAssetId], references: [id], onDelete: SetNull)
+  backdropAssetId  String?     @unique
+  backdropAsset    MediaAsset? @relation("MovieBackdrop", fields: [backdropAssetId], references: [id], onDelete: SetNull)
+  thumbnailAssetId String?     @unique
+  thumbnailAsset   MediaAsset? @relation("MovieThumbnail", fields: [thumbnailAssetId], references: [id], onDelete: SetNull)
+  masterAssetId    String?     @unique
+  masterAsset      MediaAsset? @relation("MovieMaster", fields: [masterAssetId], references: [id], onDelete: SetNull)
+  trailerAssetId   String?     @unique
+  trailerAsset     MediaAsset? @relation("MovieTrailer", fields: [trailerAssetId], references: [id], onDelete: SetNull)
+  teaserAssetId    String?     @unique
+  teaserAsset      MediaAsset? @relation("MovieTeaser", fields: [teaserAssetId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  captions    MovieCaption[]
+  audioTracks MovieAudioTrack[]
+  cast        MovieCast[]
+  crew        MovieCrew[]
+  progress    MovieProgress[]
+}
+
+model MovieCaption {
+  id           String          @id @default(cuid())
+  movieId      String
+  movie        Movie           @relation(fields: [movieId], references: [contentId], onDelete: Cascade)
+  languageId   String
+  language     Language        @relation(fields: [languageId], references: [id], onDelete: Restrict)
+  type         CaptionType
+  mediaAssetId String?         @unique
+  mediaAsset   MediaAsset?     @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
+  status       AssetLinkStatus @default(PENDING)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@unique([movieId, languageId, type])
+  @@index([movieId])
+}
+
+model MovieAudioTrack {
+  id           String          @id @default(cuid())
+  movieId      String
+  movie        Movie           @relation(fields: [movieId], references: [contentId], onDelete: Cascade)
+  languageId   String
+  language     Language        @relation(fields: [languageId], references: [id], onDelete: Restrict)
+  mediaAssetId String?         @unique
+  mediaAsset   MediaAsset?     @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
+  status       AssetLinkStatus @default(PENDING)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@unique([movieId, languageId])
+  @@index([movieId])
+}
+
+model MovieCast {
+  id            String      @id @default(cuid())
+  movieId       String
+  movie         Movie       @relation(fields: [movieId], references: [contentId], onDelete: Cascade)
+  name          String
+  characterName String?
+  imageAssetId  String?     @unique
+  imageAsset    MediaAsset? @relation(fields: [imageAssetId], references: [id], onDelete: SetNull)
+  displayOrder  Int         @default(0)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([movieId])
+}
+
+model MovieCrew {
+  id           String   @id @default(cuid())
+  movieId      String
+  movie        Movie    @relation(fields: [movieId], references: [contentId], onDelete: Cascade)
+  name         String
+  role         CrewRole
+  displayOrder Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([movieId])
+}
+
+/// eBook-only metadata. EPUB/PDF files themselves are MediaAsset rows; Phase 3 does not require either -
+/// publish-readiness (needing at least one) is a business rule, not a database constraint (Section 32/34).
+model Ebook {
+  contentId String  @id
+  content   Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  author          String?
+  coAuthor        String?
+  editor          String?
+  publisher       String?
+  isbn            String?
+  edition         String?
+  series          String?
+  seriesNumber    Int?
+  pageCount       Int?
+  publicationDate DateTime?
+  copyrightOwner  String?
+  copyrightYear   Int?
+  rightsNotes     String?
+
+  /// Phase 4: the primary-language file set lives here; EbookEdition is for additional languages only.
+  epubAssetId      String?     @unique
+  epubAsset        MediaAsset? @relation("EbookEpub", fields: [epubAssetId], references: [id], onDelete: SetNull)
+  pdfAssetId       String?     @unique
+  pdfAsset         MediaAsset? @relation("EbookPdf", fields: [pdfAssetId], references: [id], onDelete: SetNull)
+  sampleAssetId    String?     @unique
+  sampleAsset      MediaAsset? @relation("EbookSample", fields: [sampleAssetId], references: [id], onDelete: SetNull)
+  frontCoverAssetId String?    @unique
+  frontCoverAsset  MediaAsset? @relation("EbookFrontCover", fields: [frontCoverAssetId], references: [id], onDelete: SetNull)
+  backCoverAssetId String?     @unique
+  backCoverAsset   MediaAsset? @relation("EbookBackCover", fields: [backCoverAssetId], references: [id], onDelete: SetNull)
+  spineAssetId     String?     @unique
+  spineAsset       MediaAsset? @relation("EbookSpine", fields: [spineAssetId], references: [id], onDelete: SetNull)
+  fullWrapAssetId  String?     @unique
+  fullWrapAsset    MediaAsset? @relation("EbookFullWrap", fields: [fullWrapAssetId], references: [id], onDelete: SetNull)
+  thumbnailAssetId String?     @unique
+  thumbnailAsset   MediaAsset? @relation("EbookThumbnail", fields: [thumbnailAssetId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  editions  EbookEdition[]
+  progress  EbookProgress[]
+  bookmarks EbookBookmark[]
+}
+
+model EbookEdition {
+  id              String      @id @default(cuid())
+  ebookId         String
+  ebook           Ebook       @relation(fields: [ebookId], references: [contentId], onDelete: Cascade)
+  languageId      String
+  language        Language    @relation(fields: [languageId], references: [id], onDelete: Restrict)
+  translatedTitle String
+  translator      String?
+  epubAssetId     String?     @unique
+  epubAsset       MediaAsset? @relation("EbookEditionEpub", fields: [epubAssetId], references: [id], onDelete: SetNull)
+  pdfAssetId      String?     @unique
+  pdfAsset        MediaAsset? @relation("EbookEditionPdf", fields: [pdfAssetId], references: [id], onDelete: SetNull)
+  coverAssetId    String?     @unique
+  coverAsset      MediaAsset? @relation("EbookEditionCover", fields: [coverAssetId], references: [id], onDelete: SetNull)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@unique([ebookId, languageId])
+  @@index([ebookId])
+}
+
+/// Audiobook-only metadata. `durationSeconds` stays null until real media exists - never a guessed value.
+model Audiobook {
+  contentId String  @id
+  content   Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  author          String?
+  narrator        String?
+  publisher       String?
+  isbn            String?
+  series          String?
+  seriesNumber    Int?
+  releaseDate     DateTime?
+  durationSeconds Int?
+  deliveryMode    DeliveryMode @default(SINGLE_FILE)
+  copyrightOwner  String?
+  copyrightYear   Int?
+  rightsNotes     String?
+
+  /// Phase 4: used when deliveryMode = SINGLE_FILE (mainAsset); chapter audio lives on AudiobookChapter instead.
+  mainAssetId      String?     @unique
+  mainAsset        MediaAsset? @relation("AudiobookMain", fields: [mainAssetId], references: [id], onDelete: SetNull)
+  previewAssetId   String?     @unique
+  previewAsset     MediaAsset? @relation("AudiobookPreview", fields: [previewAssetId], references: [id], onDelete: SetNull)
+  coverAssetId     String?     @unique
+  coverAsset       MediaAsset? @relation("AudiobookCover", fields: [coverAssetId], references: [id], onDelete: SetNull)
+  thumbnailAssetId String?     @unique
+  thumbnailAsset   MediaAsset? @relation("AudiobookThumbnail", fields: [thumbnailAssetId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  editions AudiobookEdition[]
+  chapters AudiobookChapter[]
+  progress AudiobookProgress[]
+}
+
+model AudiobookEdition {
+  id                   String      @id @default(cuid())
+  audiobookId          String
+  audiobook            Audiobook   @relation(fields: [audiobookId], references: [contentId], onDelete: Cascade)
+  languageId           String
+  language             Language    @relation(fields: [languageId], references: [id], onDelete: Restrict)
+  narrator             String
+  narratorBio          String?
+  narratorImageAssetId String?     @unique
+  narratorImageAsset   MediaAsset? @relation("AudiobookEditionNarratorImage", fields: [narratorImageAssetId], references: [id], onDelete: SetNull)
+  audioAssetId         String?     @unique
+  audioAsset           MediaAsset? @relation("AudiobookEditionAudio", fields: [audioAssetId], references: [id], onDelete: SetNull)
+  durationSeconds      Int?
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  @@unique([audiobookId, languageId])
+  @@index([audiobookId])
+}
+
+model AudiobookChapter {
+  id               String      @id @default(cuid())
+  audiobookId      String
+  audiobook        Audiobook   @relation(fields: [audiobookId], references: [contentId], onDelete: Cascade)
+  chapterNumber    Int
+  title            String
+  audioAssetId     String?     @unique
+  audioAsset       MediaAsset? @relation(fields: [audioAssetId], references: [id], onDelete: SetNull)
+  durationSeconds  Int?
+  startTimeSeconds Int?
+  endTimeSeconds   Int?
+  displayOrder     Int         @default(0)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  progressEntries AudiobookProgress[]
+
+  @@unique([audiobookId, chapterNumber])
+  @@index([audiobookId])
+}
+
+/// One row per spoken/written language, referenced by id everywhere - never a free-text "English, Spanish".
+model Language {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  contentLinks       ContentLanguage[]
+  movieCaptions      MovieCaption[]
+  movieAudioTracks   MovieAudioTrack[]
+  ebookEditions      EbookEdition[]
+  audiobookEditions  AudiobookEdition[]
+  mediaAssets        MediaAsset[]
+
+  @@index([code])
+}
+
+model ContentLanguage {
+  id         String       @id @default(cuid())
+  contentId  String
+  content    Content      @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  languageId String
+  language   Language     @relation(fields: [languageId], references: [id], onDelete: Restrict)
+  role       LanguageRole
+
+  @@unique([contentId, languageId, role])
+  @@index([contentId])
+  @@index([languageId])
+}
+
+/// Admin-managed taxonomy. Renaming `name` never breaks a relationship - joins are by `id`.
+model Genre {
+  id          String       @id @default(cuid())
+  name        String
+  slug        String       @unique
+  description String?
+  contentType ContentType?
+  active      Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  content ContentGenre[]
+
+  @@index([slug])
+}
+
+model ContentGenre {
+  contentId String
+  content   Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  genreId   String
+  genre     Genre   @relation(fields: [genreId], references: [id], onDelete: Restrict)
+
+  @@id([contentId, genreId])
+  @@index([genreId])
+}
+
+/// Free-form, admin/search-facing labels. `slug` is the normalized, case-insensitive identity.
+model Tag {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  content ContentTag[]
+
+  @@index([slug])
+}
+
+model ContentTag {
+  contentId String
+  content   Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  tagId     String
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Restrict)
+
+  @@id([contentId, tagId])
+  @@index([tagId])
+}
+
+/// Seeded, fixed vocabulary (VIOLENCE, STRONG_LANGUAGE, ...) rather than free text, so the frontend can
+/// render consistent labels/icons.
+model ContentWarningType {
+  id    String @id @default(cuid())
+  key   String @unique
+  label String
+
+  content ContentWarning[]
+}
+
+model ContentWarning {
+  contentId     String
+  content       Content            @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  warningTypeId String
+  warningType   ContentWarningType @relation(fields: [warningTypeId], references: [id], onDelete: Restrict)
+  notes         String?
+
+  @@id([contentId, warningTypeId])
+  @@index([warningTypeId])
+}
+
+/// Only meaningful when Content.territoryMode is INCLUDE or EXCLUDE. ISO 3166-1 alpha-2, uppercase.
+model ContentTerritory {
+  contentId   String
+  content     Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  countryCode String
+
+  @@id([contentId, countryCode])
+}
+
+/// Metadata for a stored file. Phase 3 has no storage integration yet - `storageKey` stays null until
+/// Phase 6 uploads one. Identity is `storageKey`, never a public URL: URLs (signed or otherwise) are
+/// generated on demand later, never persisted as the asset's primary identity (Section 26).
+model MediaAsset {
+  id               String           @id @default(cuid())
+  contentId        String?
+  content          Content?         @relation(fields: [contentId], references: [id], onDelete: SetNull)
+  type             MediaAssetType
+  storageKey       String?          @unique
+  originalFileName String?
+  mimeType         String?
+  sizeBytes        Int?
+  width            Int?
+  height           Int?
+  durationSeconds  Int?
+  checksum         String?
+  status           MediaAssetStatus @default(PENDING)
+  processingError  String?
+
+  /// Phase 6: who created this upload (Section 6/75) — nullable so the row survives if the account is removed.
+  createdById String?
+  createdBy   User?   @relation("MediaAssetCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  /// Phase 6: a processed rendition (e.g. one HLS variant) points back at the master it was generated
+  /// from; `variant` names which one ("720p", "HLS_MASTER_PLAYLIST", ...). The master's own row has
+  /// `sourceAssetId = null`. Not every asset has renditions — only MOVIE_MASTER does.
+  sourceAssetId String?
+  sourceAsset   MediaAsset?  @relation("MediaAssetRenditions", fields: [sourceAssetId], references: [id], onDelete: Cascade)
+  renditions    MediaAsset[] @relation("MediaAssetRenditions")
+  variant       String?
+  bitrate       Int?
+  resolution    String?
+  codec         String?
+
+  /// Phase 6: per-language renditions (e.g. an audio-track rendition) — optional, only set when relevant.
+  languageId String?
+  language   Language? @relation(fields: [languageId], references: [id], onDelete: SetNull)
+
+  /// Phase 6: the storage key of the HLS master playlist once video processing finishes (Section 25/26) —
+  /// lives on the MASTER asset's own row so playback lookup never has to walk its renditions first.
+  hlsManifestKey String?
+  /// Phase 6: extra probe/processing output that doesn't warrant its own column (frame rate, audio
+  /// stream list, channels, sample rate, ...) — Section 23/30. Never used for anything access-control
+  /// related; those fields are always first-class columns.
+  metadata Json?
+
+  /// Phase 6 (Section 50): when a still-PENDING/UPLOADING presigned upload expires, or a replaced asset's
+  /// cleanup grace period ends — read by the cleanup job, never by access-control logic.
+  expiresAt DateTime?
+  deletedAt DateTime?
+  /// Last time this asset was checked by the reconciliation job; null = never checked. Used as a cursor
+  /// so repeated runs advance past already-inspected rows instead of re-checking the same batch.
+  checkedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  multipartUpload MultipartUpload?
+
+  movieCaptionFor           MovieCaption?     @relation
+  movieAudioTrackFor        MovieAudioTrack?  @relation
+  movieCastImageFor         MovieCast?        @relation
+  ebookEpubFor              EbookEdition?     @relation("EbookEditionEpub")
+  ebookPdfFor               EbookEdition?     @relation("EbookEditionPdf")
+  ebookCoverFor             EbookEdition?     @relation("EbookEditionCover")
+  audiobookNarratorImageFor AudiobookEdition? @relation("AudiobookEditionNarratorImage")
+  audiobookAudioFor         AudiobookEdition? @relation("AudiobookEditionAudio")
+  audiobookChapterFor       AudiobookChapter? @relation
+  collectionBannerFor       Collection?       @relation
+  bannerDesktopFor          Banner?           @relation("BannerDesktop")
+  bannerMobileFor           Banner?           @relation("BannerMobile")
+
+  moviePosterFor    Movie? @relation("MoviePoster")
+  movieBackdropFor  Movie? @relation("MovieBackdrop")
+  movieThumbnailFor Movie? @relation("MovieThumbnail")
+  movieMasterFor    Movie? @relation("MovieMaster")
+  movieTrailerFor   Movie? @relation("MovieTrailer")
+  movieTeaserFor    Movie? @relation("MovieTeaser")
+
+  ebookPrimaryEpubFor  Ebook? @relation("EbookEpub")
+  ebookPrimaryPdfFor   Ebook? @relation("EbookPdf")
+  ebookSampleFor       Ebook? @relation("EbookSample")
+  ebookFrontCoverFor   Ebook? @relation("EbookFrontCover")
+  ebookBackCoverFor    Ebook? @relation("EbookBackCover")
+  ebookSpineFor        Ebook? @relation("EbookSpine")
+  ebookFullWrapFor     Ebook? @relation("EbookFullWrap")
+  ebookThumbnailFor    Ebook? @relation("EbookThumbnail")
+
+  audiobookMainFor      Audiobook? @relation("AudiobookMain")
+  audiobookPreviewFor   Audiobook? @relation("AudiobookPreview")
+  audiobookCoverFor     Audiobook? @relation("AudiobookCover")
+  audiobookThumbnailFor Audiobook? @relation("AudiobookThumbnail")
+
+  @@index([contentId])
+  @@index([type])
+  @@index([status])
+  @@index([sourceAssetId])
+  @@index([expiresAt])
+}
+
+/// Phase 6 (Section 47/48/49): tracks one in-progress S3-compatible multipart upload per MediaAsset.
+/// `providerUploadId` is the storage provider's own multipart upload id (opaque); `parts` is the list of
+/// {partNumber, etag} the client collected from each signed PUT, sent back on complete — the server never
+/// sees the part bytes themselves (Section 58: no giant file ever flows through Node).
+model MultipartUpload {
+  id                String    @id @default(cuid())
+  assetId           String    @unique
+  asset             MediaAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  providerUploadId  String
+  parts             Json?
+  expiresAt         DateTime
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+/* ---------------------------------------------------------------------- legal documents */
+
+/// One row per document TYPE. The published and draft text live in separate LegalDocumentVersion rows, so
+/// editing a draft never changes what currentPublishedVersion points to until an explicit publish.
+model LegalDocument {
+  id                        String                @id @default(cuid())
+  type                      LegalDocType          @unique
+  title                     String
+  slug                      String                @unique
+  currentPublishedVersionId String?               @unique
+  currentPublishedVersion   LegalDocumentVersion? @relation("PublishedVersion", fields: [currentPublishedVersionId], references: [id], onDelete: SetNull)
+  currentDraftVersionId     String?               @unique
+  currentDraftVersion       LegalDocumentVersion? @relation("DraftVersion", fields: [currentDraftVersionId], references: [id], onDelete: SetNull)
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
+
+  versions LegalDocumentVersion[] @relation("VersionsOfDocument")
+
+  @@index([type])
+}
+
+model LegalDocumentVersion {
+  id              String        @id @default(cuid())
+  legalDocumentId String
+  legalDocument   LegalDocument @relation("VersionsOfDocument", fields: [legalDocumentId], references: [id], onDelete: Cascade)
+  version         String
+  title           String
+  content         String
+  seoTitle        String?
+  seoDescription  String?
+  effectiveAt     DateTime?
+  status          LegalStatus   @default(DRAFT)
+  createdById     String?
+  createdBy       User?         @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt       DateTime      @default(now())
+  publishedAt     DateTime?
+
+  publishedByDoc LegalDocument? @relation("PublishedVersion")
+  draftByDoc     LegalDocument? @relation("DraftVersion")
+
+  @@index([legalDocumentId])
+  @@index([status])
+}
+
+/* ---------------------------------------------------------------------- settings */
+
+/// One row per known key, not one column per setting. `value` is stored as text; `type` says how to parse it.
+model AppSetting {
+  key         String           @id
+  value       String
+  type        SettingValueType
+  updatedById String?
+  updatedBy   User?            @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt   DateTime         @updatedAt
+}
+
+/* ---------------------------------------------------------------------- homepage / collections / banners
+ * Foundation only (Section 38): models exist so later relationships are correct from day one, but no
+ * admin CRUD/API is built for them until Phase 4. Every reference below is Content.id - never a copied
+ * title, slug or cover.
+ */
+
+model HomepageSection {
+  id           String   @id @default(cuid())
+  /// Never changes; only displayTitle does. Renaming the section can't break anything that points at it.
+  key          String   @unique
+  displayTitle String
+  enabled      Boolean  @default(true)
+  displayOrder Int      @default(0)
+  itemLimit    Int      @default(12)
+  type         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  items HomepageSectionItem[]
+}
+
+model HomepageSectionItem {
+  id           String          @id @default(cuid())
+  sectionId    String
+  section      HomepageSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  contentId    String
+  content      Content         @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  displayOrder Int             @default(0)
+
+  @@unique([sectionId, contentId])
+  @@index([contentId])
+}
+
+model Collection {
+  id            String           @id @default(cuid())
+  name          String
+  slug          String           @unique
+  description   String?
+  bannerAssetId String?          @unique
+  bannerAsset   MediaAsset?      @relation(fields: [bannerAssetId], references: [id], onDelete: SetNull)
+  status        CollectionStatus @default(DRAFT)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  items CollectionItem[]
+
+  @@index([slug])
+  @@index([status])
+}
+
+model CollectionItem {
+  id           String     @id @default(cuid())
+  collectionId String
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  contentId    String
+  content      Content    @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  displayOrder Int        @default(0)
+
+  @@unique([collectionId, contentId])
+  @@index([contentId])
+}
+
+model Banner {
+  id              String      @id @default(cuid())
+  type            BannerType
+  title           String
+  description     String?
+  desktopAssetId  String?     @unique
+  desktopAsset    MediaAsset? @relation("BannerDesktop", fields: [desktopAssetId], references: [id], onDelete: SetNull)
+  mobileAssetId   String?     @unique
+  mobileAsset     MediaAsset? @relation("BannerMobile", fields: [mobileAssetId], references: [id], onDelete: SetNull)
+  linkedContentId String?
+  linkedContent   Content?    @relation(fields: [linkedContentId], references: [id], onDelete: SetNull)
+  buttonText      String?
+  priority        Int         @default(1)
+  startsAt        DateTime?
+  endsAt          DateTime?
+  active          Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([linkedContentId])
+  @@index([active])
+}
+
+/* ================================================================== Phase 4: admin action audit log */
+
+/// One row per admin action that changes something (Section 60). Append-only — nothing in this phase
+/// ever updates or deletes a row here. `userId` is nullable so a log row survives even if the acting
+/// account is ever removed; `entityId` is a plain string (not a FK) for the same reason, and because it
+/// names rows across several different tables (Content, Genre, Collection, ...).
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  ip         String?
+  userAgent  String?
+  requestId  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+/* ================================================================== Phase 5: customer activity
+ * Everything below stores only a reference (`contentId`/`movieId`/`ebookId`/`audiobookId`) to a title —
+ * never a copy of its title, slug or cover (Section 27/31). If Admin renames or re-covers a title, every
+ * one of these automatically shows the new values, because they are read through Content at request
+ * time, not stored here.
+ */
+
+enum HistoryActivityType {
+  WATCHED
+  READ
+  LISTENED
+}
+
+enum NotificationType {
+  NEW_RELEASE
+  SUBSCRIPTION
+  RECOMMENDATION
+  ACCOUNT
+  SYSTEM
+}
+
+/// My List (Section 24): "save this for later". Deliberately separate from LibraryItem (Section 31) —
+/// different meaning, never merged just because the UI looks similar.
+model UserSavedContent {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contentId String
+  content   Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, contentId])
+  @@index([contentId])
+}
+
+/// Library (Section 29/31): content the platform considers this account to have access to / be using,
+/// as opposed to a simple "save for later" (that's UserSavedContent). `source` records why, once there is
+/// a reason to (e.g. a future "included with subscription" vs "purchased") — unused today.
+model LibraryItem {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contentId String
+  content   Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  addedAt   DateTime @default(now())
+  source    String?
+
+  @@unique([userId, contentId])
+  @@index([contentId])
+}
+
+model MovieProgress {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  movieId         String
+  movie           Movie    @relation(fields: [movieId], references: [contentId], onDelete: Cascade)
+  positionSeconds Int      @default(0)
+  durationSeconds Int?
+  percentage      Float    @default(0)
+  completed       Boolean  @default(false)
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, movieId])
+  @@index([movieId])
+}
+
+/// `location` is an EPUB CFI (or similar reader-defined position); `page` is a PDF-style page number.
+/// Section 36: these are not the same concept, and a reader may only ever populate one of them.
+model EbookProgress {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ebookId    String
+  ebook      Ebook    @relation(fields: [ebookId], references: [contentId], onDelete: Cascade)
+  location   String?
+  page       Int?
+  percentage Float    @default(0)
+  completed  Boolean  @default(false)
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, ebookId])
+  @@index([ebookId])
+}
+
+model AudiobookProgress {
+  id              String            @id @default(cuid())
+  userId          String
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  audiobookId     String
+  audiobook       Audiobook         @relation(fields: [audiobookId], references: [contentId], onDelete: Cascade)
+  chapterId       String?
+  chapter         AudiobookChapter? @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  positionSeconds Int               @default(0)
+  percentage      Float             @default(0)
+  completed       Boolean           @default(false)
+  updatedAt       DateTime          @updatedAt
+
+  @@unique([userId, audiobookId])
+  @@index([audiobookId])
+}
+
+/// One row per (user, content) — "last accessed" is updated in place, never one row per play/read tick
+/// (Section 44). `removedAt` lets a customer clear an entry from History without touching progress
+/// (Section 43) — a separate concept, not deleted outright, so re-watching naturally brings it back.
+model UserHistory {
+  id             String              @id @default(cuid())
+  userId         String
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contentId      String
+  content        Content             @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  activityType   HistoryActivityType
+  lastAccessedAt DateTime            @default(now())
+  removedAt      DateTime?
+
+  @@unique([userId, contentId])
+  @@index([contentId])
+  @@index([userId, lastAccessedAt])
+}
+
+model EbookBookmark {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ebookId   String
+  ebook     Ebook    @relation(fields: [ebookId], references: [contentId], onDelete: Cascade)
+  location  String
+  page      Int?
+  label     String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, ebookId])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  message   String
+  readAt    DateTime?
+  metadata  Json?
+  createdAt DateTime         @default(now())
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
+}
+
+/* ================================================================== Phase 7: billing (Stripe)
+ * Stripe is the source of truth for money movement; these tables are a synchronized local projection of
+ * it, kept current by webhooks (stripeWebhook.service.ts) and repairable by reconciliation
+ * (stripeReconciliation.service.ts) when a webhook is missed. Nothing here is ever trusted from the
+ * frontend — amounts/currency/price ids always come from this database or from Stripe itself.
+ */
+
+enum BillingInterval {
+  MONTHLY
+  YEARLY
+}
+
+/// Mirrors Stripe Subscription statuses (Section 14) — deliberately NOT a vague ACTIVE/INACTIVE pair, so
+/// `subscriptionAccess.service.ts` can make an explicit, auditable choice about which of these grant
+/// access instead of collapsing the distinction before it ever reaches that decision.
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  UNPAID
+  CANCELED
+  INCOMPLETE
+  INCOMPLETE_EXPIRED
+  PAUSED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum RefundStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  CANCELED
+}
+
+/// One row per sellable plan (Section 8/9). `stripePriceId` is the single source of truth the backend
+/// resolves from a frontend-supplied `planId` — Stripe Price amounts are effectively immutable, so a
+/// price change creates a NEW Stripe Price and updates `stripePriceId` here; it never mutates `priceAmount`
+/// on an existing row that payments already reference historically through Subscription/Payment rows.
+model Plan {
+  id              String           @id @default(cuid())
+  name            String
+  slug            String           @unique
+  description     String?
+  stripeProductId String?
+  stripePriceId   String           @unique
+  /// Integer minor units (Section 72) — e.g. 1999 for $19.99. Never a float.
+  priceAmount     Int
+  currency        String
+  billingInterval BillingInterval
+  trialDays       Int?
+  /// null = unlimited
+  maxDevices           Int?
+  /// null = unlimited
+  maxConcurrentStreams  Int?
+  /// null = unrestricted
+  maxVideoQuality      String?
+  /// Whether plan includes ebook access
+  ebooksEnabled        Boolean @default(false)
+  /// Whether plan includes audiobook access
+  audiobooksEnabled    Boolean @default(false)
+  /// Whether plan includes movie/video access
+  moviesEnabled        Boolean @default(true)
+  features        String[]
+  /// Deactivating (not deleting) is how a plan is retired — Section 10/114: a plan referenced by any
+  /// Subscription/Payment is never hard-deleted.
+  active          Boolean          @default(true)
+  displayOrder    Int              @default(0)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  subscriptions Subscription[]
+
+  @@index([active])
+}
+
+/// One row per user (Section 76: one current subscription per account, updated in place across its
+/// whole lifecycle — a cancel-then-resubscribe reuses this row with a new `stripeSubscriptionId` rather
+/// than creating a second one). Synchronized from Stripe by webhooks; never written from a raw frontend
+/// value.
+model Subscription {
+  id                   String             @id @default(cuid())
+  userId               String             @unique
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId               String
+  plan                 Plan               @relation(fields: [planId], references: [id])
+  stripeCustomerId     String
+  stripeSubscriptionId String             @unique
+  stripePriceId        String
+  status               SubscriptionStatus
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean            @default(false)
+  canceledAt           DateTime?
+  trialEnd             DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  payments Payment[]
+
+  @@index([status])
+  @@index([stripeCustomerId])
+}
+
+/// Created only from verified Stripe data (webhooks) — Section 25: never from a frontend "payment
+/// succeeded" claim. Immutable history once written (Section 80/114): status moves forward via webhook
+/// sync and refunds, nothing exposes a generic edit endpoint.
+model Payment {
+  id                    String    @id @default(cuid())
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscriptionId        String?
+  subscription          Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  stripePaymentIntentId String?   @unique
+  stripeInvoiceId       String?   @unique
+  stripeChargeId        String?   @unique
+  /// Integer minor units (Section 72/24) — never a float.
+  amount                Int
+  currency              String
+  status                PaymentStatus
+  description           String?
+  paidAt                DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  refunds Refund[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+/// One row per Stripe refund (full or partial) against a Payment (Section 57). Admin-initiated only.
+model Refund {
+  id               String       @id @default(cuid())
+  paymentId        String
+  payment          Payment      @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  stripeRefundId   String?      @unique
+  /// Integer minor units — never a float.
+  amount           Int
+  currency         String
+  reason           String?
+  status           RefundStatus
+  createdByAdminId String?
+  createdByAdmin   User?        @relation("RefundIssuedBy", fields: [createdByAdminId], references: [id], onDelete: SetNull)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@index([paymentId])
+}
+
+/* ================================================================== Phase 8: age verification
+ * Proper per-user age verification, replacing the Phase 5 `User.ageVerifiedAt` placeholder.
+ * `dateOfBirth` is stored securely and never returned to clients; only a computed age and verification
+ * status are exposed. `method` is "SELF_DECLARED" (user enters DOB, no third-party check) or "VERIFIED"
+ * (future: third-party identity service).
+ */
+model UserAgeVerification {
+  id          String    @id @default(cuid())
+  userId      String    @unique
+  user        User      @relation(fields: [userId], references: [id])
+  dateOfBirth DateTime?
+  verifiedAge Int?
+  /// "SELF_DECLARED" | "VERIFIED"
+  method      String    @default("SELF_DECLARED")
+  verifiedAt  DateTime  @default(now())
+  expiresAt   DateTime?
+
+  @@index([userId])
+}
+
+enum DeviceStatus {
+  ACTIVE
+  REVOKED
+}
+
+model Device {
+  id               String       @id @default(cuid())
+  userId           String
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Client-generated stable identifier (e.g. UUID stored in device localStorage)
+  deviceIdentifier String
+  deviceName       String?
+  deviceType       String?
+  platform         String?
+  status           DeviceStatus @default(ACTIVE)
+  lastSeenAt       DateTime     @default(now())
+  revokedAt        DateTime?
+  createdAt        DateTime     @default(now())
+
+  playbackSessions PlaybackSession[]
+
+  @@unique([userId, deviceIdentifier])
+  @@index([userId])
+  @@index([status])
+}
+
+enum PlaybackSessionStatus {
+  ACTIVE
+  ENDED
+  EXPIRED
+}
+
+model PlaybackSession {
+  id                String               @id @default(cuid())
+  userId            String
+  user              User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId          String?
+  device            Device?              @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  contentId         String
+  contentType       ContentType
+  status            PlaybackSessionStatus @default(ACTIVE)
+  startedAt         DateTime             @default(now())
+  lastHeartbeatAt   DateTime             @default(now())
+  endedAt           DateTime?
+
+  @@index([userId, status])
+  @@index([contentId])
+  @@index([lastHeartbeatAt])
+}
+
+/* ================================================================== Phase 9: analytics & audit */
+
+/// Lightweight event log for future analytics pipelines. Phase 9 derives metrics from Progress tables
+/// (not from this model); AnalyticsEvent is created here for forward compatibility and is written to
+/// only for SUBSCRIPTION_STARTED / SUBSCRIPTION_CANCELED from webhook handlers.
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  userId    String?
+  contentId String?
+  eventType String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([eventType])
+  @@index([contentId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+/// Webhook idempotency ledger (Section 21/63/104): `stripeEventId` is unique, so a Stripe retry of the
+/// same event is detected and never re-applies its business side effect twice.
+model StripeEvent {
+  id            String    @id @default(cuid())
+  stripeEventId String    @unique
+  type          String
+  processedAt   DateTime?
+  /// "PROCESSED" | "FAILED" | "IGNORED" (a type this backend doesn't act on, but still records receipt of)
+  status        String
+  error         String?
+  createdAt     DateTime  @default(now())
+
+  @@index([type])
+}

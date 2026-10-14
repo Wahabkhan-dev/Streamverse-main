@@ -1,0 +1,58 @@
+# Local development services. Not a production deployment file.
+# Usage: docker compose up -d
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: streamverse
+      POSTGRES_PASSWORD: dev
+      POSTGRES_DB: streamverse_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U streamverse"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://streamverse:dev@db:5432/streamverse_dev
+      NODE_ENV: development
+      PORT: 3000
+      FRONTEND_URL: http://localhost:5173
+      JWT_SECRET: dev-only-jwt-secret-not-for-production-use-0001
+      JWT_REFRESH_SECRET: dev-only-jwt-refresh-secret-not-for-production-0002
+      STRIPE_SECRET_KEY: sk_test_changeme
+      STRIPE_WEBHOOK_SECRET: whsec_changeme
+      STRIPE_SUCCESS_URL: http://localhost:5173/billing/success
+      STRIPE_CANCEL_URL: http://localhost:5173/billing/cancel
+      QUEUE_DRIVER: bullmq
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/dist
+
+volumes:
+  pgdata:

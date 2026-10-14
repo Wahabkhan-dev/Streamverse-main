@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  test:
+    name: Validate, test and build
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: streamverse_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - "5432:5432"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate Prisma schema
+        run: npx prisma validate
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Run tests
+        run: npx vitest run
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://postgres:test@localhost:5432/streamverse_test
+          FRONTEND_URL: http://localhost:5173
+          ALLOWED_ORIGINS: http://localhost:5180
+          JWT_SECRET: ci-jwt-secret-ci-jwt-secret-ci-jwt-secret-0001
+          JWT_REFRESH_SECRET: ci-jwt-refresh-secret-ci-jwt-refresh-secret-0002
+          STRIPE_SECRET_KEY: sk_test_ci_fake_key_for_tests_only_000000
+          STRIPE_WEBHOOK_SECRET: whsec_ci_fake_secret_for_tests_only
+          STRIPE_SUCCESS_URL: http://localhost:5173/billing/success
+          STRIPE_CANCEL_URL: http://localhost:5173/billing/cancel
+          STORAGE_PROVIDER: local
+          LOCAL_STORAGE_DIR: ./.data/test-media
+          QUEUE_DRIVER: inline
+
+      - name: Build
+        run: npm run build
