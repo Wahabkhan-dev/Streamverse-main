@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { AVATARS, Avatar } from "@/components/sv/TopNavbar";
 import { Btn, ConfirmDialog, Field, Panel, PanelHeader, SelectInput, TextInput, Toggle } from "@/components/sv/ui";
 import { COUNTRIES, LANGUAGES } from "@/components/sv/wizard/kit";
+import { useUpdateProfileMutation } from "@/hooks/useApiMe";
 import { DEMO_MODE } from "@/lib/demo";
 import { resetDrafts } from "@/lib/drafts";
 import { resetStore } from "@/lib/store";
@@ -37,6 +38,7 @@ function ProfileForm() {
   const [resetOpen, setResetOpen] = useState(false);
   const saved: Form = { profile, prefs };
   const dirty = !same(form, saved);
+  const updateProfileMutation = useUpdateProfileMutation();
 
   const setP = <K extends keyof Form["profile"]>(k: K, v: Form["profile"][K]) => setForm((f) => ({ ...f, profile: { ...f.profile, [k]: v } }));
   const setPref = <K extends keyof Form["prefs"]>(k: K, v: Form["prefs"][K]) => setForm((f) => ({ ...f, prefs: { ...f.prefs, [k]: v } }));
@@ -54,6 +56,12 @@ function ProfileForm() {
     }
     updateUser((s) => ({ ...s, profile: { ...form.profile, name: form.profile.name.trim(), email: form.profile.email.trim() }, prefs: form.prefs }));
     toast.success("Profile saved");
+    if (!DEMO_MODE) {
+      updateProfileMutation.mutate(
+        { name: form.profile.name.trim(), country: form.profile.country, language: form.profile.language, age: form.profile.age },
+        { onError: () => toast.error("Failed to sync profile with server") },
+      );
+    }
   };
 
   const err = (k: string) => errors[k] && <p role="alert" className="mt-1 text-[11px] font-medium text-primary-text">{errors[k]}</p>;

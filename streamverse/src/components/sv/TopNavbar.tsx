@@ -68,7 +68,7 @@ export function TopNavbar() {
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-2 md:gap-3">
-          <SearchField value={q} onChange={setQ} className="hidden w-64 focus-within:w-80 md:block xl:w-72" onSubmit={(t) => navigate({ to: "/search", search: { q: t } })} id="navbar-search" />
+          <SearchField value={q} onChange={setQ} className="hidden w-44 focus-within:w-56 md:block xl:w-64 xl:focus-within:w-80" onSubmit={(t) => navigate({ to: "/search", search: { q: t } })} id="navbar-search" />
           <Link to="/search" aria-label="Search" className="grid size-9 place-items-center rounded-md text-soft hover:bg-surface-3 hover:text-foreground md:hidden">
             <SearchIcon />
           </Link>
@@ -105,7 +105,7 @@ export function TopNavbar() {
             </PopoverContent>
           </Popover>
           {isGuest ? (
-            <div className="flex items-center gap-2">
+            <div className="hidden items-center gap-2 sm:flex">
               <Link to="/sign-in" className="rounded-md px-3.5 py-1.5 text-sm font-medium text-soft transition hover:bg-surface-3 hover:text-foreground">
                 Sign in
               </Link>
@@ -211,6 +211,16 @@ export function TopNavbar() {
               {l.label}
             </Link>
           ))}
+          {isGuest && (
+            <div className="mt-3 border-t border-border pt-3 sm:hidden">
+              <Link to="/sign-in" onClick={() => setOpen(false)} className="block rounded-md px-3 py-2.5 text-sm font-medium text-soft hover:bg-surface-3 hover:text-foreground">
+                Sign in
+              </Link>
+              <Link to="/signup" onClick={() => setOpen(false)} className="mt-1 block rounded-md bg-primary px-3 py-2.5 text-center text-sm font-semibold text-white hover:bg-primary/90">
+                Sign up
+              </Link>
+            </div>
+          )}
         </nav>
       </div>
     </header>

@@ -99,8 +99,8 @@ function Payments() {
             <tbody>
               {list.map((p) => (
                 <tr key={p.id} className={tr}>
-                  <td className={`${td} font-mono text-xs`}>{p.id}</td>
-                  <td className={td}>{p.user}</td>
+                  <td className={`${td} font-mono text-xs`}><span className="block truncate max-w-[120px]" title={p.id}>{p.id}</span></td>
+                  <td className={td}><span className="block truncate max-w-[160px]" title={p.user}>{p.user}</span></td>
                   <td className={`${td} text-soft`}>{p.plan}</td>
                   <td className={`${td} font-bold`}>${p.amount.toFixed(2)}</td>
                   <td className={`${td} text-soft`}>{p.currency}</td>

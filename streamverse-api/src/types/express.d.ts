@@ -6,6 +6,8 @@ declare module "express-serve-static-core" {
   interface Request {
     /** set by requestId middleware */
     id: string;
+    /** alias for id — set by requestId middleware; used by Sentry and observability integrations */
+    requestId: string;
     /** set by requireAuth; absent on an unauthenticated request */
     auth?: AuthContext;
     /**

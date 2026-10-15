@@ -40,10 +40,10 @@ function apiMovieToMovie(m: ApiMovie): Movie {
     cast: (m.cast ?? []).map((c) => ({ name: c.name, role: c.role })),
     cid: m.id,
     meta: m.rating ? { "Age Rating": m.rating } : {},
-    restrictions: m.restrictions ? { access: m.restrictions.access === "Subscription" ? "Subscribers Only" : m.restrictions.access } : undefined,
-    promo: m.promo,
-    createdAt: m.createdAt,
-    updatedAt: m.updatedAt,
+    ...(m.restrictions?.access ? { restrictions: { access: m.restrictions.access === "Subscription" ? "Subscribers Only" as const : m.restrictions.access === "Purchase" ? "Subscribers Only" as const : "Public" as const } } : {}),
+    ...(m.promo != null ? { promo: m.promo } : {}),
+    ...(m.createdAt != null ? { createdAt: m.createdAt } : {}),
+    ...(m.updatedAt != null ? { updatedAt: m.updatedAt } : {}),
   };
 }
 
@@ -53,12 +53,12 @@ function apiBookToBook(b: ApiBook): Book {
     slug: b.slug,
     title: b.title,
     author: b.author,
-    narrator: b.narrator,
+    ...(b.narrator != null ? { narrator: b.narrator } : {}),
     genre: b.genres[0] ?? "",
     rating: 4,
     reviews: 0,
     pages: b.pages ?? 0,
-    duration: b.duration ? `${Math.floor(b.duration / 3600)}h ${Math.floor((b.duration % 3600) / 60)}m` : undefined,
+    ...(b.duration != null ? { duration: `${Math.floor(b.duration / 3600)}h ${Math.floor((b.duration % 3600) / 60)}m` } : {}),
     year: b.year ?? new Date().getFullYear(),
     description: b.description,
     palette: FALLBACK_PALETTE,
@@ -67,10 +67,10 @@ function apiBookToBook(b: ApiBook): Book {
     isbn: "",
     count: 0,
     cid: b.id,
-    restrictions: b.restrictions ? { access: b.restrictions.access === "Subscription" ? "Subscribers Only" : b.restrictions.access } : undefined,
-    promo: b.promo,
-    createdAt: b.createdAt,
-    updatedAt: b.updatedAt,
+    ...(b.restrictions?.access ? { restrictions: { access: b.restrictions.access === "Subscription" ? "Subscribers Only" as const : b.restrictions.access === "Purchase" ? "Subscribers Only" as const : "Public" as const } } : {}),
+    ...(b.promo != null ? { promo: b.promo } : {}),
+    ...(b.createdAt != null ? { createdAt: b.createdAt } : {}),
+    ...(b.updatedAt != null ? { updatedAt: b.updatedAt } : {}),
   };
 }
 
@@ -141,7 +141,7 @@ function listConfig(type: ContentType, items: (Movie | Book)[], genres: string[]
     label: "Title",
     sort: (i) => i.title.toLowerCase(),
     cell: (i) => (
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 items-center gap-3">
         <Thumb type={type} it={i} />
         <span className="truncate font-semibold">{i.title}</span>
       </div>
@@ -492,7 +492,7 @@ function DraftChooser({ type, drafts }: { type: ContentType; drafts: DraftRec[] 
 
 /** Add and edit both use the multi-step publishing wizard for the content type. */
 export function AdminContentForm({ type, slug, draft }: { type: ContentType; slug?: string; draft?: string | undefined }) {
-  const items = useItems(type);
+  const items = useStoreItems(type);
   const drafts = useDrafts();
   const draftsReady = useDraftsHydrated();
   const navigate = useNavigate();

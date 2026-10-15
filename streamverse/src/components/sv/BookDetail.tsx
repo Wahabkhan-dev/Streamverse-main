@@ -56,10 +56,10 @@ export function BookDetail({ b, kind, related }: { b: Book; kind: "ebook" | "aud
       <div className="absolute inset-x-0 top-0 h-80 opacity-40 blur-3xl" style={{ background: `linear-gradient(180deg, ${b.palette[0]}, transparent)` }} />
       <div className="relative mx-auto max-w-[1400px] px-4 pt-10 md:px-8">
         <div className="grid gap-10 md:grid-cols-[300px_1fr]">
-          <BookCover b={b} square={!isBook} className="w-56 md:w-full" />
+          <BookCover b={b} square={!isBook} className="mx-auto w-44 sm:w-56 md:mx-0 md:w-full" />
           <div className="min-w-0">
             <span className="eyebrow text-primary-text">{isBook ? "eBook" : "Audiobook"}</span>
-            <h1 className="mt-2 text-4xl font-black tracking-tight md:text-5xl">{b.title}</h1>
+            <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl md:text-5xl">{b.title}</h1>
             {info.subtitle && <p className="mt-1 text-lg text-soft">{info.subtitle}</p>}
             <p className="mt-2 text-soft">
               by <span className="font-semibold text-foreground">{b.author}</span>

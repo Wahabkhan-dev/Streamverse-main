@@ -32,7 +32,7 @@ export function HeroBanner({ slides, autoplay = true }: { slides: HeroSlide[]; a
   const s = slides[Math.min(i, count - 1)];
   if (!s) return null;
   return (
-    <section className="relative h-[72vh] min-h-[460px] w-full overflow-hidden bg-ink md:h-[78vh] md:min-h-[520px]" aria-roledescription="carousel" aria-label="Featured">
+    <section className="relative h-[60vh] min-h-[360px] w-full overflow-hidden bg-ink sm:h-[72vh] sm:min-h-[460px] md:h-[78vh] md:min-h-[520px]" aria-roledescription="carousel" aria-label="Featured">
       {slides.map((it, idx) => (
         <picture key={it.key} className={cn("absolute inset-0 transition-opacity duration-1000", idx === i ? "opacity-100" : "opacity-0")}>
           {it.mobileImage && <source media="(max-width: 767px)" srcSet={it.mobileImage} />}
@@ -41,10 +41,10 @@ export function HeroBanner({ slides, autoplay = true }: { slides: HeroSlide[]; a
       ))}
       <div className="absolute inset-0 bg-hero-x" />
       <div className="absolute inset-0 bg-hero-y" />
-      <div className="relative mx-auto flex h-full max-w-[1600px] items-end px-4 pb-10 md:items-center md:px-8 md:pb-0">
+      <div className="relative mx-auto flex h-full max-w-[1600px] items-end px-4 pb-6 sm:pb-10 md:items-center md:px-8 md:pb-0">
         <div key={s.key} className="max-w-xl animate-in fade-in slide-in-from-bottom-4 duration-700">
           <span className="eyebrow text-primary-text">{s.eyebrow ?? "StreamVerse Original"}</span>
-          <h1 className="mt-3 text-4xl font-black tracking-tight md:text-6xl">{s.title}</h1>
+          <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-4xl md:text-6xl">{s.title}</h1>
           {s.movie && <MovieMeta m={s.movie} className="mt-4" />}
           <p className="mt-4 line-clamp-3 text-sm text-soft md:text-base">{s.description}</p>
           <div className="mt-6 flex flex-wrap gap-3">
@@ -80,7 +80,7 @@ export function HeroBanner({ slides, autoplay = true }: { slides: HeroSlide[]; a
 }
 const btnLg = (v: "primary" | "glass") =>
   cn(
-    "inline-flex h-12 items-center gap-2 rounded-md px-6 text-sm font-bold tracking-wide uppercase transition-all [&_svg]:size-4",
+    "inline-flex h-10 items-center gap-2 rounded-md px-4 text-sm font-bold tracking-wide uppercase transition-all sm:h-12 sm:px-6 [&_svg]:size-4",
     v === "primary" ? "bg-primary text-primary-foreground hover:bg-primary-hover shadow-red" : "border border-border bg-foreground/15 backdrop-blur hover:bg-foreground/25",
   );
 
@@ -153,7 +153,7 @@ export function MediaRow({ title, children, seeAll, loading, empty, variant }: {
   return (
     <section className="group/row relative" aria-label={title}>
       <div className="mb-3 flex items-end justify-between px-4 md:px-8">
-        <h2 className="text-lg font-bold tracking-tight md:text-xl">{title}</h2>
+        <h2 className="min-w-0 truncate text-lg font-bold tracking-tight md:text-xl">{title}</h2>
         {seeAll && (
           <Link to={seeAll} className="text-xs font-semibold text-muted-foreground hover:text-primary-text">
             See All

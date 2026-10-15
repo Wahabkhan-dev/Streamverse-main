@@ -130,7 +130,7 @@ export function BookReader({ b }: { b: Book }) {
 
   return (
     <main ref={box} className={cn("flex h-screen w-full flex-col overflow-hidden", T.page)}>
-      <header className={cn("flex items-center gap-1 border-b px-2 py-2 md:px-4", T.bar)}>
+      <header className={cn("flex items-center gap-1 overflow-x-auto border-b px-2 py-2 md:px-4", T.bar)}>
         <RBtn label="Close reader" onClick={() => { persist(); navigate({ to: "/ebooks/$slug", params: { slug: b.slug } }); }}>
           <ArrowLeft />
         </RBtn>
@@ -158,7 +158,7 @@ export function BookReader({ b }: { b: Book }) {
         <RBtn label="Increase font size" onClick={() => setFontSaved(font + 2)} disabled={font >= FONT_MAX}>
           <Plus />
         </RBtn>
-        <div role="radiogroup" aria-label="Reader theme" className="ml-1 flex gap-1">
+        <div role="radiogroup" aria-label="Reader theme" className="ml-1 flex shrink-0 gap-1">
           {(["dark", "sepia", "light"] as Theme[]).map((t) => (
             <button key={t} type="button" role="radio" aria-checked={theme === t} aria-label={`${t[0]!.toUpperCase()}${t.slice(1)} theme`} title={`${t[0]!.toUpperCase()}${t.slice(1)} theme`} onClick={() => setThemeSaved(t)} className={cn("size-6 rounded-full border-2", t === "dark" ? "bg-[#0b0d0f]" : t === "sepia" ? "bg-[#f4ecd8]" : "bg-white", theme === t ? "border-primary" : "border-current/30")} />
           ))}

@@ -83,7 +83,7 @@ function SignInPage() {
   }
 
   return (
-    <div className="grid min-h-screen grid-rows-[auto_1fr_auto] bg-background">
+    <div className="grid min-h-dvh grid-rows-[auto_1fr_auto] bg-background">
       {/* Header */}
       <header className="border-b border-border bg-ink px-6 py-4">
         <Link to="/"><Logo /></Link>
@@ -121,9 +121,9 @@ function SignInPage() {
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label htmlFor="password" className="block text-sm font-medium">Password</label>
-                  <button type="button" className="text-xs font-medium text-primary-text hover:underline">
+                  <Link to="/forgot-password" className="text-xs font-medium text-primary-text hover:underline">
                     Forgot password?
-                  </button>
+                  </Link>
                 </div>
                 <div className="relative">
                   <input

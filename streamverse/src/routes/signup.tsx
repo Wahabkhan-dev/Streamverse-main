@@ -8,7 +8,7 @@ export const Route = createFileRoute("/signup")({
 
 function SignupLayout() {
   return (
-    <div className="flex min-h-screen flex-col bg-background">
+    <div className="flex min-h-dvh flex-col bg-background">
       <header className="shrink-0 border-b border-border bg-ink px-6 py-4">
         <div className="mx-auto flex max-w-5xl items-center justify-between">
           <Link to="/">

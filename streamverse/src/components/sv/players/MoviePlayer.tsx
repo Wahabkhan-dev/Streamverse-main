@@ -2,6 +2,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Check, Maximize, Minimize, Pause, Play, RotateCcw, RotateCw, Settings, Volume1, Volume2, VolumeX, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { isApiError } from "@/api/client";
+import { mediaApi } from "@/api/media.api";
 import { meApi } from "@/api/me.api";
 import type { Movie } from "@/lib/data";
 import { DEMO_MODE } from "@/lib/config";
@@ -46,7 +48,13 @@ export function MoviePlayer({ m, trailer }: { m: Movie; trailer?: Trailer | unde
   const video = useRef<HTMLVideoElement>(null);
   const [failed, setFailed] = useState(false);
   const [realLen, setRealLen] = useState(0);
-  const real = !!fileUrl && !failed;
+  // Presigned URL from backend (non-demo, non-trailer only)
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [accessError, setAccessError] = useState<string | null>(null);
+  const [accessLoading, setAccessLoading] = useState(!DEMO_MODE && !trailer);
+  // In non-demo mode use presigned URL; in demo mode use admin-uploaded local file
+  const effectiveSrc = (!DEMO_MODE && !trailer) ? videoUrl : fileUrl;
+  const real = !!effectiveSrc && !failed;
   const total = real && realLen > 0 ? realLen : trailer ? TRAILER_LEN[trailer] : runtimeSeconds(m.runtime);
   const saved = trailer ? undefined : getUser().progress[refKey({ type: "Movie", slug: m.slug })];
   const [t, setT] = useState(() => (saved && !saved.completed ? Math.min(saved.seconds ?? 0, total - 5) : 0));
@@ -72,13 +80,41 @@ export function MoviePlayer({ m, trailer }: { m: Movie; trailer?: Trailer | unde
   endedRef.current = ended;
   const apiSave = useSaveProgressMutation();
 
+  // Fetch presigned streaming URL when not in demo mode and not showing a trailer
+  useEffect(() => {
+    if (DEMO_MODE || trailer) return;
+    let cancelled = false;
+    setAccessLoading(true);
+    mediaApi.getMoviePlayback(m.slug)
+      .then((res) => {
+        if (!cancelled) {
+          setVideoUrl(res.data.url);
+          setAccessLoading(false);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          const code = isApiError(err) ? err.code : undefined;
+          setAccessError(
+            code === "NO_ACTIVE_SUBSCRIPTION" ? "A subscription is required to watch this movie." :
+            code === "CONTENT_TYPE_NOT_IN_PLAN" ? "Your plan does not include movies." :
+            code === "CONCURRENT_STREAM_LIMIT_REACHED" ? "You have reached your concurrent stream limit." :
+            "Unable to load video.",
+          );
+          setAccessLoading(false);
+        }
+      });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [m.slug, trailer]);
+
   // drive the real video from the player state
   useEffect(() => {
     const v = video.current;
     if (!v || !real) return;
     if (playing && !ended) void v.play().catch(() => setPlaying(false));
     else v.pause();
-  }, [playing, ended, real, fileUrl]);
+  }, [playing, ended, real, effectiveSrc]);
   useEffect(() => {
     if (video.current) video.current.playbackRate = speed;
   }, [speed, real]);
@@ -187,6 +223,22 @@ export function MoviePlayer({ m, trailer }: { m: Movie; trailer?: Trailer | unde
   const caption = !real && subtitle !== "Off" && playing ? captionAt(subtitle, t) : "";
   const visible = show || !playing || !!panel;
 
+  // Loading / access-error states for non-demo, non-trailer playback
+  if (!DEMO_MODE && !trailer && accessLoading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-black">
+        <div className="size-8 animate-spin rounded-full border-4 border-white/20 border-t-white" aria-label="Loading" />
+      </div>
+    );
+  }
+  if (!DEMO_MODE && !trailer && accessError) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-black px-4">
+        <p className="text-center text-red-400">{accessError}</p>
+      </div>
+    );
+  }
+
   const row = (label: string, value: string, to: Panel) => (
     <button type="button" onClick={() => setPanel(to)} className="flex w-full items-center justify-between gap-6 rounded-md px-3 py-2.5 text-left text-sm hover:bg-foreground/10">
       <span>{label}</span>
@@ -213,7 +265,7 @@ export function MoviePlayer({ m, trailer }: { m: Movie; trailer?: Trailer | unde
       {real ? (
         <video
           ref={video}
-          src={fileUrl ?? undefined}
+          src={effectiveSrc ?? undefined}
           playsInline
           preload="auto"
           aria-label={`${m.title} video`}
@@ -286,10 +338,10 @@ export function MoviePlayer({ m, trailer }: { m: Movie; trailer?: Trailer | unde
           <IconBtn label={playing ? "Pause" : "Play"} onClick={() => setPlaying((p) => !p)}>
             {playing ? <Pause className="fill-current" /> : <Play className="fill-current" />}
           </IconBtn>
-          <IconBtn label="Skip back 10 seconds" onClick={() => seek(t - 10)}>
+          <IconBtn label="Skip back 10 seconds" onClick={() => seek(t - 10)} className="hidden sm:grid">
             <RotateCcw />
           </IconBtn>
-          <IconBtn label="Skip forward 10 seconds" onClick={() => seek(t + 10)}>
+          <IconBtn label="Skip forward 10 seconds" onClick={() => seek(t + 10)} className="hidden sm:grid">
             <RotateCw />
           </IconBtn>
           <div className="group/vol flex items-center">
@@ -300,7 +352,7 @@ export function MoviePlayer({ m, trailer }: { m: Movie; trailer?: Trailer | unde
               <Range value={muted ? 0 : volume} max={1} onChange={(v) => { setVolume(v); setMuted(false); }} label="Volume" valueText={`${Math.round((muted ? 0 : volume) * 100)}%`} />
             </div>
           </div>
-          <span className="ml-2 text-xs tabular-nums md:text-sm" aria-live="off">
+          <span className="ml-2 hidden sm:inline text-xs tabular-nums" aria-live="off">
             {clock(t)} / {clock(total)}
           </span>
           <div className="relative ml-auto flex items-center gap-1">

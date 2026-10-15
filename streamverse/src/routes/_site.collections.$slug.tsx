@@ -1,9 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft, Layers } from "lucide-react";
 import { ItemCard } from "@/components/sv/ItemCard";
-import { ContentUnavailable } from "@/components/sv/states";
+import { ContentUnavailable, GeneralError } from "@/components/sv/states";
 import { EmptyState } from "@/components/sv/ui";
-import { useCatalog } from "@/lib/items";
+import { useApiCollectionQuery } from "@/hooks/useApiCatalog";
+import { DEMO_MODE } from "@/lib/config";
+import { apiCollectionToItems, apiCollectionToLocal } from "@/lib/api-mappers";
+import { useCatalog, type Item } from "@/lib/items";
 import { useCollections } from "@/lib/store";
 
 export const Route = createFileRoute("/_site/collections/$slug")({
@@ -13,10 +16,21 @@ export const Route = createFileRoute("/_site/collections/$slug")({
 
 function CollectionPage() {
   const { slug } = Route.useParams();
-  const collection = useCollections().find((c) => c.slug === slug && c.status === "Published");
+  const demoCollection = useCollections().find((c) => c.slug === slug && c.status === "Published");
   const cat = useCatalog();
+  const apiQuery = useApiCollectionQuery(slug);
+
+  if (!DEMO_MODE && apiQuery.isLoading) return <div className="py-24" aria-busy="true" />;
+  if (!DEMO_MODE && apiQuery.isError) return <GeneralError />;
+
+  const collection = DEMO_MODE ? demoCollection : apiQuery.data ? apiCollectionToLocal(apiQuery.data) : undefined;
   if (!collection) return <ContentUnavailable message="This collection doesn't exist or isn't published." />;
-  const items = cat.resolveListed(collection.items);
+
+  const items: Item[] = DEMO_MODE
+    ? cat.resolveListed(collection.items)
+    : apiQuery.data
+      ? apiCollectionToItems(apiQuery.data)
+      : [];
   const movies = items.filter((i) => i.type === "Movie");
   const books = items.filter((i) => i.type !== "Movie");
 

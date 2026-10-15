@@ -130,7 +130,7 @@ export function MetricCard({ icon: Icon, label, value, trend }: { icon: React.El
         <span className={cn("inline-flex items-center gap-1 text-xs font-semibold", up ? "text-success" : "text-primary-text")}>
           {up ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />}
           {up ? "+" : ""}
-          {trend}%<span className="font-normal text-muted-foreground"> vs last month</span>
+          {trend}%<span className="hidden font-normal text-muted-foreground sm:inline"> vs last month</span>
         </span>
       </div>
       <div className="mt-4 text-2xl font-bold tracking-tight">{value}</div>

@@ -4,9 +4,13 @@ import { useState } from "react";
 import { Gated } from "@/components/sv/Gate";
 import { MediaRow, MovieCard, MovieMeta } from "@/components/sv/media";
 import { MyListButton } from "@/components/sv/SaveButtons";
+import { ContentUnavailable, GeneralError } from "@/components/sv/states";
 import { EmptyState, TabBar, Tag } from "@/components/sv/ui";
+import { useApiMovieQuery } from "@/hooks/useApiCatalog";
+import { DEMO_MODE } from "@/lib/config";
 import { findMovie, type Movie } from "@/lib/data";
 import { itemEntity, toItem, useCatalog } from "@/lib/items";
+import { apiMovieToLocal } from "@/lib/api-mappers";
 import { relatedTo } from "@/lib/related";
 import { useProgressOf } from "@/lib/user";
 
@@ -38,7 +42,19 @@ export const Route = createFileRoute("/_site/movies/$slug")({
 function MovieDetailPage() {
   const { slug } = Route.useParams();
   const cat = useCatalog();
-  const m = cat.movies.find((x) => x.slug === slug);
+  const apiQuery = useApiMovieQuery(slug);
+
+  if (!DEMO_MODE && apiQuery.isLoading) return <div className="py-24" aria-busy="true" />;
+  if (!DEMO_MODE && apiQuery.isError) return <GeneralError />;
+
+  const m: Movie | undefined = DEMO_MODE
+    ? cat.movies.find((x) => x.slug === slug)
+    : apiQuery.data
+      ? apiMovieToLocal(apiQuery.data)
+      : undefined;
+
+  if (!DEMO_MODE && !m) return <ContentUnavailable />;
+
   return <Gated item={m ? toItem("Movie", m) : undefined}>{m && <MovieDetail m={m} />}</Gated>;
 }
 
@@ -67,15 +83,15 @@ function MovieDetail({ m }: { m: Movie }) {
 
   return (
     <>
-      <section className="relative h-[70vh] min-h-[480px] overflow-hidden">
+      <section className="relative h-[60vh] min-h-[380px] overflow-hidden sm:h-[70vh] sm:min-h-[480px]">
         <img src={m.image} alt={m.title} className="absolute inset-0 size-full object-cover" />
         <div className="absolute inset-0 bg-hero-x" />
         <div className="absolute inset-0 bg-hero-y" />
         <div className="relative mx-auto flex h-full max-w-[1600px] items-end px-4 pb-14 md:px-8">
           <div className="max-w-2xl">
-            <h1 className="text-4xl font-black tracking-tight md:text-6xl">{m.title}</h1>
+            <h1 className="text-3xl font-black tracking-tight sm:text-4xl md:text-6xl">{m.title}</h1>
             <MovieMeta m={m} className="mt-4" />
-            <p className="mt-4 text-soft">{m.description}</p>
+            <p className="mt-4 line-clamp-3 text-soft md:line-clamp-none">{m.description}</p>
             {resuming && (
               <div className="mt-4 flex max-w-xs items-center gap-3 text-xs text-soft">
                 <div className="h-1 flex-1 overflow-hidden rounded-full bg-foreground/20">

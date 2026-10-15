@@ -5,9 +5,11 @@ import helmet from "helmet";
 import swaggerUi from "swagger-ui-express";
 import { buildCorsOptions } from "./config/cors";
 import { env } from "./config/env";
+import { initSentry, Sentry } from "./config/sentry";
 import { openApiDocument } from "./docs/openapi";
 import { errorHandler } from "./middleware/error.middleware";
 import { requestLogger } from "./middleware/logger.middleware";
+import { metricsMiddleware } from "./middleware/metrics.middleware";
 import { notFound } from "./middleware/notFound.middleware";
 import { generalLimiter } from "./middleware/rateLimit.middleware";
 import { requestId } from "./middleware/requestId.middleware";
@@ -20,6 +22,9 @@ import { optionalAuth } from "./middleware/auth.middleware";
 import { registerVideoWorker } from "./workers/video.worker";
 import { registerAudioWorker } from "./workers/audio.worker";
 import { registerCleanupWorker } from "./workers/cleanup.worker";
+
+// Initialize Sentry before app is created. No-op when SENTRY_DSN is absent.
+initSentry();
 
 export interface AppOptions {
   /** override the general limiter (tests) */
@@ -42,6 +47,7 @@ export function createApp(options: AppOptions = {}): Express {
   app.set("trust proxy", env.TRUST_PROXY);
 
   app.use(requestId);
+  app.use(metricsMiddleware);
   app.use(requestLogger);
 
   // API docs: own, relaxed CSP (Swagger UI needs inline scripts). Off in production unless API_DOCS_ENABLED=true.
@@ -82,6 +88,10 @@ export function createApp(options: AppOptions = {}): Express {
   app.use("/api/v1", apiV1Router);
 
   app.use(notFound);
+  // Sentry error handler must come before the app's own error handler (no-op when SENTRY_DSN is absent).
+  if (process.env["SENTRY_DSN"]) {
+    app.use(Sentry.expressErrorHandler());
+  }
   app.use(errorHandler);
   return app;
 }

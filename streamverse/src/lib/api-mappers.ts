@@ -2,9 +2,10 @@
  * Utility functions to convert API response types to the local UI types
  * used by the demo mode catalog. These are used when DEMO_MODE=false.
  */
-import type { ApiMovie, ApiBook } from "@/api/types";
-import type { Movie, Book, Status } from "@/lib/data";
+import type { ApiMovie, ApiBook, ApiCollection } from "@/api/types";
+import type { Movie, Book, Status, ItemRef } from "@/lib/data";
 import { toItem, type Item } from "@/lib/items";
+import type { Collection } from "@/lib/store";
 
 /** Convert an ApiMovie to the local Movie shape expected by UI components. */
 export function apiMovieToLocal(m: ApiMovie): Movie {
@@ -92,6 +93,51 @@ export function apiBookToLocal(b: ApiBook): Book {
       : {}),
     ...(b.duration !== undefined ? { duration: `${Math.floor(b.duration / 60)}h ${b.duration % 60}m` } : {}),
   } as Book;
+}
+
+/** Convert an ApiCollection to the local Collection shape expected by UI components. */
+export function apiCollectionToLocal(c: ApiCollection): Collection {
+  const items: ItemRef[] = c.items
+    .sort((a, b) => a.position - b.position)
+    .map((item) => {
+      const slug =
+        (item.contentType === "movie" ? item.movie?.slug : item.contentType === "ebook" ? item.ebook?.slug : item.audiobook?.slug) ?? item.contentId;
+      const id =
+        (item.contentType === "movie" ? item.movie?.id : item.contentType === "ebook" ? item.ebook?.id : item.audiobook?.id) ?? undefined;
+      const type: ItemRef["type"] =
+        item.contentType === "movie" ? "Movie" : item.contentType === "ebook" ? "eBook" : "Audiobook";
+      return id ? { type, slug, id } : { type, slug };
+    });
+  return {
+    id: c.id,
+    slug: c.slug,
+    name: c.name,
+    description: c.description,
+    cover: c.cover ?? "",
+    status: c.status,
+    items,
+  };
+}
+
+/** Convert an ApiCollection's items to Item[] directly from embedded objects (avoids catalog lookup). */
+export function apiCollectionToItems(c: ApiCollection): Item[] {
+  return c.items
+    .sort((a, b) => a.position - b.position)
+    .flatMap((item) => {
+      if (item.contentType === "movie" && item.movie) {
+        const m = apiMovieToLocal(item.movie);
+        return [{ type: "Movie" as const, slug: m.slug, m }];
+      }
+      if (item.contentType === "ebook" && item.ebook) {
+        const b = apiBookToLocal(item.ebook);
+        return [{ type: "eBook" as const, slug: b.slug, b }];
+      }
+      if (item.contentType === "audiobook" && item.audiobook) {
+        const b = apiBookToLocal(item.audiobook);
+        return [{ type: "Audiobook" as const, slug: b.slug, b }];
+      }
+      return [] as Item[];
+    });
 }
 
 /** Convert an ApiMovie to an Item (for search / my-list / etc.). */

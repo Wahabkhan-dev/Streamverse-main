@@ -52,7 +52,7 @@ function SiteLayout() {
   const role = useRole();
   if (maintenance) {
     return (
-      <div className="grid min-h-screen place-items-center bg-background px-4 text-center">
+      <div className="grid min-h-dvh place-items-center bg-background px-4 text-center">
         <div className="max-w-md">
           <Logo />
           <h1 className="mt-8 text-3xl font-bold tracking-tight">We'll be right back</h1>
@@ -67,7 +67,7 @@ function SiteLayout() {
     );
   }
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-dvh bg-background">
       <TopNavbar />
       {!online && (
         <div role="alert" className="flex items-center justify-center gap-2 bg-warning/15 px-4 py-2 text-center text-sm text-warning">

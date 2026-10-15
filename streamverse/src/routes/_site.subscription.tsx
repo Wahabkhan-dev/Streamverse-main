@@ -362,7 +362,7 @@ function SubscriptionPage() {
                   <td className="px-5 py-3">
                     <StatusBadge status={b.status} />
                   </td>
-                  <td className="px-5 py-3 font-mono text-xs text-muted-foreground">{b.id}</td>
+                  <td className="max-w-[8rem] truncate px-5 py-3 font-mono text-xs text-muted-foreground">{b.id}</td>
                 </tr>
               ))}
             </tbody>

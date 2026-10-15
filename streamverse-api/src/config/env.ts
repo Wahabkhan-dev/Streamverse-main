@@ -84,6 +84,13 @@ const schema = z
     // Phase 9: analytics cache TTL.
     /** Seconds expensive analytics queries are cached in memory. 0 = disabled. */
     ANALYTICS_CACHE_TTL_SECONDS: z.coerce.number().int().min(0).default(30),
+
+    // Email delivery.
+    EMAIL_PROVIDER: z.enum(["console", "resend"]).default("console"),
+    EMAIL_FROM: z.string().default("noreply@streamverse.com"),
+    RESEND_API_KEY: optional(z.string().min(1)),
+    /** Public URL of the frontend app, used for email links (e.g. password reset). */
+    APP_PUBLIC_URL: optional(z.url()),
   })
   .superRefine((env, ctx) => {
     if (env.STORAGE_PROVIDER !== "local") {
@@ -142,3 +149,38 @@ export type Env = ReturnType<typeof buildEnv>;
 
 /** Read once at startup. A missing or invalid value stops the process before it listens. */
 export const env: Env = buildEnv(process.env);
+
+/**
+ * Additional production gate: refuses to start if critical vars are absent.
+ * Call this at the very top of server.ts before any service is initialized.
+ * Note: DATABASE_URL, JWT_SECRET, JWT_REFRESH_SECRET, STRIPE_SECRET_KEY, and
+ * STRIPE_WEBHOOK_SECRET are already enforced by the Zod schema above (they
+ * will have caused process.exit before this function is reached if missing).
+ * This function adds REDIS_URL (not required by Zod when QUEUE_DRIVER=inline)
+ * and warning-level checks for recommended vars.
+ */
+export function validateProductionEnv(): void {
+  if (process.env["NODE_ENV"] !== "production") return;
+
+  const required = [
+    "DATABASE_URL",
+    "JWT_SECRET",
+    "JWT_REFRESH_SECRET",
+    "STRIPE_SECRET_KEY",
+    "STRIPE_WEBHOOK_SECRET",
+    "REDIS_URL",
+  ] as const;
+
+  const missing = required.filter((k) => !process.env[k]);
+  if (missing.length > 0) {
+    console.error(`[startup] FATAL: missing required production env vars: ${missing.join(", ")}`);
+    process.exit(1);
+  }
+
+  // Warn about recommended but not strictly blocking vars
+  const recommended = ["SENTRY_DSN", "EMAIL_PROVIDER", "APP_PUBLIC_URL"];
+  const missingRec = recommended.filter((k) => !process.env[k]);
+  if (missingRec.length > 0) {
+    console.warn(`[startup] WARNING: missing recommended env vars: ${missingRec.join(", ")}`);
+  }
+}

@@ -182,7 +182,7 @@ export const meApi = {
   },
 
   markNotificationRead(id: string) {
-    return api.patch<ApiResponse<ApiNotification>>(`/me/notifications/${id}/read`);
+    return api.post<ApiResponse<ApiNotification>>(`/me/notifications/${id}/read`);
   },
 
   markAllNotificationsRead() {

@@ -1,37 +1,43 @@
-// Email service — currently logs only; swap for a real provider before production.
-// Tokens are truncated in logs to prevent accidental exposure.
+// Email service — delegates to the configured email provider.
+// Provider is selected at startup via EMAIL_PROVIDER env var (default: "console").
+// Swap to "resend" in production by setting EMAIL_PROVIDER=resend and RESEND_API_KEY.
 
-export interface EmailPayload {
+import { emailProvider } from "./email/index";
+
+export async function sendPasswordReset(payload: {
   to: string;
-  subject: string;
-}
-
-export interface PasswordResetPayload extends EmailPayload {
+  subject?: string;
   resetToken: string;
   expiresInMinutes: number;
+}): Promise<void> {
+  await emailProvider.sendPasswordReset({
+    to: payload.to,
+    resetToken: payload.resetToken,
+    expiresInMinutes: payload.expiresInMinutes,
+  });
 }
 
-export interface WelcomePayload extends EmailPayload {
-  name: string;
+export async function sendWelcomeEmail(payload: {
+  to: string;
+  subject?: string;
+  name?: string;
+}): Promise<void> {
+  await emailProvider.sendWelcome({
+    to: payload.to,
+    name: payload.name ?? "there",
+  });
 }
 
-export interface BillingNotificationPayload extends EmailPayload {
-  eventType: "subscription_created" | "subscription_canceled" | "payment_failed" | "payment_succeeded";
+export async function sendBillingNotification(payload: {
+  to: string;
+  subject: string;
+  body?: string;
+  eventType?: string;
   planName?: string;
-}
-
-function safeToken(token: string): string {
-  return token.length > 8 ? `${token.slice(0, 4)}...${token.slice(-4)}` : "****";
-}
-
-export async function sendPasswordReset(payload: PasswordResetPayload): Promise<void> {
-  console.log(`[email] password-reset to=${payload.to} token=${safeToken(payload.resetToken)} expires=${payload.expiresInMinutes}m`);
-}
-
-export async function sendWelcomeEmail(payload: WelcomePayload): Promise<void> {
-  console.log(`[email] welcome to=${payload.to} name=${payload.name}`);
-}
-
-export async function sendBillingNotification(payload: BillingNotificationPayload): Promise<void> {
-  console.log(`[email] billing event=${payload.eventType} to=${payload.to} plan=${payload.planName ?? "n/a"}`);
+}): Promise<void> {
+  await emailProvider.sendBillingNotification({
+    to: payload.to,
+    subject: payload.subject,
+    body: payload.body ?? payload.subject,
+  });
 }

@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import type { ErrorRequestHandler } from "express";
 import { ERROR_CODES } from "../constants/errors";
 import { logger } from "../config/logger";
+import { Sentry } from "../config/sentry";
 import { sendError } from "../utils/apiResponse";
 import { AppError, ConflictError, NotFoundError } from "../utils/errors";
 
@@ -32,6 +33,18 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   const log = { requestId: req.id, err: appError.statusCode >= 500 ? err : undefined, statusCode: appError.statusCode, code: appError.code };
   if (appError.statusCode >= 500) logger.error(log, "request failed");
   else logger.debug(log, appError.message);
+
+  // Report 5xx errors to Sentry when enabled — never logs secrets from the request body
+  if (appError.statusCode >= 500 && process.env["SENTRY_DSN"]) {
+    Sentry.withScope((scope) => {
+      scope.setTag("requestId", req.id);
+      scope.setTag("route", req.path);
+      scope.setTag("method", req.method);
+      scope.setTag("statusCode", String(appError.statusCode));
+      if (req.auth?.userId) scope.setUser({ id: req.auth.userId });
+      Sentry.captureException(err);
+    });
+  }
 
   if (res.headersSent) return;
   sendError(res, appError.statusCode, appError.message, appError.errors, { code: appError.code, requestId: req.id });

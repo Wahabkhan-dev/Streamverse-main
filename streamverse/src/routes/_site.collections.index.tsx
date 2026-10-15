@@ -1,7 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Layers } from "lucide-react";
 import { CollectionCard } from "@/components/sv/media";
+import { GeneralError } from "@/components/sv/states";
 import { EmptyState } from "@/components/sv/ui";
+import { useApiCollectionsQuery } from "@/hooks/useApiCatalog";
+import { DEMO_MODE } from "@/lib/config";
+import { apiCollectionToLocal } from "@/lib/api-mappers";
 import { useCollections } from "@/lib/store";
 
 export const Route = createFileRoute("/_site/collections/")({
@@ -10,7 +14,16 @@ export const Route = createFileRoute("/_site/collections/")({
 });
 
 function CollectionsPage() {
-  const collections = useCollections().filter((c) => c.status === "Published");
+  const demoCollections = useCollections().filter((c) => c.status === "Published");
+  const apiQuery = useApiCollectionsQuery();
+
+  if (!DEMO_MODE && apiQuery.isLoading) return <div className="py-24" aria-busy="true" />;
+  if (!DEMO_MODE && apiQuery.isError) return <GeneralError />;
+
+  const collections = DEMO_MODE
+    ? demoCollections
+    : (apiQuery.data ?? []).map(apiCollectionToLocal);
+
   return (
     <div className="mx-auto max-w-[1600px] px-4 pt-8 md:px-8">
       <h1 className="text-3xl font-bold tracking-tight">Collections</h1>

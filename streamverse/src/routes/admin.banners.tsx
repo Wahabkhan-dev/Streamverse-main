@@ -74,7 +74,7 @@ function apiBannerToBanner(b: ApiBanner): Banner {
     description: b.description,
     buttonText: b.buttonText,
     linkKind: b.linkKind as LinkKind,
-    linkId: b.linkId,
+    ...(b.linkId != null ? { linkId: b.linkId } : {}),
     linkSlug: b.linkSlug ?? "",
     image: b.image,
     mobileImage: b.mobileImage,
@@ -155,7 +155,7 @@ function Banners() {
       setEdit(null);
       toast.success("Banner saved");
     } else {
-      const apiData = { type: saved.type, title: saved.title, description: saved.description, buttonText: saved.buttonText, linkKind: saved.linkKind, linkId: saved.linkId, linkSlug: saved.linkSlug, image: saved.image, mobileImage: saved.mobileImage, priority: saved.priority, start: saved.start, end: saved.end, active: saved.active };
+      const apiData = { type: saved.type, title: saved.title, description: saved.description, buttonText: saved.buttonText, linkKind: saved.linkKind, ...(saved.linkId != null ? { linkId: saved.linkId } : {}), linkSlug: saved.linkSlug, image: saved.image, mobileImage: saved.mobileImage, priority: saved.priority, start: saved.start, end: saved.end, active: saved.active };
       if (edit) {
         apiMutation.update.mutate({ id: edit, data: apiData }, { onSuccess: () => { setEdit(null); toast.success("Banner saved"); } });
       } else {

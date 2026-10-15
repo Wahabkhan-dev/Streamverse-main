@@ -1,9 +1,12 @@
 import type { Server } from "node:http";
 import { createApp } from "./app";
 import { disconnectDatabase } from "./config/database";
-import { env } from "./config/env";
+import { env, validateProductionEnv } from "./config/env";
 import { onShutdown, runShutdownHooks } from "./config/lifecycle";
 import { logger } from "./config/logger";
+
+// Refuse to start in production if critical environment variables are absent.
+validateProductionEnv();
 
 const app = createApp();
 const server: Server = app.listen(env.PORT, () => {

@@ -2,6 +2,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Check, Moon, Pause, Play, RotateCcw, RotateCw, SkipBack, SkipForward, Volume1, Volume2, VolumeX } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { isApiError } from "@/api/client";
+import { mediaApi } from "@/api/media.api";
 import { meApi } from "@/api/me.api";
 import type { Book } from "@/lib/data";
 import { DEMO_MODE } from "@/lib/config";
@@ -29,7 +31,16 @@ export function AudiobookPlayer({ b, startChapter }: { b: Book; startChapter?: n
   const prefs = usePrefs();
   const chapters = chaptersOf(b);
   const starts = chapterStarts(chapters);
-  const total = totalSecondsOf(chapters);
+  // Presigned audio URL (non-demo)
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [audioFailed, setAudioFailed] = useState(false);
+  const [audioError, setAudioError] = useState<string | null>(null);
+  const [audioLoading, setAudioLoading] = useState(!DEMO_MODE);
+  const [realAudioLen, setRealAudioLen] = useState(0);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const realAudio = !DEMO_MODE && !!audioUrl && !audioFailed;
+  // Use real audio duration when available; fall back to calculated from chapter metadata
+  const total = realAudio && realAudioLen > 0 ? realAudioLen : totalSecondsOf(chapters);
   const saved = getUser().progress[refKey({ type: "Audiobook", slug: b.slug })];
 
   const [pos, setPos] = useState(() => {
@@ -73,22 +84,25 @@ export function AudiobookPlayer({ b, startChapter }: { b: Book; startChapter?: n
   }, [apiSave, b.slug]);
 
   useBeat(playing && !finished, 250, (dt) => {
-    setPos((p) => {
-      const nextPos = Math.min(total, p + dt * speed);
-      // "end of chapter" sleep stops exactly at the boundary
-      if (sleep === "chapter") {
-        const endOfChapter = starts[locate(chapters, p).chapter]! + chapters[locate(chapters, p).chapter]!.seconds;
-        if (nextPos >= endOfChapter) {
-          window.setTimeout(() => {
-            setPlaying(false);
-            setSleep("off");
-            toast("Sleep timer: paused at the end of the chapter");
-          }, 0);
-          return endOfChapter;
+    // In real-audio mode the <audio> element drives pos via onTimeUpdate; skip simulated advance
+    if (!realAudio) {
+      setPos((p) => {
+        const nextPos = Math.min(total, p + dt * speed);
+        // "end of chapter" sleep stops exactly at the boundary
+        if (sleep === "chapter") {
+          const endOfChapter = starts[locate(chapters, p).chapter]! + chapters[locate(chapters, p).chapter]!.seconds;
+          if (nextPos >= endOfChapter) {
+            window.setTimeout(() => {
+              setPlaying(false);
+              setSleep("off");
+              toast("Sleep timer: paused at the end of the chapter");
+            }, 0);
+            return endOfChapter;
+          }
         }
-      }
-      return nextPos;
-    });
+        return nextPos;
+      });
+    }
     if (sleep !== "chapter" && sleep !== "off") {
       setSleepLeft((l) => {
         const left = l - dt;
@@ -134,7 +148,60 @@ export function AudiobookPlayer({ b, startChapter }: { b: Book; startChapter?: n
     }
   }, [persist, b.slug]);
 
-  const seek = (v: number) => setPos(Math.max(0, Math.min(total, v)));
+  // Fetch presigned audio URL when not in demo mode
+  useEffect(() => {
+    if (DEMO_MODE) return;
+    let cancelled = false;
+    setAudioLoading(true);
+    mediaApi.getAudiobookPlayback(b.slug)
+      .then((res) => {
+        if (!cancelled) {
+          setAudioUrl(res.data.url);
+          setAudioLoading(false);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          const code = isApiError(err) ? err.code : undefined;
+          setAudioError(
+            code === "NO_ACTIVE_SUBSCRIPTION" ? "A subscription is required to listen to this audiobook." :
+            code === "CONTENT_TYPE_NOT_IN_PLAN" ? "Your plan does not include audiobooks." :
+            code === "CONCURRENT_STREAM_LIMIT_REACHED" ? "You have reached your concurrent stream limit." :
+            "Unable to load audio.",
+          );
+          setAudioLoading(false);
+        }
+      });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [b.slug]);
+
+  // Sync audio element play/pause to player state
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a || !realAudio) return;
+    if (playing && !finished) void a.play().catch(() => setPlaying(false));
+    else a.pause();
+  }, [playing, finished, realAudio, audioUrl]);
+
+  // Sync playback speed to audio element
+  useEffect(() => {
+    if (audioRef.current && realAudio) audioRef.current.playbackRate = speed;
+  }, [speed, realAudio]);
+
+  // Sync volume / mute to audio element
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a || !realAudio) return;
+    a.volume = volume;
+    a.muted = muted;
+  }, [volume, muted, realAudio]);
+
+  const seek = (v: number) => {
+    const clamped = Math.max(0, Math.min(total, v));
+    if (realAudio && audioRef.current) audioRef.current.currentTime = clamped;
+    setPos(clamped);
+  };
   const jumpChapter = (i: number) => {
     seek(starts[Math.max(0, Math.min(chapters.length - 1, i))]!);
   };
@@ -158,8 +225,42 @@ export function AudiobookPlayer({ b, startChapter }: { b: Book; startChapter?: n
 
   const VolIcon = muted || volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2;
 
+  // Loading / access-error states for non-demo playback
+  if (!DEMO_MODE && audioLoading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <div className="size-8 animate-spin rounded-full border-4 border-border border-t-primary" aria-label="Loading" />
+      </div>
+    );
+  }
+  if (!DEMO_MODE && audioError) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center px-4">
+        <p className="text-center text-red-400">{audioError}</p>
+      </div>
+    );
+  }
+
   return (
     <main className="relative min-h-screen bg-background text-foreground">
+      {/* Hidden audio element for real playback in non-demo mode */}
+      {realAudio && (
+        <audio
+          ref={audioRef}
+          src={audioUrl ?? undefined}
+          preload="auto"
+          aria-hidden="true"
+          className="hidden"
+          onLoadedMetadata={(e) => {
+            const a = e.currentTarget;
+            if (isFinite(a.duration)) setRealAudioLen(a.duration);
+            if (posRef.current > 0 && posRef.current < a.duration - 1) a.currentTime = posRef.current;
+          }}
+          onTimeUpdate={(e) => setPos(e.currentTarget.currentTime)}
+          onEnded={() => setPos(total)}
+          onError={() => setAudioFailed(true)}
+        />
+      )}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-96 opacity-40 blur-3xl" style={{ background: `linear-gradient(180deg, ${b.palette[0]}, transparent)` }} />
       <div className="relative mx-auto max-w-6xl px-4 py-6 md:px-8">
         <button type="button" onClick={() => { persist(); navigate({ to: "/audiobooks/$slug", params: { slug: b.slug } }); }} className="inline-flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-semibold text-soft hover:text-foreground">

@@ -1,3 +1,4 @@
+import DOMPurify from "dompurify";
 import { createPersistedStore } from "./persisted";
 import { privacyPolicy, refundPolicy, termsAndConditions, type LegalBlock, type LegalDoc } from "./legal-content";
 
@@ -48,44 +49,14 @@ export const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, 
 const blockHtml = (b: LegalBlock) => (typeof b === "string" ? `<p>${escapeHtml(b)}</p>` : `<ul>${b.list.map((i) => `<li>${escapeHtml(i)}</li>`).join("")}</ul>`);
 export const docToHtml = (d: LegalDoc) => d.sections.map((s) => `<h2>${escapeHtml(s.heading)}</h2>${s.blocks.map(blockHtml).join("")}`).join("");
 
-const ALLOWED = new Set(["H2", "H3", "P", "BR", "STRONG", "B", "EM", "I", "U", "UL", "OL", "LI", "A", "BLOCKQUOTE", "TABLE", "THEAD", "TBODY", "TR", "TH", "TD"]);
-const DROP = new Set(["SCRIPT", "STYLE", "IFRAME", "OBJECT", "EMBED", "FORM", "INPUT", "BUTTON", "SVG", "IMG", "LINK", "META"]);
-
-/** Keeps a small set of formatting tags and safe links. Needs a DOM, so it only runs in the browser. */
+/** Sanitizes HTML using DOMPurify. Removes scripts, iframes, forms and dangerous attributes. */
 export function sanitizeHtml(html: string): string {
-  if (typeof DOMParser === "undefined") return html;
-  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
-  const clean = (node: Node): void => {
-    for (const child of [...node.childNodes]) {
-      if (child.nodeType === 3) continue;
-      if (child.nodeType !== 1) {
-        child.remove();
-        continue;
-      }
-      const el = child as Element;
-      if (DROP.has(el.tagName.toUpperCase())) {
-        el.remove();
-        continue;
-      }
-      clean(el);
-      if (!ALLOWED.has(el.tagName)) {
-        el.replaceWith(...el.childNodes);
-        continue;
-      }
-      for (const a of [...el.attributes]) {
-        const keep = el.tagName === "A" && (a.name === "href" || a.name === "target" || a.name === "rel");
-        if (!keep) el.removeAttribute(a.name);
-      }
-      if (el.tagName === "A") {
-        const href = el.getAttribute("href") ?? "";
-        if (!/^(https?:|mailto:|\/|#)/i.test(href)) el.removeAttribute("href");
-        if (el.getAttribute("target") === "_blank") el.setAttribute("rel", "noopener noreferrer");
-        else el.removeAttribute("target");
-      }
-    }
-  };
-  clean(doc.body);
-  return doc.body.innerHTML;
+  if (typeof window === "undefined") return html;
+  return DOMPurify.sanitize(html, {
+    USE_PROFILES: { html: true },
+    FORBID_TAGS: ["script", "iframe", "form", "object", "embed", "input", "button", "svg", "img", "link", "meta"],
+    FORBID_ATTR: ["onerror", "onclick", "onload", "onmouseover", "onfocus", "onblur", "onchange", "onsubmit"],
+  });
 }
 
 export const slugifyHeading = (t: string) =>

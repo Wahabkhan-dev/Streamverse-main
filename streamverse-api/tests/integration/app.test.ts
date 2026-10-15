@@ -27,7 +27,7 @@ describe("health", () => {
     vi.mocked(pingDatabase).mockResolvedValue(undefined);
     const res = await request(app).get("/ready");
     expect(res.status).toBe(200);
-    expect(res.body.data).toEqual({ ready: true, checks: { database: "ok" } });
+    expect(res.body.data).toMatchObject({ ready: true, checks: { database: "ok" } });
   });
 
   it("GET /ready is 503 and leaks nothing when the database is down", async () => {

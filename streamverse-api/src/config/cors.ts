@@ -9,9 +9,10 @@ import { env } from "./env";
 export function buildCorsOptions(allowedOrigins: readonly string[] = env.allowedOrigins): CorsOptions {
   return {
     origin(origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-      // not allowed: no CORS headers are sent, so the browser blocks the response
-      return callback(null, false);
+      // Allow requests with no origin (server-to-server, health checks, Stripe webhooks)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      callback(new Error(`Origin ${origin} not allowed by CORS`));
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],

@@ -89,7 +89,7 @@ function SettingsPage() {
                     <div className="text-sm font-semibold">Default language</div>
                     <div className="text-xs text-muted-foreground">Pre-selected as the Primary Language when adding content.</div>
                   </div>
-                  <div className="w-44">
+                  <div className="w-full sm:w-44">
                     <SelectInput
                       aria-label="Default language"
                       options={LANGUAGES}

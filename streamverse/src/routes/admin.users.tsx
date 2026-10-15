@@ -138,9 +138,9 @@ function Users() {
                             .map((p) => p[0])
                             .join("")}
                         </span>
-                        <span>
+                        <span className="min-w-0">
                           <span className="block font-semibold hover:underline">{u.name}</span>
-                          <span className="block text-xs text-muted-foreground">{u.email}</span>
+                          <span className="block truncate max-w-[180px] text-xs text-muted-foreground">{u.email}</span>
                         </span>
                       </button>
                     </td>

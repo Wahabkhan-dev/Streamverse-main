@@ -16,16 +16,21 @@ import { hydrateLegal } from "../lib/legal";
 import { hydrateStore } from "../lib/store";
 import { hydrateUser } from "../lib/user";
 import { BackendNoticeHost } from "../components/sv/BackendNotice";
+import { ErrorBoundary } from "../components/ErrorBoundary";
 import { GeneralError, NotFoundScreen } from "../components/sv/states";
 import { Toaster } from "../components/ui/sonner";
 import { DEMO_MODE } from "../lib/config";
+import { initSentry } from "../lib/sentry";
 import { authApi } from "../api/auth.api";
 import { getAccessToken } from "../api/client";
 import { setAuthUser, clearAuthUser } from "../lib/authState";
 
+// Initialize Sentry as early as possible
+initSentry();
+
 function NotFoundComponent() {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-dvh bg-background">
       <NotFoundScreen />
     </div>
   );
@@ -39,7 +44,7 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
   }, [error]);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-dvh bg-background">
       <GeneralError
         onRetry={() => {
           router.invalidate();
@@ -114,10 +119,12 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
-      <Toaster theme="dark" />
-      <BackendNoticeHost />
+      <ErrorBoundary>
+        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+        <Outlet />
+        <Toaster theme="dark" />
+        <BackendNoticeHost />
+      </ErrorBoundary>
     </QueryClientProvider>
   );
 }

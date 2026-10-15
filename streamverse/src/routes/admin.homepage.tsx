@@ -60,7 +60,7 @@ function apiSectionToHomeSection(s: ApiHomeSection): HomeSection {
     enabled: s.enabled,
     limit: s.limit,
     mode: s.mode,
-    autoFlag: s.autoFlag,
+    ...(s.autoFlag != null ? { autoFlag: s.autoFlag } : {}),
     items: s.items.map((it) => ({ type: it.contentType === "movie" ? "Movie" : it.contentType === "ebook" ? "eBook" : "Audiobook", slug: it.movie?.slug ?? it.ebook?.slug ?? it.audiobook?.slug ?? "" } as import("@/lib/data").ItemRef)),
   };
 }

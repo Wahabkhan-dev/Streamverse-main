@@ -120,12 +120,17 @@
   }
   html {
     color-scheme: dark;
+    width: 100%;
+    min-width: 0;
   }
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
+    width: 100%;
+    min-width: 0;
+    overflow-x: clip;
   }
 }
 
@@ -201,6 +206,10 @@
 .legal-body li + li { margin-top: 0.375rem; }
 .legal-body a { text-decoration: underline; text-underline-offset: 2px; color: var(--primary-text, inherit); }
 .legal-body blockquote { border-left: 3px solid var(--border); padding-left: 1rem; color: var(--muted-foreground); }
-.legal-body table { width: 100%; border-collapse: collapse; }
+.legal-body img { max-width: 100%; height: auto; }
+.legal-body table { display: block; width: 100%; overflow-x: auto; border-collapse: collapse; }
 .legal-body th, .legal-body td { border: 1px solid var(--border); padding: 0.5rem 0.75rem; text-align: left; vertical-align: top; }
 .legal-body th { font-weight: 600; background: var(--surface-2, transparent); }
+.legal-body pre { overflow-x: auto; }
+.legal-body code { word-break: break-word; }
+.legal-body a { word-break: break-word; }

@@ -206,9 +206,9 @@ function Dashboard() {
                       <td className={td}>
                         <div className="flex items-center gap-3">
                           <span className="grid size-8 place-items-center rounded-md bg-surface-3 text-xs font-bold">{u.name.split(" ").map((x) => x[0]).join("")}</span>
-                          <div>
+                          <div className="min-w-0">
                             <div className="font-semibold">{u.name}</div>
-                            <div className="text-xs text-muted-foreground">{u.email}</div>
+                            <div className="truncate max-w-[180px] text-xs text-muted-foreground">{u.email}</div>
                           </div>
                         </div>
                       </td>
