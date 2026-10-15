@@ -25,7 +25,7 @@ const schema = z
     DATABASE_URL: z
       .string()
       .min(1, "DATABASE_URL is required")
-      .refine((v) => /^postgres(ql)?:\/\//.test(v), "DATABASE_URL must be a postgresql:// URL"),
+      .refine((v) => /^mysql:\/\//.test(v), "DATABASE_URL must be a mysql:// URL"),
 
     FRONTEND_URL: z.url("FRONTEND_URL must be a full URL, e.g. http://localhost:5173"),
     ALLOWED_ORIGINS: z.string().default(""),

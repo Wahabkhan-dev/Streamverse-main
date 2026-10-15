@@ -3,9 +3,9 @@ import { prisma } from "../config/database";
 
 /**
  * Atomically bumps the counter for one content type and returns the new value. Backed by a single
- * Postgres `INSERT ... ON CONFLICT DO UPDATE SET "lastValue" = "lastValue" + 1` (what Prisma compiles
+ * MySQL `INSERT ... ON DUPLICATE KEY UPDATE lastValue = lastValue + 1` (what Prisma compiles
  * `upsert` with an `increment` to) — one statement, so two concurrent callers can never read the same
- * value: Postgres serializes the two statements via the row's lock, and each gets a distinct result.
+ * value: MySQL/InnoDB serializes the two statements via the row's lock, and each gets a distinct result.
  * Pass the enclosing transaction's client (`tx`) when this is part of a bigger content-creation write, so
  * a rollback there rolls this back too (see content.service.ts).
  */
