@@ -51,7 +51,7 @@ export async function listCustomerPlans() {
   return plans.map(toCustomerPlan);
 }
 
-export function toCustomerPlan(plan: { id: string; name: string; slug: string; description: string | null; priceAmount: number; currency: string; billingInterval: string; trialDays: number | null; features: string[] }) {
+export function toCustomerPlan(plan: { id: string; name: string; slug: string; description: string | null; priceAmount: number; currency: string; billingInterval: string; trialDays: number | null; features: unknown }) {
   return {
     id: plan.id,
     name: plan.name,
@@ -61,7 +61,7 @@ export function toCustomerPlan(plan: { id: string; name: string; slug: string; d
     currency: plan.currency,
     billingInterval: plan.billingInterval,
     trialDays: plan.trialDays,
-    features: plan.features,
+    features: Array.isArray(plan.features) ? (plan.features as string[]) : [],
   };
 }
 

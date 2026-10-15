@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+﻿import type { Prisma } from "@prisma/client";
 import { prisma } from "../config/database";
 
 const WITH_PLAN = { plan: true } as const;
@@ -27,7 +27,7 @@ export function adminListWhere(filters: AdminSubscriptionFilters): Prisma.Subscr
   return {
     ...(filters.status ? { status: filters.status } : {}),
     ...(filters.planId ? { planId: filters.planId } : {}),
-    ...(filters.search ? { user: { OR: [{ email: { contains: filters.search, mode: "insensitive" } }, { fullName: { contains: filters.search, mode: "insensitive" } }] } } : {}),
+    ...(filters.search ? { user: { OR: [{ email: { contains: filters.search } }, { fullName: { contains: filters.search } }] } } : {}),
   };
 }
 

@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+﻿import type { Prisma } from "@prisma/client";
 import { prisma } from "../config/database";
 
 export const create = (data: Prisma.CollectionUncheckedCreateInput) => prisma.collection.create({ data });
@@ -9,7 +9,7 @@ export const slugExists = async (slug: string, excludeId?: string) => (await pri
 export const archive = (id: string) => prisma.collection.update({ where: { id }, data: { status: "ARCHIVED" } });
 
 export async function list(filters: { search?: string; status?: Prisma.CollectionWhereInput["status"] }, skip: number, take: number, orderBy: Prisma.CollectionOrderByWithRelationInput) {
-  const where: Prisma.CollectionWhereInput = { ...(filters.status ? { status: filters.status } : {}), ...(filters.search ? { name: { contains: filters.search, mode: "insensitive" } } : {}) };
+  const where: Prisma.CollectionWhereInput = { ...(filters.status ? { status: filters.status } : {}), ...(filters.search ? { name: { contains: filters.search } } : {}) };
   const [rows, total] = await Promise.all([prisma.collection.findMany({ where, skip, take, orderBy }), prisma.collection.count({ where })]);
   return { rows, total };
 }

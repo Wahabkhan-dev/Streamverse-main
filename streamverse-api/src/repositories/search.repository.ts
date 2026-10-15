@@ -1,4 +1,4 @@
-import type { ContentType, Prisma } from "@prisma/client";
+﻿import type { ContentType, Prisma } from "@prisma/client";
 import { prisma } from "../config/database";
 import { customerVisibleWhere } from "./catalog.repository";
 
@@ -16,7 +16,7 @@ export interface SearchFilters {
  * in the single `contains` the client sent (normalized to a bounded length by the validator).
  */
 export function buildSearchWhere(type: ContentType | undefined, q: string, filters: SearchFilters, now = new Date()): Prisma.ContentWhereInput {
-  const contains = { contains: q, mode: "insensitive" as const };
+  const contains = { contains: q };
   return {
     ...customerVisibleWhere(now),
     ...(type ? { type } : {}),
@@ -53,7 +53,7 @@ export interface PersonMatch {
 
 /** Section 20: people — actors/directors/writers/producers (movies) and authors/narrators (books). */
 export async function searchPeople(q: string, limit: number, now = new Date()): Promise<PersonMatch[]> {
-  const contains = { contains: q, mode: "insensitive" as const };
+  const contains = { contains: q };
   const visible = customerVisibleWhere(now);
 
   const [cast, crew, ebooks, audiobooks] = await Promise.all([

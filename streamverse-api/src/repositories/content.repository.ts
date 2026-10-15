@@ -1,4 +1,4 @@
-import type { Content, Prisma } from "@prisma/client";
+﻿import type { Content, Prisma } from "@prisma/client";
 import { prisma } from "../config/database";
 
 export type { Content };
@@ -96,7 +96,7 @@ export function adminListWhere(type: Prisma.ContentWhereInput["type"], filters: 
     ...(filters.ageRating ? { ageRating: filters.ageRating } : {}),
     ...(filters.genreId ? { genres: { some: { genreId: filters.genreId } } } : {}),
     ...(filters.languageId ? { languages: { some: { languageId: filters.languageId } } } : {}),
-    ...(filters.search ? { OR: [{ title: { contains: filters.search, mode: "insensitive" } }, { contentCode: { contains: filters.search, mode: "insensitive" } }, { slug: { contains: filters.search, mode: "insensitive" } }] } : {}),
+    ...(filters.search ? { OR: [{ title: { contains: filters.search } }, { contentCode: { contains: filters.search } }, { slug: { contains: filters.search } }] } : {}),
   };
 }
 
@@ -106,4 +106,4 @@ export async function adminList(where: Prisma.ContentWhereInput, skip: number, t
 }
 
 export const listDrafts = (filters: { type?: Prisma.ContentWhereInput["type"]; search?: string }, skip: number, take: number) =>
-  adminList({ status: "DRAFT", type: filters.type, ...(filters.search ? { title: { contains: filters.search, mode: "insensitive" } } : {}) }, skip, take, { updatedAt: "desc" });
+  adminList({ status: "DRAFT", type: filters.type, ...(filters.search ? { title: { contains: filters.search } } : {}) }, skip, take, { updatedAt: "desc" });

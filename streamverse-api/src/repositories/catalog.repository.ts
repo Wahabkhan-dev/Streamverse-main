@@ -1,4 +1,4 @@
-import type { ContentStatus, Prisma } from "@prisma/client";
+﻿import type { ContentStatus, Prisma } from "@prisma/client";
 import { prisma } from "../config/database";
 
 const WITH_CONTENT_RELATIONS = { genres: { include: { genre: true } }, tags: { include: { tag: true } }, languages: { include: { language: true } }, warnings: { include: { warningType: true } } } as const;
@@ -38,7 +38,7 @@ export function withCustomerFilters(base: Prisma.ContentWhereInput, filters: Cus
     ...(filters.trending ? { trending: true } : {}),
     ...(filters.popular ? { popular: true } : {}),
     ...(filters.newRelease ? { newRelease: true } : {}),
-    ...(filters.search ? { title: { contains: filters.search, mode: "insensitive" } } : {}),
+    ...(filters.search ? { title: { contains: filters.search } } : {}),
   };
 }
 

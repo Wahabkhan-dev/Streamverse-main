@@ -1,21 +1,24 @@
 # Local development services. Not a production deployment file.
 # Usage: docker compose up -d
+# MySQL credentials are read from environment variables — copy .env.example to .env and set them.
 services:
   db:
-    image: postgres:16-alpine
+    image: mysql:8.0
     environment:
-      POSTGRES_USER: streamverse
-      POSTGRES_PASSWORD: dev
-      POSTGRES_DB: streamverse_dev
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-dev-root-password}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-streamverse_dev}
+      MYSQL_USER: ${MYSQL_USER:-streamverse}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-streamverse}
     ports:
-      - "5432:5432"
+      - "3306:3306"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - mysqldata:/var/lib/mysql
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --default-authentication-plugin=mysql_native_password
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U streamverse"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "--password=${MYSQL_ROOT_PASSWORD:-dev-root-password}"]
       interval: 5s
       timeout: 3s
-      retries: 10
+      retries: 12
 
   redis:
     image: redis:7-alpine
@@ -35,7 +38,7 @@ services:
       redis:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://streamverse:dev@db:5432/streamverse_dev
+      DATABASE_URL: mysql://${MYSQL_USER:-streamverse}:${MYSQL_PASSWORD:-streamverse}@db:3306/${MYSQL_DATABASE:-streamverse_dev}
       NODE_ENV: development
       PORT: 3000
       FRONTEND_URL: http://localhost:5173
@@ -55,4 +58,4 @@ services:
       - /app/dist
 
 volumes:
-  pgdata:
+  mysqldata:

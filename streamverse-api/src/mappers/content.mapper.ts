@@ -1,5 +1,11 @@
 /** Shared pieces of the admin DTO every content type's mapper reuses — never a raw Prisma relation row. */
 
+/** MySQL stores String[] fields as JSON. Cast back to string[] at read time. */
+export function toStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value.filter((v): v is string => typeof v === "string");
+  return [];
+}
+
 interface GenreJoin {
   genreId: string;
   genre: { id: string; name: string; slug: string };
@@ -53,7 +59,7 @@ export interface ContentBaseRow {
   newRelease: boolean;
   seoTitle: string | null;
   seoDescription: string | null;
-  seoKeywords: string[];
+  seoKeywords: unknown; // Json in MySQL; cast to string[] at read time
   createdById: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -81,7 +87,7 @@ export function mapContentBase(content: ContentBaseRow) {
     territory: { mode: content.territoryMode, countryCodes: mapTerritoryCodes(content.territories) },
     dates: { releaseDate: content.releaseDate, publishedAt: content.publishedAt, publishAt: content.publishAt, availableFrom: content.availableFrom, availableUntil: content.availableUntil },
     promo: { featured: content.featured, trending: content.trending, popular: content.popular, newRelease: content.newRelease },
-    seo: { seoTitle: content.seoTitle, seoDescription: content.seoDescription, seoKeywords: content.seoKeywords },
+    seo: { seoTitle: content.seoTitle, seoDescription: content.seoDescription, seoKeywords: toStringArray(content.seoKeywords) },
     genres: mapGenres(content.genres),
     tags: mapTags(content.tags),
     languages: mapLanguages(content.languages),
