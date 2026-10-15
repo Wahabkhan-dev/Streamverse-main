@@ -396,7 +396,7 @@ function Home() {
   return (
     <>
       {hero}
-      <div className={hero ? "relative z-10 -mt-16 space-y-10" : "space-y-10 pt-8"}>
+      <div className={hero ? "relative z-10 space-y-10 md:-mt-16" : "space-y-10 pt-8"}>
         {nothing ? (
           <div className="px-4 md:px-8">
             <EmptyState
