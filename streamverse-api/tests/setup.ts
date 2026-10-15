@@ -1,7 +1,7 @@
 // Safe, fake values: tests never touch a real database, Stripe or storage.
 process.env["NODE_ENV"] = "test";
 process.env["PORT"] = "4000";
-process.env["DATABASE_URL"] = "postgresql://test:test@localhost:5432/streamverse_test?schema=public";
+process.env["DATABASE_URL"] = "mysql://test:test@localhost:3306/streamverse_test";
 process.env["FRONTEND_URL"] = "http://localhost:5173";
 process.env["ALLOWED_ORIGINS"] = "http://localhost:5180";
 process.env["JWT_SECRET"] = "test-jwt-secret-test-jwt-secret-0001";

@@ -3,7 +3,7 @@ import { buildEnv } from "../../src/config/env";
 
 const base = {
   NODE_ENV: "development",
-  DATABASE_URL: "postgresql://u:p@localhost:5432/db",
+  DATABASE_URL: "mysql://u:p@localhost:3306/db",
   FRONTEND_URL: "http://localhost:5173",
   JWT_SECRET: "a".repeat(40),
   JWT_REFRESH_SECRET: "b".repeat(40),
@@ -24,7 +24,7 @@ describe("environment validation", () => {
   it("fails fast and lists every missing or invalid value", () => {
     expect(() => buildEnv({} as NodeJS.ProcessEnv)).toThrow(/DATABASE_URL[\s\S]*FRONTEND_URL[\s\S]*JWT_SECRET/);
     expect(() => buildEnv({ ...base, JWT_SECRET: "short" })).toThrow(/JWT_SECRET must be at least 32/);
-    expect(() => buildEnv({ ...base, DATABASE_URL: "mysql://x" })).toThrow(/postgresql/);
+    expect(() => buildEnv({ ...base, DATABASE_URL: "postgresql://x" })).toThrow(/mysql/);
   });
 
   it("rejects wildcard and malformed CORS origins", () => {
