@@ -354,10 +354,12 @@ export interface ApiPlaybackAccess {
 }
 
 export interface ApiEbookAccess {
-  url: string;
-  token?: string;
-  expiresAt?: string;
-  format?: string;
+  signedUrl: string | null;
+  fileType: "epub" | "pdf" | null;
+  contentId: string;
+  expiresAt: string | null;
+  progress: { location: string | null; page: number | null; pct: number } | null;
+  mediaReady: boolean;
 }
 
 /* ─────────────────────────────── Admin ──────────────────────────────────── */
