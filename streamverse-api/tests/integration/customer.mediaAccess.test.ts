@@ -92,7 +92,10 @@ describe("Private eBook/audiobook access", () => {
     const res = await request(app).post(`/api/v1/media/ebooks/${content.id}/access`).set(await auth());
     expect(res.status).toBe(200);
     expect(res.body.data.mediaReady).toBe(true);
-    expect(res.body.data.access_url.url).toBeTruthy();
+    expect(res.body.data.signedUrl).toBeTruthy();
+    expect(res.body.data.fileType).toBe("epub");
+    expect(res.body.data.contentId).toBe(content.id);
+    expect(res.body.data.expiresAt).toBeTruthy();
     expect(JSON.stringify(res.body)).not.toMatch(/storageKey/i);
   });
 

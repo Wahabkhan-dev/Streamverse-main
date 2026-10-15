@@ -81,7 +81,10 @@ describe("eBook access — signed URL security", () => {
     expect(res.status).toBe(200);
     expect(res.body.data.access.canConsume).toBe(true);
     expect(res.body.data.mediaReady).toBe(true);
-    expect(res.body.data.access_url.url).toBeTruthy();
+    expect(res.body.data.signedUrl).toBeTruthy();
+    expect(res.body.data.fileType).toBe("epub");
+    expect(res.body.data.contentId).toBe(content.id);
+    expect(res.body.data.expiresAt).toBeTruthy();
     expect(JSON.stringify(res.body)).not.toMatch(/storageKey/i);
   });
 

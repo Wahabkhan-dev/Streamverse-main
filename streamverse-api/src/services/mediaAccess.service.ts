@@ -1,9 +1,11 @@
 import { logger } from "../config/logger";
 import { env } from "../config/env";
 import * as mediaAccessRepository from "../repositories/mediaAccess.repository";
+import * as progressRepository from "../repositories/progress.repository";
 import { NotFoundError } from "../utils/errors";
 import { checkAccess, type AccessContext } from "./entitlement/entitlement.service";
 import { getStorageProvider } from "./storage";
+import type { EbookAccessResponse } from "../types/mediaAccess.types";
 
 /**
  * Phase 6 (Section 53-56) foundation, now backed by Phase 8's central entitlement service.
@@ -43,19 +45,47 @@ export async function getEbookAccess(contentId: string, context: AccessContext) 
 
   const file =
     row.epubAsset?.status === "READY"
-      ? { asset: row.epubAsset, contentType: "application/epub+zip" }
+      ? { asset: row.epubAsset, contentType: "application/epub+zip", fileType: "epub" as const }
       : row.pdfAsset?.status === "READY"
-        ? { asset: row.pdfAsset, contentType: "application/pdf" }
+        ? { asset: row.pdfAsset, contentType: "application/pdf", fileType: "pdf" as const }
         : null;
   const mediaReady = !!file;
-  if (!decision.canConsume || !mediaReady) return { access: decision, mediaReady, access_url: null };
+
+  const base = {
+    access: decision,
+    mediaReady,
+    contentId,
+    signedUrl: null as string | null,
+    fileType: null as "epub" | "pdf" | null,
+    expiresAt: null as string | null,
+    progress: null as { location: string | null; page: number | null; pct: number } | null,
+  } satisfies { access: typeof decision; mediaReady: boolean } & EbookAccessResponse;
+
+  if (!decision.canConsume || !mediaReady) return base;
 
   if (!file!.asset.storageKey) {
     logger.warn({ contentId }, "mediaAccess: READY ebook asset has null storageKey");
-    return { access: decision, mediaReady: false, access_url: null };
+    return { ...base, mediaReady: false };
   }
-  const playback = await signedUrlFor(file!.asset.storageKey, file!.contentType);
-  return { access: decision, mediaReady, access_url: playback };
+
+  const { url, expiresAt } = await signedUrlFor(file!.asset.storageKey, file!.contentType);
+
+  // Fetch reading progress when the user is authenticated
+  let progress: { location: string | null; page: number | null; pct: number } | null = null;
+  if (context.userId) {
+    const progressRecord = await progressRepository.findEbookProgress(context.userId, contentId);
+    if (progressRecord) {
+      progress = { location: progressRecord.location ?? null, page: progressRecord.page ?? null, pct: progressRecord.percentage };
+    }
+  }
+
+  return {
+    ...base,
+    signedUrl: url,
+    fileType: file!.fileType,
+    expiresAt,
+    progress,
+  };
 }
 
 export async function getAudiobookPlayback(contentId: string, context: AccessContext) {
