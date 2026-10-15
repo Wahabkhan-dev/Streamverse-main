@@ -1,4 +1,4 @@
-import { useNavigate } from "@tanstack/react-router";
+﻿import { useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Bookmark, BookmarkCheck, ChevronLeft, ChevronRight, ListTree, Maximize, Minimize, Minus, Plus, Search, X } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { meApi } from "@/api/me.api";
@@ -62,7 +62,7 @@ export function BookReader({ b, accessData }: { b: Book; accessData?: BookReader
   /** True when we should use the real EPUB/PDF renderer instead of synthetic content */
   const useRealReader = !DEMO_MODE && accessData != null;
 
-  // ─── Demo mode state ───────────────────────────────────────────────────────
+  // â”€â”€â”€ Demo mode state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const chapters = useMemo(() => chaptersOf(b), [b]);
   const total = totalPagesOf(b);
   const prefs = useUser((s) => s.prefs);
@@ -78,7 +78,7 @@ export function BookReader({ b, accessData }: { b: Book; accessData?: BookReader
   const totalRef = useRef(total);
   totalRef.current = total;
 
-  // ─── Real reader state ─────────────────────────────────────────────────────
+  // â”€â”€â”€ Real reader state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [currentPct, setCurrentPct] = useState(accessData?.initialPct ?? 0);
   const [currentLocation, setCurrentLocation] = useState<string | null>(
     accessData?.initialLocation ?? null,
@@ -96,14 +96,14 @@ export function BookReader({ b, accessData }: { b: Book; accessData?: BookReader
   const epubRef = useRef<EpubReaderHandle>(null);
   const pdfRef = useRef<PdfReaderHandle>(null);
 
-  // ─── Shared state ──────────────────────────────────────────────────────────
+  // â”€â”€â”€ Shared state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [theme, setTheme] = useState<Theme>(prefs.readerTheme);
   const [font, setFont] = useState(prefs.readerFont);
   const [panel, setPanel] = useState<null | "toc" | "bookmarks" | "search">(null);
   const [query, setQuery] = useState("");
   const T = THEMES[theme];
 
-  // ─── Demo mode API save ────────────────────────────────────────────────────
+  // â”€â”€â”€ Demo mode API save â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const apiSave = useSaveProgressMutation();
   const lastApiWriteRef = useRef(0);
 
@@ -120,7 +120,7 @@ export function BookReader({ b, accessData }: { b: Book; accessData?: BookReader
     const p = pageRef.current;
     const t = totalRef.current;
     apiSave.mutate(
-      { type: "ebooks", contentId: b.slug, data: { percentage: (p / t) * 100, positionPage: p, completed: p >= t } },
+      { type: "ebook", contentId: b.slug, data: { percentage: (p / t) * 100, positionPage: p, completed: p >= t } },
       { onError: () => undefined },
     );
   }, [apiSave, b.slug, useRealReader]);
@@ -146,7 +146,7 @@ export function BookReader({ b, accessData }: { b: Book; accessData?: BookReader
       if (!DEMO_MODE) {
         const p = pageRef.current;
         const t = totalRef.current;
-        void meApi.saveProgress("ebooks", b.slug, { percentage: (p / t) * 100, positionPage: p, completed: p >= t }).catch(() => undefined);
+        void meApi.saveProgress("ebook", b.slug, { percentage: (p / t) * 100, positionPage: p, completed: p >= t }).catch(() => undefined);
       }
     };
   }, [persistDemoLocal, b.slug, useRealReader]);
@@ -156,7 +156,7 @@ export function BookReader({ b, accessData }: { b: Book; accessData?: BookReader
     if (!useRealReader) scroller.current?.scrollTo?.({ top: 0 });
   }, [page, useRealReader]);
 
-  // ─── Real reader: save on unmount ─────────────────────────────────────────
+  // â”€â”€â”€ Real reader: save on unmount â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     if (!useRealReader) return undefined;
     const cid = accessData?.contentId;
@@ -168,11 +168,11 @@ export function BookReader({ b, accessData }: { b: Book; accessData?: BookReader
       const data = isNumericLoc
         ? { percentage: pct, positionPage: Number(loc) }
         : { percentage: pct };
-      void meApi.saveProgress("ebooks", cid, data).catch(() => undefined);
+      void meApi.saveProgress("ebook", cid, data).catch(() => undefined);
     };
   }, [useRealReader, accessData?.contentId]);
 
-  // ─── Real reader: location change handler ─────────────────────────────────
+  // â”€â”€â”€ Real reader: location change handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleLocationChange = useCallback(
     (cfi: string, pct: number) => {
       setCurrentPct(pct);
@@ -180,13 +180,13 @@ export function BookReader({ b, accessData }: { b: Book; accessData?: BookReader
       const now = Date.now();
       if (now - lastApiWriteRef.current >= 30_000 && accessData?.contentId) {
         lastApiWriteRef.current = now;
-        void meApi.saveProgress("ebooks", accessData.contentId, { percentage: pct }).catch(() => undefined);
+        void meApi.saveProgress("ebook", accessData.contentId, { percentage: pct }).catch(() => undefined);
       }
     },
     [accessData?.contentId],
   );
 
-  // ─── Real reader: PDF page change handler ─────────────────────────────────
+  // â”€â”€â”€ Real reader: PDF page change handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handlePdfPageChange = useCallback(
     (pg: number, total: number) => {
       setTotalPages(total);
@@ -196,13 +196,13 @@ export function BookReader({ b, accessData }: { b: Book; accessData?: BookReader
       const now = Date.now();
       if (now - lastApiWriteRef.current >= 30_000 && accessData?.contentId) {
         lastApiWriteRef.current = now;
-        void meApi.saveProgress("ebooks", accessData.contentId, { percentage: pct, positionPage: pg }).catch(() => undefined);
+        void meApi.saveProgress("ebook", accessData.contentId, { percentage: pct, positionPage: pg }).catch(() => undefined);
       }
     },
     [accessData?.contentId],
   );
 
-  // ─── Shared helpers ────────────────────────────────────────────────────────
+  // â”€â”€â”€ Shared helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const setThemeSaved = (t: Theme) => {
     setTheme(t);
     updateUser((s) => ({ ...s, prefs: { ...s.prefs, readerTheme: t } }));
@@ -241,7 +241,7 @@ export function BookReader({ b, accessData }: { b: Book; accessData?: BookReader
     [panel, b, query, chapters, useRealReader],
   );
 
-  // ─── Keyboard navigation ───────────────────────────────────────────────────
+  // â”€â”€â”€ Keyboard navigation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useKey((e) => {
     if (useRealReader) {
       if (e.key === "ArrowRight" || e.key === "PageDown") readerNext();
@@ -256,7 +256,7 @@ export function BookReader({ b, accessData }: { b: Book; accessData?: BookReader
     }
   });
 
-  // ─── Bookmark helpers for real reader ──────────────────────────────────────
+  // â”€â”€â”€ Bookmark helpers for real reader â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const toggleApiBookmark = () => {
     const loc = currentLocation;
     if (!loc) return;
@@ -265,19 +265,19 @@ export function BookReader({ b, accessData }: { b: Book; accessData?: BookReader
     );
   };
 
-  // ─── Current chapter label (header subtitle) ───────────────────────────────
+  // â”€â”€â”€ Current chapter label (header subtitle) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const subLabel = useRealReader
     ? (currentPct > 0 ? `${currentPct}% read` : "")
     : (content.heading ?? chapters[content.chapter]?.title ?? "");
 
-  // ─── PDF current page (derived from currentLocation) ──────────────────────
+  // â”€â”€â”€ PDF current page (derived from currentLocation) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const pdfCurrentPage = accessData?.fileType === "pdf" && currentLocation !== null
     ? (Number(currentLocation) || 1)
     : 1;
 
   return (
     <main ref={box} className={cn("flex h-screen w-full flex-col overflow-hidden", T.page)}>
-      {/* ── Top toolbar ── */}
+      {/* â”€â”€ Top toolbar â”€â”€ */}
       <header className={cn("flex items-center gap-1 overflow-x-auto border-b px-2 py-2 md:px-4", T.bar)}>
         <RBtn
           label="Close reader"
@@ -336,7 +336,7 @@ export function BookReader({ b, accessData }: { b: Book; accessData?: BookReader
         </RBtn>
       </header>
 
-      {/* ── Main content area ── */}
+      {/* â”€â”€ Main content area â”€â”€ */}
       <div className="relative flex min-h-0 flex-1">
         {useRealReader ? (
           /* Real reader (EPUB or PDF) */
@@ -384,7 +384,7 @@ export function BookReader({ b, accessData }: { b: Book; accessData?: BookReader
           </div>
         )}
 
-        {/* ── Side panels ── */}
+        {/* â”€â”€ Side panels â”€â”€ */}
         {panel && (
           <aside
             aria-label={panel === "toc" ? "Table of contents" : panel === "search" ? "Search in book" : "Bookmarks"}
@@ -450,7 +450,7 @@ export function BookReader({ b, accessData }: { b: Book; accessData?: BookReader
                             }}
                             className="min-w-0 flex-1 px-4 py-3 text-left text-sm hover:bg-current/5"
                           >
-                            <span className="font-semibold">{isPage ? `Page ${loc}` : `Position ${loc.slice(0, 20)}…`}</span>
+                            <span className="font-semibold">{isPage ? `Page ${loc}` : `Position ${loc.slice(0, 20)}â€¦`}</span>
                           </button>
                           <RBtn
                             label="Remove bookmark"
@@ -503,7 +503,7 @@ export function BookReader({ b, accessData }: { b: Book; accessData?: BookReader
         )}
       </div>
 
-      {/* ── Footer / navigation bar ── */}
+      {/* â”€â”€ Footer / navigation bar â”€â”€ */}
       <footer className={cn("flex items-center gap-2 border-t px-2 py-2 md:gap-4 md:px-4", T.bar)}>
         {useRealReader ? (
           /* Real reader footer */
@@ -586,3 +586,4 @@ export function BookReader({ b, accessData }: { b: Book; accessData?: BookReader
     </main>
   );
 }
+

@@ -52,13 +52,13 @@ function apiBookToItem(b: ApiBook, type: "eBook" | "Audiobook"): Item {
   return toItem(type, book);
 }
 
-function apiHistoryEntryToRow(entry: ApiHistoryEntry): { id: string; item: Item; at: number } | null {
+function apiHistoryEntryToRow(entry: ApiHistoryEntry): { id: string; contentId: string; item: Item; at: number } | null {
   let item: Item | null = null;
   if (entry.contentType === "movie" && entry.movie) item = apiMovieToItem(entry.movie);
   else if (entry.contentType === "ebook" && entry.ebook) item = apiBookToItem(entry.ebook, "eBook");
   else if (entry.contentType === "audiobook" && entry.audiobook) item = apiBookToItem(entry.audiobook, "Audiobook");
   if (!item) return null;
-  return { id: entry.id, item, at: new Date(entry.watchedAt).getTime() };
+  return { id: entry.id, contentId: entry.contentId, item, at: new Date(entry.watchedAt).getTime() };
 }
 
 function Thumb({ item }: { item: Item }) {
@@ -128,9 +128,9 @@ function HistoryPage() {
     toast.success("History cleared");
   };
 
-  const handleRemoveItem = (row: { id: string; item: Item }) => {
+  const handleRemoveItem = (row: { id: string; contentId?: string; item: Item }) => {
     if (!DEMO_MODE) {
-      deleteHistoryMutation.mutate(row.id, {
+      deleteHistoryMutation.mutate(row.contentId ?? row.id, {
         onSuccess: () => toast.success("Removed from history"),
         onError: () => toast.error("Failed to remove from history"),
       });

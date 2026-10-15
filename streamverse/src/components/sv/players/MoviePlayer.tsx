@@ -1,4 +1,4 @@
-import { useNavigate } from "@tanstack/react-router";
+﻿import { useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Check, Maximize, Minimize, Pause, Play, RotateCcw, RotateCw, Settings, Volume1, Volume2, VolumeX, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -22,9 +22,9 @@ const TRAILER_NAME: Record<Trailer, string> = { official: "Official Trailer", te
 
 const LINES: Record<string, string[]> = {
   English: ["We don't have much time.", "Stay close. Whatever happens, stay close.", "Did you hear that?", "It was never about the map."],
-  Spanish: ["No tenemos mucho tiempo.", "Quédate cerca. Pase lo que pase.", "¿Lo oíste?", "Nunca se trató del mapa."],
-  French: ["Nous n'avons pas beaucoup de temps.", "Reste près de moi, quoi qu'il arrive.", "Tu as entendu ça ?", "Ce n'était jamais à propos de la carte."],
-  German: ["Wir haben nicht viel Zeit.", "Bleib in meiner Nähe.", "Hast du das gehört?", "Es ging nie um die Karte."],
+  Spanish: ["No tenemos mucho tiempo.", "QuÃ©date cerca. Pase lo que pase.", "Â¿Lo oÃ­ste?", "Nunca se tratÃ³ del mapa."],
+  French: ["Nous n'avons pas beaucoup de temps.", "Reste prÃ¨s de moi, quoi qu'il arrive.", "Tu as entendu Ã§a ?", "Ce n'Ã©tait jamais Ã  propos de la carte."],
+  German: ["Wir haben nicht viel Zeit.", "Bleib in meiner NÃ¤he.", "Hast du das gehÃ¶rt?", "Es ging nie um die Karte."],
 };
 const captionAt = (lang: string, t: number) => {
   const lines = LINES[lang] ?? LINES["English"]!.map((l) => `[${lang}] ${l}`);
@@ -88,7 +88,10 @@ export function MoviePlayer({ m, trailer }: { m: Movie; trailer?: Trailer | unde
     mediaApi.getMoviePlayback(m.slug)
       .then((res) => {
         if (!cancelled) {
-          setVideoUrl(res.data.url);
+          const p = res.data;
+          const url = p.mediaReady && p.playback?.mode === "SINGLE_FILE" ? p.playback.url : null;
+          setVideoUrl(url);
+          if (!url) setAccessError("This movie is not yet ready for playback.");
           setAccessLoading(false);
         }
       })
@@ -145,7 +148,7 @@ export function MoviePlayer({ m, trailer }: { m: Movie; trailer?: Trailer | unde
     if (DEMO_MODE || trailer) return;
     const now = tRef.current;
     apiSave.mutate(
-      { type: "movies", contentId: m.slug, data: { percentage: (now / totalRef.current) * 100, positionSeconds: now, completed: endedRef.current } },
+      { type: "movie", contentId: m.slug, data: { percentage: (now / totalRef.current) * 100, positionSeconds: now, completed: endedRef.current } },
       { onError: () => undefined },
     );
   }, [apiSave, m.slug, trailer]);
@@ -160,7 +163,7 @@ export function MoviePlayer({ m, trailer }: { m: Movie; trailer?: Trailer | unde
       persist();
       if (!DEMO_MODE && !trailer) {
         apiSave.mutate(
-          { type: "movies", contentId: m.slug, data: { percentage: 100, positionSeconds: totalRef.current, completed: true } },
+          { type: "movie", contentId: m.slug, data: { percentage: 100, positionSeconds: totalRef.current, completed: true } },
           { onError: () => undefined },
         );
       }
@@ -178,7 +181,7 @@ export function MoviePlayer({ m, trailer }: { m: Movie; trailer?: Trailer | unde
     persist();
     if (!DEMO_MODE && !trailer) {
       const now = tRef.current;
-      void meApi.saveProgress("movies", m.slug, { percentage: (now / totalRef.current) * 100, positionSeconds: now, completed: endedRef.current }).catch(() => undefined);
+      void meApi.saveProgress("movie", m.slug, { percentage: (now / totalRef.current) * 100, positionSeconds: now, completed: endedRef.current }).catch(() => undefined);
     }
   }, [persist, m.slug, trailer]);
 
@@ -242,7 +245,7 @@ export function MoviePlayer({ m, trailer }: { m: Movie; trailer?: Trailer | unde
   const row = (label: string, value: string, to: Panel) => (
     <button type="button" onClick={() => setPanel(to)} className="flex w-full items-center justify-between gap-6 rounded-md px-3 py-2.5 text-left text-sm hover:bg-foreground/10">
       <span>{label}</span>
-      <span className="text-muted-foreground">{value} ›</span>
+      <span className="text-muted-foreground">{value} â€º</span>
     </button>
   );
   const optionList = (title: string, options: string[], value: string, onPick: (v: string) => void) => (
@@ -305,7 +308,7 @@ export function MoviePlayer({ m, trailer }: { m: Movie; trailer?: Trailer | unde
         </IconBtn>
         <div className="min-w-0">
           <h1 className="truncate text-base font-bold md:text-lg">{m.title}</h1>
-          <p className="truncate text-xs text-soft">{trailer ? `Trailer · ${TRAILER_NAME[trailer]}` : `Feature film · ${m.year} · ${m.rating}`}</p>
+          <p className="truncate text-xs text-soft">{trailer ? `Trailer Â· ${TRAILER_NAME[trailer]}` : `Feature film Â· ${m.year} Â· ${m.rating}`}</p>
         </div>
         <span className="ml-auto hidden rounded border border-foreground/30 px-2 py-0.5 text-[11px] font-bold sm:block">{quality === "Auto" ? "AUTO" : quality}</span>
       </div>
@@ -387,3 +390,4 @@ export function MoviePlayer({ m, trailer }: { m: Movie; trailer?: Trailer | unde
     </main>
   );
 }
+

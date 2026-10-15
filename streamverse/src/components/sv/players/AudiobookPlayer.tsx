@@ -1,4 +1,4 @@
-import { useNavigate } from "@tanstack/react-router";
+﻿import { useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Check, Moon, Pause, Play, RotateCcw, RotateCw, SkipBack, SkipForward, Volume1, Volume2, VolumeX } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -33,6 +33,7 @@ export function AudiobookPlayer({ b, startChapter }: { b: Book; startChapter?: n
   const starts = chapterStarts(chapters);
   // Presigned audio URL (non-demo)
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [chapterUrls, setChapterUrls] = useState<Record<number, string> | null>(null);
   const [audioFailed, setAudioFailed] = useState(false);
   const [audioError, setAudioError] = useState<string | null>(null);
   const [audioLoading, setAudioLoading] = useState(!DEMO_MODE);
@@ -77,7 +78,7 @@ export function AudiobookPlayer({ b, startChapter }: { b: Book; startChapter?: n
     if (DEMO_MODE) return;
     const { chapter: c, into: i } = locate(chapters, posRef.current);
     apiSave.mutate(
-      { type: "audiobooks", contentId: b.slug, data: { percentage: (posRef.current / totalRef.current) * 100, positionSeconds: posRef.current, chapterIndex: c, chapterSeconds: i, completed: finishedRef.current } },
+      { type: "audiobook", contentId: b.slug, data: { percentage: (posRef.current / totalRef.current) * 100, positionSeconds: posRef.current, chapterIndex: c, chapterSeconds: i, completed: finishedRef.current } },
       { onError: () => undefined },
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -126,7 +127,7 @@ export function AudiobookPlayer({ b, startChapter }: { b: Book; startChapter?: n
       persist();
       if (!DEMO_MODE) {
         apiSave.mutate(
-          { type: "audiobooks", contentId: b.slug, data: { percentage: 100, positionSeconds: totalRef.current, completed: true } },
+          { type: "audiobook", contentId: b.slug, data: { percentage: 100, positionSeconds: totalRef.current, completed: true } },
           { onError: () => undefined },
         );
       }
@@ -144,7 +145,7 @@ export function AudiobookPlayer({ b, startChapter }: { b: Book; startChapter?: n
     persist();
     if (!DEMO_MODE) {
       const { chapter: c, into: i } = locate(chapters, posRef.current);
-      void meApi.saveProgress("audiobooks", b.slug, { percentage: (posRef.current / totalRef.current) * 100, positionSeconds: posRef.current, chapterIndex: c, chapterSeconds: i, completed: finishedRef.current }).catch(() => undefined);
+      void meApi.saveProgress("audiobook", b.slug, { percentage: (posRef.current / totalRef.current) * 100, positionSeconds: posRef.current, chapterIndex: c, chapterSeconds: i, completed: finishedRef.current }).catch(() => undefined);
     }
   }, [persist, b.slug]);
 
@@ -156,7 +157,20 @@ export function AudiobookPlayer({ b, startChapter }: { b: Book; startChapter?: n
     mediaApi.getAudiobookPlayback(b.slug)
       .then((res) => {
         if (!cancelled) {
-          setAudioUrl(res.data.url);
+          const p = res.data;
+          if (!p.mediaReady || !p.playback) {
+            setAudioError("This audiobook is not yet ready for playback.");
+          } else if (p.playback.mode === "SINGLE_FILE") {
+            setAudioUrl(p.playback.url);
+          } else {
+            // CHAPTER_FILES: build a map from chapterNumber â†’ url
+            const urlMap: Record<number, string> = {};
+            for (const ch of p.playback.chapters) urlMap[ch.chapterNumber] = ch.url;
+            setChapterUrls(urlMap);
+            // use chapter 1 (or lowest available) as initial src
+            const firstKey = Math.min(...Object.keys(urlMap).map(Number));
+            setAudioUrl(urlMap[firstKey] ?? null);
+          }
           setAudioLoading(false);
         }
       })
@@ -203,7 +217,13 @@ export function AudiobookPlayer({ b, startChapter }: { b: Book; startChapter?: n
     setPos(clamped);
   };
   const jumpChapter = (i: number) => {
-    seek(starts[Math.max(0, Math.min(chapters.length - 1, i))]!);
+    const idx = Math.max(0, Math.min(chapters.length - 1, i));
+    if (chapterUrls) {
+      // CHAPTER_FILES mode: chapters are 1-indexed from backend
+      const url = chapterUrls[idx + 1] ?? chapterUrls[Math.min(...Object.keys(chapterUrls).map(Number))];
+      if (url) setAudioUrl(url);
+    }
+    seek(starts[idx]!);
   };
   const pickSleep = (id: (typeof SLEEP)[number]["id"]) => {
     setSleep(id);
@@ -294,7 +314,7 @@ export function AudiobookPlayer({ b, startChapter }: { b: Book; startChapter?: n
               <Range value={pos} max={total} onChange={seek} label="Timeline" valueText={`${clock(pos)} of ${clock(total)}`} />
               <div className="mt-2 flex justify-between text-xs tabular-nums text-muted-foreground">
                 <span>{clock(pos)}</span>
-                <span>{Math.round((pos / total) * 100)}% · {clock(total)}</span>
+                <span>{Math.round((pos / total) * 100)}% Â· {clock(total)}</span>
               </div>
               <div className="mt-3 flex flex-wrap items-center justify-center gap-1 sm:gap-3">
                 <IconBtn label="Previous chapter" onClick={() => jumpChapter(into > 5 ? chapter : chapter - 1)}>
@@ -356,7 +376,7 @@ export function AudiobookPlayer({ b, startChapter }: { b: Book; startChapter?: n
           </div>
 
           <aside aria-label="Chapters" className="rounded-xl border border-border bg-surface lg:max-h-[640px] lg:overflow-hidden">
-            <div className="border-b border-border px-5 py-4 text-sm font-bold">Chapters <span className="font-normal text-muted-foreground">· {chapters.length}</span></div>
+            <div className="border-b border-border px-5 py-4 text-sm font-bold">Chapters <span className="font-normal text-muted-foreground">Â· {chapters.length}</span></div>
             <ol className="max-h-[520px] overflow-auto lg:max-h-[580px]">
               {chapters.map((c, i) => (
                 <li key={c.title}>
@@ -376,3 +396,4 @@ export function AudiobookPlayer({ b, startChapter }: { b: Book; startChapter?: n
     </main>
   );
 }
+

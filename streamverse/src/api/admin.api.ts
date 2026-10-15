@@ -129,11 +129,11 @@ export const adminCollectionsApi = {
 /* ─────────────────────────────── Homepage / Banners ─────────────────────── */
 
 export const adminHomepageApi = {
-  list: () => api.get<ApiResponse<ApiHomeSection[]>>("/admin/homepage"),
+  list: () => api.get<ApiResponse<ApiHomeSection[]>>("/admin/homepage/sections"),
   update: (sections: ApiHomeSection[]) =>
-    api.put<ApiResponse<ApiHomeSection[]>>("/admin/homepage", { sections }),
+    api.put<ApiResponse<ApiHomeSection[]>>("/admin/homepage/sections", { sections }),
   updateSection: (id: string, data: Partial<ApiHomeSection>) =>
-    api.patch<ApiResponse<ApiHomeSection>>(`/admin/homepage/${id}`, data),
+    api.patch<ApiResponse<ApiHomeSection>>(`/admin/homepage/sections/${id}`, data),
 };
 
 export const adminBannersApi = {

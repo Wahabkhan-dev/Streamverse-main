@@ -145,7 +145,7 @@ export function useSaveProgressMutation() {
       contentId,
       data,
     }: {
-      type: "movies" | "ebooks" | "audiobooks";
+      type: "movie" | "ebook" | "audiobook";
       contentId: string;
       data: Parameters<typeof meApi.saveProgress>[2];
     }) => meApi.saveProgress(type, contentId, data),
