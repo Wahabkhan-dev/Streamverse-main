@@ -9,7 +9,7 @@ export const authApi = {
 
   /** POST /auth/register */
   register(name: string, email: string, password: string) {
-    return api.post<ApiResponse<AuthTokenResponse>>("/auth/register", { name, email, password });
+    return api.post<ApiResponse<AuthTokenResponse>>("/auth/register", { fullName: name, email, password });
   },
 
   /** GET /auth/me — returns the currently authenticated user */
@@ -39,7 +39,7 @@ export const authApi = {
 
   /** POST /auth/reset-password */
   resetPassword(token: string, password: string) {
-    return api.post<ApiResponse<{ message: string }>>("/auth/reset-password", { token, password });
+    return api.post<ApiResponse<{ message: string }>>("/auth/reset-password", { token, newPassword: password });
   },
 
   /** POST /auth/change-password */

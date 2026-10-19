@@ -60,10 +60,9 @@ function SignInPage() {
         profile: {
           ...s.profile,
           email: res.data.user.email,
-          name: res.data.user.name,
-          ...(res.data.user.country ? { country: res.data.user.country } : {}),
-          ...(res.data.user.language ? { language: res.data.user.language } : {}),
-          ...(res.data.user.age ? { age: res.data.user.age } : {}),
+          name: res.data.user.fullName,
+          ...(res.data.user.preferences?.country ? { country: res.data.user.preferences.country } : {}),
+          ...(res.data.user.preferences?.preferredLanguage ? { language: res.data.user.preferences.preferredLanguage } : {}),
         },
       }));
       setLoading(false);
@@ -86,7 +85,7 @@ function SignInPage() {
     <div className="grid min-h-dvh grid-rows-[auto_1fr_auto] bg-background">
       {/* Header */}
       <header className="border-b border-border bg-ink px-6 py-4">
-        <Link to="/"><Logo /></Link>
+        <Logo />
       </header>
 
       {/* Card */}

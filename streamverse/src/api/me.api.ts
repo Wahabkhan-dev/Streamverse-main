@@ -23,7 +23,7 @@ export const meApi = {
     return api.get<ApiResponse<ApiUser>>("/me/profile");
   },
 
-  updateProfile(data: Partial<Pick<ApiUser, "name" | "avatar" | "country" | "language" | "age">>) {
+  updateProfile(data: { fullName?: string; country?: string | null; preferredLanguage?: string | null; subtitleLanguage?: string | null; audioLanguage?: string | null; videoQuality?: string | null; audiobookSpeed?: number | null }) {
     return api.patch<ApiResponse<ApiUser>>("/me/profile", data);
   },
 
@@ -58,9 +58,9 @@ export const meApi = {
     return api.post<ApiResponse<ApiSubscription>>("/me/subscription/change-plan", { planId });
   },
 
-  /** POST /me/subscription/billing-portal — returns Stripe billing portal URL */
+  /** POST /me/billing-portal — returns Stripe billing portal URL */
   billingPortal() {
-    return api.post<ApiResponse<ApiBillingPortal>>("/me/subscription/billing-portal");
+    return api.post<ApiResponse<ApiBillingPortal>>("/me/billing-portal");
   },
 
   getInvoices() {
@@ -97,7 +97,7 @@ export const meApi = {
   },
 
   addToMyList(contentId: string, contentType: "movie" | "ebook" | "audiobook") {
-    return api.post<ApiResponse<ApiListItem>>("/me/my-list", { contentId, contentType });
+    return api.post<ApiResponse<ApiListItem>>(`/me/my-list/${contentId}`, { contentType });
   },
 
   removeFromMyList(contentId: string) {
@@ -111,7 +111,7 @@ export const meApi = {
   },
 
   addToLibrary(contentId: string, contentType: "movie" | "ebook" | "audiobook") {
-    return api.post<ApiResponse<ApiListItem>>("/me/library", { contentId, contentType });
+    return api.post<ApiResponse<ApiListItem>>(`/me/library/${contentId}`, { contentType });
   },
 
   removeFromLibrary(contentId: string) {
@@ -125,13 +125,13 @@ export const meApi = {
   },
 
   /** GET /me/progress/:type/:id */
-  getProgress(type: "movies" | "ebooks" | "audiobooks", contentId: string) {
+  getProgress(type: "movie" | "ebook" | "audiobook", contentId: string) {
     return api.get<ApiResponse<ApiProgress>>(`/me/progress/${type}/${contentId}`);
   },
 
   /** PUT /me/progress/:type/:id */
   saveProgress(
-    type: "movies" | "ebooks" | "audiobooks",
+    type: "movie" | "ebook" | "audiobook",
     contentId: string,
     data: {
       percentage: number;
@@ -164,15 +164,15 @@ export const meApi = {
   /* ────────── Bookmarks ────────── */
 
   getBookmarks(ebookId: string) {
-    return api.get<ApiResponse<ApiBookmark[]>>(`/me/bookmarks/${ebookId}`);
+    return api.get<ApiResponse<ApiBookmark[]>>(`/me/ebooks/${ebookId}/bookmarks`);
   },
 
   addBookmark(ebookId: string, page: number, note?: string) {
-    return api.post<ApiResponse<ApiBookmark>>(`/me/bookmarks/${ebookId}`, { page, note });
+    return api.post<ApiResponse<ApiBookmark>>(`/me/ebooks/${ebookId}/bookmarks`, { page, note });
   },
 
-  removeBookmark(ebookId: string, page: number) {
-    return api.delete<ApiResponse<{ message: string }>>(`/me/bookmarks/${ebookId}/${page}`);
+  removeBookmark(ebookId: string, bookmarkId: string) {
+    return api.delete<ApiResponse<{ message: string }>>(`/me/ebooks/${ebookId}/bookmarks/${bookmarkId}`);
   },
 
   /* ────────── Notifications ────────── */

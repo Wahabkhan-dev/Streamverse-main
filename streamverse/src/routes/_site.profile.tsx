@@ -58,7 +58,7 @@ function ProfileForm() {
     toast.success("Profile saved");
     if (!DEMO_MODE) {
       updateProfileMutation.mutate(
-        { name: form.profile.name.trim(), country: form.profile.country, language: form.profile.language, age: form.profile.age },
+        { fullName: form.profile.name.trim(), country: form.profile.country ?? null, preferredLanguage: form.profile.language ?? null },
         { onError: () => toast.error("Failed to sync profile with server") },
       );
     }

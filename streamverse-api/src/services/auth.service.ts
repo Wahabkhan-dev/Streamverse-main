@@ -1,4 +1,5 @@
 import type { Request } from "express";
+import { logger } from "../config/logger";
 import { AppError, ConflictError, UnauthorizedError, ValidationError } from "../utils/errors";
 import { ERROR_CODES } from "../constants/errors";
 import { env } from "../config/env";
@@ -124,7 +125,10 @@ export async function forgotPassword(email: string, req: Request): Promise<void>
   const reset = issuePasswordResetToken();
   await passwordResetRepository.create({ userId: user.id, tokenHash: reset.tokenHash, expiresAt: reset.expiresAt });
   logAuthEvent("password.reset_requested", req, { userId: user.id });
-  await sendPasswordReset({ to: user.email, subject: "Reset your StreamVerse password", resetToken: reset.token, expiresInMinutes: env.PASSWORD_RESET_TOKEN_TTL_MINUTES });
+  // Swallow email errors — caller always gets the same generic response for anti-enumeration.
+  await sendPasswordReset({ to: user.email, subject: "Reset your StreamVerse password", resetToken: reset.token, expiresInMinutes: env.PASSWORD_RESET_TOKEN_TTL_MINUTES }).catch((err) => {
+    logger.warn({ userId: user.id, err: (err as Error).message }, "auth: forgot-password email delivery failed");
+  });
 }
 
 export async function resetPassword(token: string, newPassword: string, req: Request): Promise<void> {

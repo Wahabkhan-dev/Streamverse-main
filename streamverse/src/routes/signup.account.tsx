@@ -115,7 +115,7 @@ function AccountStep() {
       updateUser((s) => ({
         ...s,
         role: res.data.user.role,
-        profile: { ...s.profile, name: res.data.user.name, email: res.data.user.email },
+        profile: { ...s.profile, name: res.data.user.fullName, email: res.data.user.email },
         subscription: { ...s.subscription, status: "canceled" },
       }));
       setLoading(false);

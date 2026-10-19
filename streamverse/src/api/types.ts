@@ -22,16 +22,21 @@ export interface ApiError {
 export interface ApiUser {
   id: string;
   email: string;
-  name: string;
+  fullName: string;
+  avatarUrl: string | null;
   role: "user" | "admin";
-  avatar?: string;
-  country?: string;
-  language?: string;
-  age?: number;
-  verified?: boolean;
-  subscriptionStatus?: string;
-  createdAt?: string;
-  updatedAt?: string;
+  status: string;
+  emailVerified: boolean;
+  preferences: {
+    country: string | null;
+    preferredLanguage: string | null;
+    subtitleLanguage: string | null;
+    audioLanguage: string | null;
+    videoQuality: string | null;
+    audiobookSpeed: number | null;
+  };
+  createdAt: string;
+  lastLoginAt: string | null;
 }
 
 export interface AuthTokenResponse {
@@ -345,13 +350,21 @@ export interface ApiSearchSuggestion {
 
 /* ─────────────────────────────── Media Access ───────────────────────────── */
 
-export interface ApiPlaybackAccess {
-  url: string;
-  token?: string;
-  expiresAt?: string;
-  captions?: Array<{ language: string; url: string }>;
-  qualities?: Array<{ label: string; url: string }>;
-}
+export type ApiPlaybackAccess =
+  | {
+      mediaReady: true;
+      playback: { mode: "SINGLE_FILE"; url: string; expiresAt: string };
+      sessionId?: string;
+    }
+  | {
+      mediaReady: true;
+      playback: {
+        mode: "CHAPTER_FILES";
+        chapters: Array<{ chapterId: string; chapterNumber: number; title: string | null; url: string; expiresAt: string }>;
+      };
+      sessionId?: string;
+    }
+  | { mediaReady: false; playback: null; sessionId?: string };
 
 export interface ApiEbookAccess {
   signedUrl: string | null;

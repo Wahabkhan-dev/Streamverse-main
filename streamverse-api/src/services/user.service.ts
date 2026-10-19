@@ -31,7 +31,7 @@ export function serializeUser(user: User): SafeUser {
     email: user.email,
     fullName: user.fullName,
     avatarUrl: user.avatarUrl,
-    role: user.role,
+    role: user.role.toLowerCase() as SafeUser["role"],
     status: user.status,
     emailVerified: user.emailVerified,
     preferences: {
