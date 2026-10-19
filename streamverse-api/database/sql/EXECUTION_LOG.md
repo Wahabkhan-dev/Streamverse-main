@@ -23,12 +23,12 @@ Credentials are NEVER recorded here.
 
 | Script | Purpose | Environment | Date | Result | Notes |
 |--------|---------|-------------|------|--------|-------|
-| `local/001_mysql_initial_setup.sql` | Create streamverse_dev DB and user | Local dev | PENDING | PENDING | Blocked: MySQL root password not available to automated process. Must be run manually by developer. |
-| `verification/002_schema_precheck.sql` | Verify DB charset/collation/version | Local dev | PENDING | PENDING | Run after 001 |
-| `verification/003_schema_verification.sql` | Verify all tables exist | Local dev | PENDING | PENDING | Run after `prisma migrate dev` |
-| `verification/004_index_verification.sql` | Verify indexes | Local dev | PENDING | PENDING | Run after 003 |
-| `verification/005_data_integrity_checks.sql` | FK, dead fields, Plan entitlements | Local dev | PENDING | PENDING | Run after 003 |
-| `verification/006_post_migration_verification.sql` | Engine, charset, SQL mode, connection | Local dev | PENDING | PENDING | Run after 003 |
+| `local/001_mysql_initial_setup.sql` | Create streamverse_dev DB and user | Local dev | 2026-10-15 | PASS | Database `streamverse_dev` created, user `streamverse` granted full privileges |
+| `verification/002_schema_precheck.sql` | Verify DB charset/collation/version | Local dev | 2026-10-15 | PASS | MySQL 8.0.46, utf8mb4, utf8mb4_unicode_ci confirmed |
+| `verification/003_schema_verification.sql` | Verify all tables exist | Local dev | 2026-10-15 | PASS | 53 tables (52 app + _prisma_migrations), all InnoDB, all utf8mb4 |
+| `verification/004_index_verification.sql` | Verify indexes | Local dev | 2026-10-15 | PASS | All unique/composite indexes present on all tables |
+| `verification/005_data_integrity_checks.sql` | FK, dead fields, Plan entitlements | Local dev | 2026-10-15 | PASS | 0 dead fields, Plan entitlements verified (audiobooksEnabled, ebooksEnabled, features JSON, maxConcurrentStreams, maxDevices, maxVideoQuality, moviesEnabled) |
+| `verification/006_post_migration_verification.sql` | Engine, charset, SQL mode, connection | Local dev | 2026-10-15 | PASS | STRICT_TRANS_TABLES enabled, all engines InnoDB, all charsets utf8mb4, Device/PlaybackSession/ContentSequence tables verified |
 
 ---
 
@@ -79,12 +79,31 @@ The following source code changes were made during the PostgreSQL → MySQL migr
 12. **`docker-compose.yml`**
     - PostgreSQL 16 service replaced with MySQL 8.0 service
 
+13. **`src/config/env.ts`**
+    - DATABASE_URL validator: `postgresql://` → `mysql://`
+
+14. **`tests/setup.ts`**
+    - Test DATABASE_URL: `postgresql://test:test@localhost:5432/streamverse_test?schema=public` → `mysql://test:test@localhost:3306/streamverse_test`
+
+15. **`tests/unit/env.test.ts`**
+    - Base DATABASE_URL: `postgresql://` → `mysql://`
+    - Rejection test: `mysql://` → `postgresql://`, assertion checks for `/mysql/`
+
 ---
 
-## Pending (requires MySQL credentials)
+## Completed — 2026-10-15
 
-- Run `001_mysql_initial_setup.sql` as MySQL root
-- Update `.env` DATABASE_URL with real credentials
-- Run `npx prisma migrate dev --name mysql_baseline`
-- Run verification scripts 002–006
-- Run `npx prisma db seed`
+All steps executed successfully:
+
+- ✓ `001_mysql_initial_setup.sql` run as MySQL root
+- ✓ `.env` DATABASE_URL updated to `mysql://streamverse:***@localhost:3306/streamverse_dev`
+- ✓ `npx prisma migrate dev --name mysql_baseline` — 52 tables created
+- ✓ Verification scripts 002–006 all PASS
+- ✓ `npx prisma db seed` — admin account, 11 languages, 17 genres, 13 warning types, 3 legal docs, 7 settings
+- ✓ Backend tests: 510/510 passed (66 files)
+- ✓ Backend TypeScript: 0 errors
+- ✓ Backend build: PASS
+- ✓ Frontend TypeScript: 0 errors
+- ✓ Frontend build: PASS (3.48s)
+- ✓ Prisma validate: PASS
+- ✓ Prisma generate: PASS

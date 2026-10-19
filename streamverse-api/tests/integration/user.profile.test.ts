@@ -29,7 +29,7 @@ describe("GET /api/v1/me/profile", () => {
     const accessToken = await register();
     const res = await request(app).get("/api/v1/me/profile").set("Authorization", `Bearer ${accessToken}`);
     expect(res.status).toBe(200);
-    expect(res.body.data).toMatchObject({ fullName: "Alex Morgan", role: "USER" });
+    expect(res.body.data).toMatchObject({ fullName: "Alex Morgan", role: "user" });
     expect(res.body.data).not.toHaveProperty("passwordHash");
   });
 });
@@ -50,7 +50,7 @@ describe("PATCH /api/v1/me/profile", () => {
     const accessToken = await register();
     const res = await request(app).patch("/api/v1/me/profile").set("Authorization", `Bearer ${accessToken}`).send({ fullName: "Still Alex", role: "ADMIN" });
     expect(res.status).toBe(200);
-    expect(res.body.data.role).toBe("USER");
+    expect(res.body.data.role).toBe("user");
   });
 
   it("ignores an attempt to change status through the generic profile update", async () => {

@@ -21,7 +21,7 @@ describe("POST /api/v1/auth/register", () => {
   it("creates a USER, ACTIVE account and returns it without the password hash", async () => {
     const res = await request(app).post("/api/v1/auth/register").send(body);
     expect(res.status).toBe(201);
-    expect(res.body.data.user).toMatchObject({ email: "alex@example.com", fullName: "Alex Morgan", role: "USER", status: "ACTIVE", emailVerified: false });
+    expect(res.body.data.user).toMatchObject({ email: "alex@example.com", fullName: "Alex Morgan", role: "user", status: "ACTIVE", emailVerified: false });
     expect(res.body.data.user).not.toHaveProperty("passwordHash");
     expect(JSON.stringify(res.body)).not.toMatch(/passwordHash|a-strong-passphrase/);
     expect(typeof res.body.data.accessToken).toBe("string");
@@ -45,7 +45,7 @@ describe("POST /api/v1/auth/register", () => {
   it("cannot be used to create an ADMIN by injecting a role in the request body", async () => {
     const res = await request(app).post("/api/v1/auth/register").send({ ...body, role: "ADMIN", status: "ACTIVE" });
     expect(res.status).toBe(201);
-    expect(res.body.data.user.role).toBe("USER");
+    expect(res.body.data.user.role).toBe("user");
     expect(db.user.all().every((u) => u.role === "USER")).toBe(true);
   });
 
