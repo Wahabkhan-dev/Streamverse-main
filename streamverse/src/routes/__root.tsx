@@ -22,7 +22,7 @@ import { Toaster } from "../components/ui/sonner";
 import { DEMO_MODE } from "../lib/config";
 import { initSentry } from "../lib/sentry";
 import { authApi } from "../api/auth.api";
-import { getAccessToken } from "../api/client";
+import { getAccessToken, setAccessToken } from "../api/client";
 import { setAuthUser, clearAuthUser } from "../lib/authState";
 
 // Initialize Sentry as early as possible
@@ -106,14 +106,21 @@ function RootComponent() {
     hydrateDrafts();
     hydrateLegal();
 
-    // In real-API mode, bootstrap auth state from token if present
-    if (!DEMO_MODE && getAccessToken()) {
-      authApi
-        .me()
-        .then((res) => setAuthUser(res.data))
+    // In real-API mode, bootstrap auth state on every page load.
+    // Try /auth/me first (uses stored access token). If no token, try refresh
+    // (uses the httpOnly sv_refresh_token cookie that survives page reloads).
+    if (!DEMO_MODE) {
+      const token = getAccessToken();
+      const attempt = token ? authApi.me().then((res) => res.data) : Promise.reject(new Error("no token"));
+      attempt
+        .catch(() =>
+          authApi.refresh().then((res) => {
+            setAccessToken(res.data.accessToken);
+            return authApi.me().then((r) => r.data);
+          }),
+        )
+        .then((user) => setAuthUser(user))
         .catch(() => clearAuthUser());
-    } else if (!DEMO_MODE) {
-      clearAuthUser();
     }
   }, []);
 
