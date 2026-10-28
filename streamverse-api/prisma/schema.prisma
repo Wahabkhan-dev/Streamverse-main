@@ -3,7 +3,9 @@
 // (User/Auth in Phase 2, Content in Phase 3, ...) and each one ships with a Prisma migration.
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // "native" for local dev; linux-musl-openssl-3.0.x for the node:20-alpine Docker image.
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {

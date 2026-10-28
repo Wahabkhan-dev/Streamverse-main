@@ -125,5 +125,6 @@ export async function deleteCustomer(stripeCustomerId: string): Promise<void> {
 
 /** Section 19/20: verifies the Stripe-Signature header against the RAW body — never a parsed/re-stringified one. */
 export function constructWebhookEvent(rawBody: Buffer, signature: string): Stripe.Event {
-  return getStripeClient().webhooks.constructEvent(rawBody, signature, stripeConfig.webhookSecret);
+  // getStripeClient() throws 503 when billing is off; env validation sets the key and webhook secret together.
+  return getStripeClient().webhooks.constructEvent(rawBody, signature, stripeConfig.webhookSecret ?? "");
 }

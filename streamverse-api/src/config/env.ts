@@ -42,9 +42,10 @@ const schema = z
     ADMIN_PASSWORD: optional(z.string().min(8)),
     ADMIN_NAME: optional(z.string().min(1)),
 
-    // Phase 7: Stripe billing. Required — validated at startup (Section 3/115), never read ad hoc.
-    STRIPE_SECRET_KEY: z.string().min(1, "STRIPE_SECRET_KEY is required"),
-    STRIPE_WEBHOOK_SECRET: z.string().min(1, "STRIPE_WEBHOOK_SECRET is required"),
+    // Phase 7: Stripe billing. Optional — when unset the API still boots and billing calls fail with 503
+    // (see stripeClient.ts). Set both together; validated at startup (Section 3/115), never read ad hoc.
+    STRIPE_SECRET_KEY: optional(z.string().min(1)),
+    STRIPE_WEBHOOK_SECRET: optional(z.string().min(1)),
     STRIPE_SUCCESS_URL: z.url("STRIPE_SUCCESS_URL must be a full URL"),
     STRIPE_CANCEL_URL: z.url("STRIPE_CANCEL_URL must be a full URL"),
     STRIPE_PORTAL_RETURN_URL: optional(z.url()),
@@ -117,8 +118,11 @@ const schema = z
     }
     // Section 115: a live secret key paired with a test-mode webhook secret (or vice versa) is a silent
     // production hazard — Stripe would sign webhooks for a different mode than the one API calls use.
-    const stripeKeyIsLive = env.STRIPE_SECRET_KEY.startsWith("sk_live_");
-    const stripeKeyIsTest = env.STRIPE_SECRET_KEY.startsWith("sk_test_");
+    if (Boolean(env.STRIPE_SECRET_KEY) !== Boolean(env.STRIPE_WEBHOOK_SECRET)) {
+      ctx.addIssue({ code: "custom", path: ["STRIPE_WEBHOOK_SECRET"], message: "Set STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET together, or neither" });
+    }
+    const stripeKeyIsLive = env.STRIPE_SECRET_KEY?.startsWith("sk_live_") ?? false;
+    const stripeKeyIsTest = env.STRIPE_SECRET_KEY?.startsWith("sk_test_") ?? false;
     if (env.NODE_ENV === "production" && stripeKeyIsTest) {
       ctx.addIssue({ code: "custom", path: ["STRIPE_SECRET_KEY"], message: "A sk_test_ key is set in production — use a live key." });
     }
@@ -155,6 +159,7 @@ export function buildEnv(source: NodeJS.ProcessEnv) {
     ...e,
     isProduction: e.NODE_ENV === "production",
     isTest: e.NODE_ENV === "test",
+    stripeEnabled: Boolean(e.STRIPE_SECRET_KEY && e.STRIPE_WEBHOOK_SECRET),
     logLevel: e.LOG_LEVEL ?? (e.NODE_ENV === "test" ? "silent" : e.NODE_ENV === "production" ? "info" : "debug"),
     docsEnabled: e.API_DOCS_ENABLED ?? e.NODE_ENV !== "production",
     allowedOrigins: [...new Set([new URL(e.FRONTEND_URL).origin, ...parseOrigins(e.ALLOWED_ORIGINS)])],
@@ -168,23 +173,14 @@ export const env: Env = buildEnv(process.env);
 /**
  * Additional production gate: refuses to start if critical vars are absent.
  * Call this at the very top of server.ts before any service is initialized.
- * Note: DATABASE_URL, JWT_SECRET, JWT_REFRESH_SECRET, STRIPE_SECRET_KEY, and
- * STRIPE_WEBHOOK_SECRET are already enforced by the Zod schema above (they
- * will have caused process.exit before this function is reached if missing).
- * This function adds REDIS_URL (not required by Zod when QUEUE_DRIVER=inline)
- * and warning-level checks for recommended vars.
+ * Note: DATABASE_URL, JWT_SECRET and JWT_REFRESH_SECRET are already enforced
+ * by the Zod schema above, as is REDIS_URL when QUEUE_DRIVER=bullmq. Stripe
+ * and Redis are optional, so this only adds warning-level checks.
  */
 export function validateProductionEnv(): void {
   if (process.env["NODE_ENV"] !== "production") return;
 
-  const required = [
-    "DATABASE_URL",
-    "JWT_SECRET",
-    "JWT_REFRESH_SECRET",
-    "STRIPE_SECRET_KEY",
-    "STRIPE_WEBHOOK_SECRET",
-    "REDIS_URL",
-  ] as const;
+  const required = ["DATABASE_URL", "JWT_SECRET", "JWT_REFRESH_SECRET"] as const;
 
   const missing = required.filter((k) => !process.env[k]);
   if (missing.length > 0) {
@@ -193,7 +189,7 @@ export function validateProductionEnv(): void {
   }
 
   // Warn about recommended but not strictly blocking vars
-  const recommended = ["SENTRY_DSN", "EMAIL_PROVIDER", "APP_PUBLIC_URL"];
+  const recommended = ["SENTRY_DSN", "EMAIL_PROVIDER", "APP_PUBLIC_URL", "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"];
   const missingRec = recommended.filter((k) => !process.env[k]);
   if (missingRec.length > 0) {
     console.warn(`[startup] WARNING: missing recommended env vars: ${missingRec.join(", ")}`);
