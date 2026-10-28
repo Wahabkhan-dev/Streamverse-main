@@ -82,7 +82,7 @@ describe("movie player", () => {
     fireEvent.click(screen.getByRole("button", { name: "Mute" }));
     expect(screen.getByRole("button", { name: "Unmute" })).toBeTruthy();
     expect(screen.getByLabelText("Volume")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Fullscreen" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Full screen/ })).toBeTruthy();
   });
 
   it("keyboard: space pauses, arrows seek", async () => {
@@ -91,7 +91,7 @@ describe("movie player", () => {
     fireEvent.keyDown(window, { key: " " });
     await waitFor(() => expect(screen.getAllByRole("button", { name: "Play" }).length).toBeGreaterThan(0));
     fireEvent.keyDown(window, { key: "ArrowRight" });
-    expect(clockText()).toMatch(/^0:1\d \/ /);
+    expect(clockText()).toMatch(/^0:05 \/ /);
   });
 
   it("plays a trailer, not the film", async () => {
