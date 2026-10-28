@@ -11,11 +11,12 @@ import { itemTitle, useCatalog } from "@/lib/items";
 import { PLACEHOLDER_IMAGE } from "@/lib/placeholder";
 import { slugify, update, useCollections, type Collection } from "@/lib/store";
 import { DEMO_MODE } from "@/lib/config";
+import { LiveCollections } from "@/components/sv/LiveAdminPages";
 import { useAdminCollectionsQuery, useAdminCollectionMutation } from "@/hooks/useAdminApi";
 
 export const Route = createFileRoute("/admin/collections")({
   validateSearch: (s: Record<string, unknown>): { edit?: string } => (typeof s["edit"] === "string" && s["edit"] ? { edit: s["edit"] } : {}),
-  component: CollectionsAdmin,
+  component: () => (DEMO_MODE ? <CollectionsAdmin /> : <LiveCollections />),
 });
 
 const MAX_IMAGE = 1_500_000;

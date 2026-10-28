@@ -12,5 +12,5 @@ export async function list(req: Request, res: Response) {
   const { page, limit, type, search } = req.query as unknown as { page: number; limit: number; type?: "MOVIE" | "EBOOK" | "AUDIOBOOK"; search?: string };
   const { skip, take } = toSkipTake(page, limit);
   const { rows, total } = await contentRepository.listDrafts({ type, search }, skip, take);
-  sendPaginated(res, rows.map(mapContentListRow), buildPagination(total, page, limit));
+  sendPaginated(res, rows.map((r) => mapContentListRow(r)), buildPagination(total, page, limit));
 }

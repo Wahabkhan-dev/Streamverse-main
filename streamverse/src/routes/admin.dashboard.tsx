@@ -11,9 +11,9 @@ import { BookCover } from "@/components/sv/media";
 import { type Book, type Movie } from "@/lib/data";
 import { useAudiobooks, useEbooks, useMovies, usePlans, useUsers } from "@/lib/store";
 import { DEMO_MODE } from "@/lib/config";
-import { useAdminDashboardQuery, useAdminMoviesQuery, useAdminEbooksQuery, useAdminAudiobooksQuery, useAdminUsersQuery } from "@/hooks/useAdminApi";
+import { LiveDashboard } from "@/components/sv/LiveDashboard";
 
-export const Route = createFileRoute("/admin/dashboard")({ component: Dashboard });
+export const Route = createFileRoute("/admin/dashboard")({ component: () => (DEMO_MODE ? <DemoDashboard /> : <LiveDashboard />) });
 
 const quick = [
   { to: "/admin/movies/new", icon: Film, t: "Add new movie", s: "Publish a new film" },
@@ -23,7 +23,8 @@ const quick = [
 
 const services = ["Website", "Streaming service", "eBook service", "Audiobook service", "Payment gateway", "Database"];
 
-function Dashboard() {
+/** Demo mode only: illustrative numbers and charts from the local sample store. */
+function DemoDashboard() {
   const demoMovies = useMovies();
   const demoEbooks = useEbooks();
   const demoAudiobooks = useAudiobooks();
@@ -31,34 +32,18 @@ function Dashboard() {
   const plans = usePlans();
   const { subs: demoSubs, revenue: demoRevenue } = planTotals(plans);
 
-  // Real API hooks (only active when DEMO_MODE=false)
-  const apiDashboard = useAdminDashboardQuery();
-  const apiMovies = useAdminMoviesQuery({ limit: 1 });
-  const apiEbooks = useAdminEbooksQuery({ limit: 1 });
-  const apiAudiobooks = useAdminAudiobooksQuery({ limit: 1 });
-  const apiUsers = useAdminUsersQuery({ limit: 5 });
-
-  // Dual-mode data selection
-  const moviesCount = DEMO_MODE ? demoMovies.length : (apiMovies.data?.meta?.total ?? 0);
-  const ebooksCount = DEMO_MODE ? demoEbooks.length : (apiEbooks.data?.meta?.total ?? 0);
-  const audiobooksCount = DEMO_MODE ? demoAudiobooks.length : (apiAudiobooks.data?.meta?.total ?? 0);
-  const subs = DEMO_MODE ? demoSubs : (apiDashboard.data?.data.activeSubscriptions ?? demoSubs);
-  const revenue = DEMO_MODE ? demoRevenue : (apiDashboard.data?.data.totalRevenue ?? demoRevenue);
-
-  // Keep chart data driven by demo counts (charts are illustrative in both modes)
-  const movies = DEMO_MODE ? demoMovies : demoMovies;
-  const ebooks = DEMO_MODE ? demoEbooks : demoEbooks;
-  const audiobooks = DEMO_MODE ? demoAudiobooks : demoAudiobooks;
-  const users = DEMO_MODE ? demoUsers : (apiUsers.data?.data ?? []).map((u) => ({
-    id: u.id,
-    name: u.name,
-    email: u.email,
-    plan: u.subscriptionStatus ?? "Free",
-    status: (u.active ? "Active" : "Suspended") as "Active" | "Suspended" | "Inactive",
-    joined: u.createdAt.slice(0, 10),
-    last: u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : "Unknown",
-    country: u.country ?? "",
-  }));
+  const moviesCount = demoMovies.length;
+  const ebooksCount = demoEbooks.length;
+  const audiobooksCount = demoAudiobooks.length;
+  const subs = demoSubs;
+  const revenue = demoRevenue;
+  const movies = demoMovies;
+  const ebooks = demoEbooks;
+  const audiobooks = demoAudiobooks;
+  const recentMovies = demoMovies;
+  const recentEbooks = demoEbooks;
+  const recentAudiobooks = demoAudiobooks;
+  const users = demoUsers;
   const [recentUsers, setRecentUsers] = useState(false);
   const charts = useMemo(() => {
     const month = { ...DEFAULT_FILTERS, range: "12m" as const, period: "Monthly" as const };
@@ -79,9 +64,9 @@ function Dashboard() {
 
   // newest first: titles are added to the front of each list
   const recent = [
-    ...movies.slice(0, 3).map((m) => ({ type: "Movie", item: m as Movie | Book })),
-    ...ebooks.slice(0, 2).map((b) => ({ type: "eBook", item: b as Movie | Book })),
-    ...audiobooks.slice(0, 2).map((b) => ({ type: "Audiobook", item: b as Movie | Book })),
+    ...recentMovies.slice(0, 3).map((m) => ({ type: "Movie", item: m as Movie | Book })),
+    ...recentEbooks.slice(0, 2).map((b) => ({ type: "eBook", item: b as Movie | Book })),
+    ...recentAudiobooks.slice(0, 2).map((b) => ({ type: "Audiobook", item: b as Movie | Book })),
   ].slice(0, 5);
 
   return (
@@ -97,9 +82,9 @@ function Dashboard() {
         }
       />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-        <MetricCard icon={Film} label="Total movies" value={String(moviesCount || movies.length)} trend={12.4} />
-        <MetricCard icon={BookOpen} label="Total eBooks" value={String(ebooksCount || ebooks.length)} trend={8.2} />
-        <MetricCard icon={Headphones} label="Total audiobooks" value={String(audiobooksCount || audiobooks.length)} trend={14.6} />
+        <MetricCard icon={Film} label="Total movies" value={String(moviesCount)} trend={12.4} />
+        <MetricCard icon={BookOpen} label="Total eBooks" value={String(ebooksCount)} trend={8.2} />
+        <MetricCard icon={Headphones} label="Total audiobooks" value={String(audiobooksCount)} trend={14.6} />
         <MetricCard icon={Users} label="Total users" value={PLATFORM_USERS.toLocaleString()} trend={6.7} />
         <MetricCard icon={CreditCard} label="Active subscriptions" value={subs.toLocaleString()} trend={4.3} />
         <MetricCard icon={TrendingUp} label="Monthly revenue" value={`$${revenue.toLocaleString()}`} trend={9.8} />
@@ -238,7 +223,9 @@ function Dashboard() {
                     <tr key={`${type}-${item.slug}`} className={tr}>
                       <td className={td}>
                         <div className="flex items-center gap-3">
-                          {type === "Movie" ? <img src={(item as Movie).image} alt="" className="h-9 w-16 rounded object-cover" /> : <BookCover b={item as Book} square className="w-9 rounded" />}
+                          {type === "Movie" ? (
+                            (item as Movie).image ? <img src={(item as Movie).image} alt="" className="h-9 w-16 rounded object-cover" /> : <div className="h-9 w-16 rounded bg-surface-3" />
+                          ) : <BookCover b={item as Book} square className="w-9 rounded" />}
                           <span className="font-semibold">{item.title}</span>
                         </div>
                       </td>

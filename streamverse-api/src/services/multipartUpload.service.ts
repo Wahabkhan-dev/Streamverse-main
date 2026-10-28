@@ -8,6 +8,7 @@ import type { MultipartPart } from "./storage/storage.provider";
 import type { AuditContext } from "./auditLog.service";
 import { recordAudit } from "./auditLog.service";
 import { ConflictError, NotFoundError, ValidationError } from "../utils/errors";
+import { completeUpload } from "./upload.service";
 import type { PresignUploadInput } from "../validators/upload.validator";
 
 const NO_ACTOR: AuditContext = { userId: undefined, ip: undefined, userAgent: undefined, requestId: undefined };
@@ -20,7 +21,8 @@ export async function initiateMultipartUpload(input: PresignUploadInput, ctx: Au
   const purpose = input.purpose as UploadPurpose;
   const rule = PURPOSE_RULES[purpose];
 
-  if (rule.requiresContentId && !input.contentId) throw new ValidationError([{ path: "contentId", message: "contentId is required for this upload purpose." }]);
+  const library = input.library === true && !input.contentId;
+  if (rule.requiresContentId && !input.contentId && !library) throw new ValidationError([{ path: "contentId", message: "contentId is required for this upload purpose." }]);
   if (input.contentId) {
     const content = await contentRepository.findActiveById(input.contentId);
     if (!content) throw new NotFoundError("Content not found");
@@ -29,7 +31,7 @@ export async function initiateMultipartUpload(input: PresignUploadInput, ctx: Au
   if (!ALLOWED_MIME_TYPES[rule.kind].includes(input.mimeType)) throw new ValidationError([{ path: "mimeType", message: `"${input.mimeType}" is not allowed for ${rule.kind.toLowerCase()} uploads.` }]);
   if (input.sizeBytes > SIZE_LIMITS_BYTES[rule.kind]) throw new ValidationError([{ path: "sizeBytes", message: "File exceeds the size limit for this upload kind." }]);
 
-  const storageKey = buildStorageKey(purpose, input.mimeType, input.contentId);
+  const storageKey = buildStorageKey(purpose, input.mimeType, input.contentId, library);
   const expiresAt = new Date(Date.now() + env.UPLOAD_URL_TTL_SECONDS * 1000);
 
   const asset = await mediaAssetRepository.create({
@@ -68,11 +70,19 @@ export async function signPart(uploadId: string, partNumber: number) {
 
 export async function completeMultipart(uploadId: string, parts: MultipartPart[], ctx: AuditContext = NO_ACTOR) {
   const { asset, multipart } = await findByAssetId(uploadId);
-  await getStorageProvider().completeMultipartUpload(asset.storageKey!, multipart.providerUploadId, parts);
+  // A browser can only read a part's ETag if the bucket CORS exposes it. The server does not need to trust the client for it:
+  // ask the storage which parts it actually received and use those (and refuse if any part the client named is missing).
+  const storage = getStorageProvider();
+  const received = await storage.listMultipartParts(asset.storageKey!, multipart.providerUploadId);
+  const have = new Map(received.map((p) => [p.partNumber, p.etag]));
+  const missing = parts.filter((p) => !have.has(p.partNumber)).map((p) => p.partNumber);
+  if (missing.length) throw new ValidationError([{ path: "parts", message: `Part ${missing.join(", ")} was never received by storage. Upload it again.` }]);
+  await storage.completeMultipartUpload(asset.storageKey!, multipart.providerUploadId, parts.map((p) => ({ partNumber: p.partNumber, etag: have.get(p.partNumber)! })));
   await mediaAssetRepository.deleteMultipartUpload(asset.id);
-  await mediaAssetRepository.update(asset.id, { status: "UPLOADED", expiresAt: null });
   await recordAudit(ctx, { action: "media.multipart_completed", entityType: "MEDIA_ASSET", entityId: asset.id });
-  return { assetId: asset.id, status: "UPLOADED" as const };
+  // Same verification as a single-PUT upload: HEAD the object, check size/MIME/dimensions, then queue processing.
+  const view = await completeUpload(asset.id, ctx);
+  return { assetId: asset.id, status: view.status };
 }
 
 export async function abortMultipart(uploadId: string, ctx: AuditContext = NO_ACTOR) {

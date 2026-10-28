@@ -2,6 +2,18 @@ import type { Request, Response } from "express";
 import * as analyticsService from "../services/analytics/analytics.service";
 import { sendSuccess } from "../utils/apiResponse";
 
+/** GET /admin/dashboard — summary in the ApiAdminAnalytics shape the frontend expects. */
+export async function dashboardOverview(_req: Request, res: Response) {
+  const data = await analyticsService.getDashboardSummary();
+  sendSuccess(res, {
+    totalRevenue: Math.round((data.totalRevenueCents ?? 0) / 100),
+    activeSubscriptions: data.activeSubscriptions ?? 0,
+    newSignups: data.newUsersThisMonth ?? 0,
+    churnRate: 0,
+    series: [],
+  }, "Dashboard overview");
+}
+
 export async function summary(_req: Request, res: Response) {
   const data = await analyticsService.getDashboardSummary();
   sendSuccess(res, data, "Dashboard summary");

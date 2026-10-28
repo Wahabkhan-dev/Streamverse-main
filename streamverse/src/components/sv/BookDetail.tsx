@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { BookOpen, Headphones, Play, Star } from "lucide-react";
+import { BookMarked, BookOpen, Headphones, Play, Star } from "lucide-react";
 import { useState } from "react";
 import type { Book } from "@/lib/data";
 import { chaptersOf } from "@/lib/book-content";
@@ -7,6 +7,7 @@ import { clock } from "@/lib/runtime";
 import { useProgressOf } from "@/lib/user";
 import { cn } from "@/lib/utils";
 import { AudiobookCard, BookCard, BookCover, MediaRow } from "./media";
+import { DownloadButton } from "./DownloadButton";
 import { LibraryButton, MyListButton } from "./SaveButtons";
 import { EmptyState, TabBar, Tag } from "./ui";
 
@@ -43,7 +44,7 @@ export function BookDetail({ b, kind, related }: { b: Book; kind: "ebook" | "aud
   const isBook = kind === "ebook";
   const tabs = isBook ? EBOOK_TABS : AUDIO_TABS;
   const [tab, setTab] = useState<string>("about");
-  const ref = { type: isBook ? ("eBook" as const) : ("Audiobook" as const), slug: b.slug };
+  const ref = { type: isBook ? ("eBook" as const) : ("Audiobook" as const), slug: b.slug, ...(b.cid ? { id: b.cid } : {}) };
   const progress = useProgressOf(ref);
   const started = !!progress && progress.pct > 0 && !progress.completed;
   const info = b.info ?? {};
@@ -124,8 +125,14 @@ export function BookDetail({ b, kind, related }: { b: Book; kind: "ebook" | "aud
                   <Play className="fill-current" /> {started ? "Resume" : "Play"}
                 </Link>
               )}
+              {isBook && b.flipbook && (
+                <Link to="/flipbook/$slug" params={{ slug: b.slug }} data-testid="flipbook-button" className="inline-flex h-12 items-center gap-2 rounded-md border border-border bg-surface-2 px-6 text-sm font-bold tracking-wide uppercase transition-colors hover:bg-surface-3 [&_svg]:size-4">
+                  <BookMarked /> Flipbook
+                </Link>
+              )}
               <LibraryButton item={ref} />
               <MyListButton item={ref} />
+              <DownloadButton item={{ type: isBook ? "eBook" : "Audiobook", slug: b.slug, ...(ref.id ? { id: ref.id } : {}) }} />
             </div>
             {started && (
               <div className="mt-4 flex max-w-xs items-center gap-3 text-xs text-soft">

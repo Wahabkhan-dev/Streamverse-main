@@ -58,8 +58,8 @@ function matches(row: Row, where: Where, relations: Record<string, RelationDef> 
 
     const actual = row[key];
     if (cond && typeof cond === "object" && !(cond instanceof Date)) {
-      const c = cond as { lt?: unknown; lte?: unknown; gt?: unknown; gte?: unknown; not?: unknown; contains?: string; mode?: string; in?: unknown[] };
-      const isOperator = ["lt", "lte", "gt", "gte", "not", "contains", "in"].some((op) => op in c);
+      const c = cond as { lt?: unknown; lte?: unknown; gt?: unknown; gte?: unknown; not?: unknown; contains?: string; mode?: string; in?: unknown[]; notIn?: unknown[]; startsWith?: string; equals?: unknown };
+      const isOperator = ["lt", "lte", "gt", "gte", "not", "contains", "in", "notIn", "startsWith", "equals"].some((op) => op in c);
       // Prisma's compound-unique lookup, e.g. `{ userId_movieId: { userId, movieId } }` — "userId_movieId"
       // is never a real column; unwrap it into direct equality checks on its own fields instead.
       if (!isOperator) {
@@ -96,6 +96,9 @@ function matches(row: Row, where: Where, relations: Record<string, RelationDef> 
       if ("in" in c) {
         if (!c.in?.includes(actual)) return false;
       }
+      if ("notIn" in c && c.notIn?.includes(actual)) return false;
+      if ("startsWith" in c && !String(actual ?? "").startsWith(c.startsWith ?? "")) return false;
+      if ("equals" in c && actual !== c.equals) return false;
       continue; // all checks passed for this key
     }
     if (cond === null) {
@@ -220,9 +223,9 @@ class Table<T extends Row = Row> {
     return this.findUnique({ where, include });
   }
 
-  async findMany({ where, orderBy, include, skip, take }: { where?: Where; orderBy?: Record<string, "asc" | "desc">; include?: IncludeSpec; skip?: number; take?: number } = {}): Promise<T[]> {
+  async findMany({ where, orderBy, include, skip, take }: { where?: Where; orderBy?: Record<string, "asc" | "desc"> | Array<Record<string, "asc" | "desc">>; include?: IncludeSpec; skip?: number; take?: number } = {}): Promise<T[]> {
     let out = [...this.rows.values()].filter((r) => !where || matches(r, where, this.relations));
-    const entry = orderBy ? Object.entries(orderBy)[0] : undefined;
+    const entry = orderBy ? Object.entries(Array.isArray(orderBy) ? (orderBy[0] ?? {}) : orderBy)[0] : undefined;
     if (entry) {
       const [field, dir] = entry;
       out = [...out].sort((a, b) => {
@@ -248,6 +251,22 @@ class Table<T extends Row = Row> {
       sums[field] = rows.length ? rows.reduce((total, r) => total + ((r[field] as number) ?? 0), 0) : null;
     }
     return { _sum: sums };
+  }
+
+  /** Just enough of `groupBy` for `by` + `_count` + `_sum` (the Media Library stats query). */
+  async groupBy({ by, where, _sum }: { by: string[]; where?: Where; _count?: boolean | Record<string, boolean>; _sum?: Record<string, boolean> }): Promise<Array<Row>> {
+    const groups = new Map<string, { row: Row; rows: T[] }>();
+    for (const r of await this.findMany({ where })) {
+      const key = by.map((f) => String(r[f])).join("|");
+      const g = groups.get(key) ?? { row: Object.fromEntries(by.map((f) => [f, r[f]])), rows: [] };
+      g.rows.push(r);
+      groups.set(key, g);
+    }
+    return [...groups.values()].map(({ row, rows }) => ({
+      ...row,
+      _count: { _all: rows.length },
+      _sum: Object.fromEntries(Object.keys(_sum ?? {}).map((f) => [f, rows.reduce((t, r) => t + ((r[f] as number) ?? 0), 0)])),
+    }));
   }
 
   private keyFor(where: Where): string | undefined {
@@ -341,7 +360,7 @@ export function createFakePrisma() {
   });
   const ebook = new Table<Row>({
     keyOf: (d) => String(d.contentId),
-    defaults: { epubAssetId: null, pdfAssetId: null, sampleAssetId: null, frontCoverAssetId: null, backCoverAssetId: null, spineAssetId: null, fullWrapAssetId: null, thumbnailAssetId: null },
+    defaults: { flipbookEnabled: false, epubAssetId: null, pdfAssetId: null, sampleAssetId: null, frontCoverAssetId: null, backCoverAssetId: null, spineAssetId: null, fullWrapAssetId: null, thumbnailAssetId: null },
   });
   const audiobook = new Table<Row>({
     keyOf: (d) => String(d.contentId),
@@ -363,7 +382,7 @@ export function createFakePrisma() {
   const contentWarningType = new Table<Row>({ uniqueSets: [["key"]] });
   const contentWarning = new Table<Row>({ keyOf: (d) => `${d.contentId}:${d.warningTypeId}`, defaults: { notes: null } });
   const contentTerritory = new Table<Row>({ keyOf: (d) => `${d.contentId}:${d.countryCode}` });
-  const mediaAsset = new Table<Row>({ defaults: { contentId: null, storageKey: null, status: "PENDING" } });
+  const mediaAsset = new Table<Row>({ defaults: { contentId: null, storageKey: null, status: "PENDING", displayTitle: null, altText: null, caption: null, notes: null, folder: null, deletedAt: null, sourceAssetId: null }, uniqueSets: [["storageKey"]] });
   const legalDocument = new Table<Row>({ defaults: { currentPublishedVersionId: null, currentDraftVersionId: null }, uniqueSets: [["type"], ["slug"]] });
   const legalDocumentVersion = new Table<Row>({ defaults: { status: "DRAFT", publishedAt: null, createdById: null } });
   const appSetting = new Table<Row>({ keyOf: (d) => String(d.key) });
@@ -371,7 +390,7 @@ export function createFakePrisma() {
   const homepageSectionItem = new Table<Row>({ defaults: { displayOrder: 0 }, uniqueSets: [["sectionId", "contentId"]] });
   const collection = new Table<Row>({ defaults: { status: "DRAFT", description: null, bannerAssetId: null }, uniqueSets: [["slug"]] });
   const collectionItem = new Table<Row>({ defaults: { displayOrder: 0 }, uniqueSets: [["collectionId", "contentId"]] });
-  const banner = new Table<Row>({ defaults: { active: true, priority: 1, linkedContentId: null } });
+  const banner = new Table<Row>({ defaults: { active: true, priority: 1, linkedContentId: null, linkToSubscription: false, showOnHomepage: false, homepageAfter: null, startsAt: null, endsAt: null } });
   const auditLog = new Table<Row>({ defaults: { userId: null, entityId: null, metadata: null, ip: null, userAgent: null, requestId: null } });
 
   // Phase 5
@@ -394,7 +413,7 @@ export function createFakePrisma() {
   const analyticsEvent = new Table<Row>({ defaults: { userId: null, contentId: null, metadata: null } });
 
   // Phase 7
-  const plan = new Table<Row>({ defaults: { description: null, stripeProductId: null, trialDays: null, features: [], active: true, displayOrder: 0, maxDevices: null, maxConcurrentStreams: null }, uniqueSets: [["slug"], ["stripePriceId"]] });
+  const plan = new Table<Row>({ defaults: { description: null, stripeProductId: null, trialDays: null, features: [], active: true, displayOrder: 0, maxDevices: null, maxConcurrentStreams: null, maxVideoQuality: null, moviesEnabled: true, ebooksEnabled: false, audiobooksEnabled: false }, uniqueSets: [["slug"], ["stripePriceId"]] });
   const subscription = new Table<Row>({
     defaults: { currentPeriodStart: null, currentPeriodEnd: null, cancelAtPeriodEnd: false, canceledAt: null, trialEnd: null },
     uniqueSets: [["userId"], ["stripeSubscriptionId"]],
@@ -562,12 +581,14 @@ export function createFakePrisma() {
     device: { kind: "one", table: device, localField: "deviceId" },
   });
 
+  const $queryRaw = async () => [{ "?column?": 1 }];
+
   return {
     ...tables,
-    $queryRaw: async () => [{ "?column?": 1 }],
+    $queryRaw,
     $disconnect: async () => undefined,
-    // not a real transaction (no rollback) — see the module doc comment
-    $transaction: async <T>(fn: (tx: typeof tables) => Promise<T>) => fn(tables),
+    // not a real transaction (no rollback) — see the module doc comment; the callback also gets $queryRaw (row locks are a no-op here)
+    $transaction: async <T>(fn: (tx: typeof tables & { $queryRaw: typeof $queryRaw }) => Promise<T>) => fn({ ...tables, $queryRaw }),
     __reset() {
       for (const t of Object.values(tables)) t.clear();
     },

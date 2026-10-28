@@ -12,7 +12,7 @@ vi.mock("../../src/config/database", async () => {
 
 import { createApp } from "../../src/app";
 import { prisma } from "../../src/config/database";
-import { createUser } from "../helpers/adminAuth";
+import { createAdmin, createUser } from "../helpers/adminAuth";
 import { makePublishedMovie, makePublishedEbook, makePublishedAudiobook } from "../helpers/publishedContent";
 
 const db = prisma as unknown as {
@@ -77,6 +77,48 @@ describe("DRAFT / UNPUBLISHED / ARCHIVED content is not customer-visible", () =>
     await db.content.update({ where: { id: content.id }, data: { status: "UNPUBLISHED" } });
     const res = await request(app).post(`/api/v1/media/movies/${content.id}/playback`).set(await authHeaders());
     expect(res.status).toBe(404);
+  });
+});
+
+describe("an admin's Preview opens the detail page of a title that is not live", () => {
+  const user = { findUnique: (a: unknown) => (prisma as unknown as { user: { findUnique: (a: unknown) => Promise<{ id: string } | null> } }).user.findUnique(a), update: (a: unknown) => (prisma as unknown as { user: { update: (a: unknown) => Promise<unknown> } }).user.update(a) };
+
+  it("a draft movie: 200 with previewStatus for an admin, still 404 for a customer and for nobody signed in", async () => {
+    const { content } = await makePublishedMovie();
+    await db.content.update({ where: { id: content.id }, data: { status: "DRAFT" } });
+    const { accessToken } = await createAdmin(app, { user });
+    const admin = await request(app).get(`/api/v1/movies/${content.slug}`).set({ Authorization: `Bearer ${accessToken}` });
+    expect(admin.status).toBe(200);
+    expect(admin.body.data.previewStatus).toBe("DRAFT");
+    expect((await request(app).get(`/api/v1/movies/${content.slug}`).set(await authHeaders())).status).toBe(404);
+    expect((await request(app).get(`/api/v1/movies/${content.slug}`)).status).toBe(404);
+  });
+
+  it("a live title carries no previewStatus, and a deleted one stays 404 even for an admin", async () => {
+    const { content } = await makePublishedEbook();
+    const { accessToken } = await createAdmin(app, { user });
+    const live = await request(app).get(`/api/v1/ebooks/${content.slug}`).set({ Authorization: `Bearer ${accessToken}` });
+    expect(live.status).toBe(200);
+    expect(live.body.data.previewStatus).toBeUndefined();
+    await db.content.update({ where: { id: content.id }, data: { deletedAt: new Date() } });
+    expect((await request(app).get(`/api/v1/ebooks/${content.slug}`).set({ Authorization: `Bearer ${accessToken}` })).status).toBe(404);
+  });
+});
+
+describe("You May Also Like", () => {
+  it("offers the other titles of the same type even when nothing is shared, never the title itself or another type", async () => {
+    const books = [];
+    for (const title of ["Book One", "Book Two", "Book Three", "Book Four"]) books.push((await makePublishedAudiobook({ title })).content);
+    await makePublishedMovie({ title: "A Movie" });
+    await makePublishedEbook({ title: "An eBook" });
+    const hidden = (await makePublishedAudiobook({ title: "Not Live" })).content;
+    await db.content.update({ where: { id: hidden.id }, data: { status: "DRAFT" } });
+
+    const res = await request(app).get(`/api/v1/audiobooks/${books[0]!.slug}`);
+    expect(res.status).toBe(200);
+    const related = res.body.data.related as { slug: string; type: string }[];
+    expect(related.map((r) => r.slug).sort()).toEqual(books.slice(1).map((b) => b.slug).sort());
+    expect(related.every((r) => r.type === "AUDIOBOOK")).toBe(true);
   });
 });
 

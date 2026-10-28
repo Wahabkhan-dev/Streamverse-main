@@ -1,10 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useGenreNames } from "@/hooks/useGenreNames";
 import { useMemo, useState } from "react";
 import { BookCard, useFakeLoad } from "@/components/sv/media";
 import { FilterPills, EmptyState, Skel } from "@/components/sv/ui";
 import { useCatalog } from "@/lib/items";
-import { useGenreNames } from "@/lib/store";
+
 import { DEMO_MODE } from "@/lib/config";
+import { SubpageHero } from "@/components/sv/SubpageHero";
 import { useApiEbooksQuery } from "@/hooks/useApiCatalog";
 import { apiBookToLocal } from "@/lib/api-mappers";
 
@@ -12,14 +14,16 @@ export const Route = createFileRoute("/_site/ebooks/")({
   head: () => ({
     meta: [
       { title: "eBooks — StreamVerse" },
-      { name: "description", content: "Read fiction, business, biography and more eBooks on StreamVerse." },
+      {
+        name: "description",
+        content: "Read fiction, business, biography and more eBooks on StreamVerse.",
+      },
       { property: "og:title", content: "eBooks — StreamVerse" },
       { property: "og:description", content: "Thousands of eBooks to read on any device." },
     ],
   }),
   component: Page,
 });
-
 
 function Page() {
   const [g, setG] = useState("All");
@@ -53,7 +57,9 @@ function Page() {
       <div className="mx-auto max-w-[1600px] px-4 pt-8 md:px-8">
         <Skel className="h-8 w-32" />
         <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 2xl:grid-cols-8">
-          {Array.from({ length: 12 }, (_, i) => <Skel key={i} className="aspect-[2/3]" />)}
+          {Array.from({ length: 12 }, (_, i) => (
+            <Skel key={i} className="aspect-[2/3]" />
+          ))}
         </div>
       </div>
     );
@@ -62,7 +68,9 @@ function Page() {
     return (
       <div className="mx-auto max-w-[1600px] px-4 pt-8 md:px-8">
         <h1 className="text-3xl font-bold tracking-tight">eBooks</h1>
-        <p className="mt-6 text-sm text-muted-foreground">Failed to load eBooks. Please refresh and try again.</p>
+        <p className="mt-6 text-sm text-muted-foreground">
+          Failed to load eBooks. Please refresh and try again.
+        </p>
       </div>
     );
   }
@@ -70,17 +78,22 @@ function Page() {
   const list = list_.filter((b) => g === "All" || b.genre === g);
 
   return (
-    <div className="mx-auto max-w-[1600px] px-4 pt-8 md:px-8">
-      <h1 className="text-3xl font-bold tracking-tight">eBooks</h1>
-      <div className="mt-5">
-        <FilterPills items={genreOptions} value={g} onChange={setG} />
+    <>
+      <SubpageHero placement="EBOOKS" />
+      <div className="mx-auto max-w-[1600px] px-4 pt-8 md:px-8">
+        <h1 className="text-3xl font-bold tracking-tight">eBooks</h1>
+        <div className="mt-5">
+          <FilterPills items={genreOptions} value={g} onChange={setG} />
+        </div>
+        <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 2xl:grid-cols-8">
+          {DEMO_MODE && loading
+            ? Array.from({ length: 12 }, (_, i) => <Skel key={i} className="aspect-[2/3]" />)
+            : list.map((b) => <BookCard key={b.slug} b={b} fixed={false} />)}
+        </div>
+        {!(DEMO_MODE && loading) && list.length === 0 && (
+          <EmptyState title={`No ${g} eBooks yet`} sub="New titles are added every week." />
+        )}
       </div>
-      <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 2xl:grid-cols-8">
-        {DEMO_MODE && loading
-          ? Array.from({ length: 12 }, (_, i) => <Skel key={i} className="aspect-[2/3]" />)
-          : list.map((b) => <BookCard key={b.slug} b={b} fixed={false} />)}
-      </div>
-      {!(DEMO_MODE && loading) && list.length === 0 && <EmptyState title={`No ${g} eBooks yet`} sub="New titles are added every week." />}
-    </div>
+    </>
   );
 }

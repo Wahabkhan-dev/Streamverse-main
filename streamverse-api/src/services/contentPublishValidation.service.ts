@@ -57,6 +57,7 @@ async function validateEbook(contentId: string): Promise<FieldError[]> {
     req(!!full.author, "ebook.author", "Author is required."),
     req(!!full.epubAssetId || !!full.pdfAssetId, "ebook.epubAssetId", "At least one EPUB or PDF file is required."),
     req(hasReadableFile, "ebook.epubAssetId", "The EPUB/PDF file has not finished processing yet."),
+    req(!full.flipbookEnabled || isReady(full.pdfAsset), "ebook.flipbookEnabled", "A flipbook is made from the PDF: upload a PDF and wait for it to finish processing, or turn the flipbook off."),
     req(!!full.frontCoverAssetId, "ebook.frontCoverAssetId", "Front cover is required."),
     req(isReady(full.frontCoverAsset), "ebook.frontCoverAssetId", "Front cover has not finished processing yet."),
     req(!!full.thumbnailAssetId, "ebook.thumbnailAssetId", "Thumbnail is required."),
@@ -89,9 +90,9 @@ async function validateAudiobook(contentId: string): Promise<FieldError[]> {
 }
 
 export async function validateReadiness(type: ContentType, contentId: string): Promise<FieldError[]> {
-  if (type === "MOVIE") return validateMovie(contentId);
-  if (type === "EBOOK") return validateEbook(contentId);
-  return validateAudiobook(contentId);
+  const errors = type === "MOVIE" ? await validateMovie(contentId) : type === "EBOOK" ? await validateEbook(contentId) : await validateAudiobook(contentId);
+  // one problem per field: a missing file is "required", never also "has not finished processing"
+  return errors.filter((e, i) => errors.findIndex((x) => x.path === e.path) === i);
 }
 
 /** Throws a ValidationError (400) carrying every problem at once, rather than one generic message. */

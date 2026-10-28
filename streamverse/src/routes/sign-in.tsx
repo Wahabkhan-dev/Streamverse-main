@@ -1,25 +1,41 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Eye, EyeOff, LogIn } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Logo } from "@/components/sv/Logo";
 import { updateUser } from "@/lib/user";
 import { DEMO_MODE } from "@/lib/config";
 import { authApi } from "@/api/auth.api";
-import { setAccessToken } from "@/api/client";
-import { setAuthUser } from "@/lib/authState";
+import { useAuthState } from "@/lib/authState";
+import { completeSignIn, rememberReturnTo, safeReturnTo } from "@/lib/authSession";
 import { isApiError } from "@/api/client";
 
 export const Route = createFileRoute("/sign-in")({
   head: () => ({ meta: [{ title: "Sign In — StreamVerse" }] }),
+  // where the visitor was headed (only an address inside this site is ever followed) and why they were sent here
+  // The router MERGES the raw query string with what this returns, so an unsafe value must be overwritten with undefined,
+  // not just left out.
+  validateSearch: (s: Record<string, unknown>): { returnTo?: string | undefined; reason?: "expired" | undefined } => ({
+    returnTo: safeReturnTo(s["returnTo"]) ?? undefined,
+    reason: s["reason"] === "expired" ? "expired" : undefined,
+  }),
   component: SignInPage,
 });
 
 function SignInPage() {
   const navigate = useNavigate();
+  const { returnTo, reason } = Route.useSearch();
+  const auth = useAuthState();
   const [form, setForm] = useState({ email: "", password: "" });
   const [showPw, setShowPw] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+
+  // someone who is already signed in has no use for this page: send them on (also covers the moment right after signing in)
+  useEffect(() => {
+    if (!DEMO_MODE && auth.status === "authenticated") void navigate({ to: returnTo ?? "/", replace: true });
+  }, [auth.status, returnTo, navigate]);
+
+  const notice = reason === "expired" ? "Your session has expired. Please sign in again." : returnTo ? "Please sign in to continue." : null;
 
   function validate() {
     const e: Record<string, string> = {};
@@ -44,29 +60,17 @@ function SignInPage() {
         profile: { ...s.profile, email: form.email, name: form.email.split("@")[0]! },
       }));
       setLoading(false);
-      void navigate({ to: "/" });
+      void navigate({ to: returnTo ?? "/", replace: true });
       return;
     }
 
     // Real API login
     try {
       const res = await authApi.login(form.email, form.password);
-      setAccessToken(res.data.accessToken);
-      setAuthUser(res.data.user);
-      // Mirror name/email into the localStorage store so existing UI (profile page, etc.) shows correct data
-      updateUser((s) => ({
-        ...s,
-        role: res.data.user.role,
-        profile: {
-          ...s.profile,
-          email: res.data.user.email,
-          name: res.data.user.fullName,
-          ...(res.data.user.preferences?.country ? { country: res.data.user.preferences.country } : {}),
-          ...(res.data.user.preferences?.preferredLanguage ? { language: res.data.user.preferences.preferredLanguage } : {}),
-        },
-      }));
+      // token, caches of any previous customer dropped, header updated at once
+      completeSignIn(res.data.user, res.data.accessToken);
       setLoading(false);
-      void navigate({ to: "/" });
+      void navigate({ to: returnTo ?? "/", replace: true });
     } catch (err) {
       setLoading(false);
       if (isApiError(err)) {
@@ -100,6 +104,11 @@ function SignInPage() {
               <p className="mt-1 text-sm text-muted-foreground">Sign in to continue to StreamVerse</p>
             </div>
 
+            {notice && (
+              <p role="status" data-testid="signin-notice" className="mb-4 rounded-lg border border-border bg-surface-3 px-3 py-2 text-center text-sm text-muted-foreground">
+                {notice}
+              </p>
+            )}
             <form onSubmit={handleSubmit} noValidate className="space-y-4">
               {/* Email */}
               <div className="space-y-1.5">
@@ -169,7 +178,7 @@ function SignInPage() {
 
             <p className="mt-6 text-center text-sm text-muted-foreground">
               Don't have an account?{" "}
-              <Link to="/signup" className="font-semibold text-primary-text hover:underline">
+              <Link to="/signup" onClick={() => rememberReturnTo(returnTo ?? null)} className="font-semibold text-primary-text hover:underline">
                 Join StreamVerse
               </Link>
             </p>

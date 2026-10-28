@@ -3,14 +3,14 @@ import type { ApiResponse, ApiLegalPage } from "./types";
 
 export const legalApi = {
   getPrivacyPolicy() {
-    return api.get<ApiResponse<ApiLegalPage>>("/legal/privacy");
+    return api.get<ApiResponse<ApiLegalPage>>("/legal/privacy-policy");
   },
 
   getTermsAndConditions() {
-    return api.get<ApiResponse<ApiLegalPage>>("/legal/terms");
+    return api.get<ApiResponse<ApiLegalPage>>("/legal/terms-and-conditions");
   },
 
   getRefundPolicy() {
-    return api.get<ApiResponse<ApiLegalPage>>("/legal/refund");
+    return api.get<ApiResponse<ApiLegalPage>>("/legal/refund-policy");
   },
 };

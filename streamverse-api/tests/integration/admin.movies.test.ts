@@ -156,6 +156,9 @@ describe("admin movie publish validation and status transitions", () => {
     expect(res.status).toBe(400);
     expect(res.body.errors.length).toBeGreaterThan(0);
     expect(res.body.errors.some((e: { path: string }) => e.path === "movie.posterAssetId")).toBe(true);
+    // one message per field: a missing poster is "required", not also "has not finished processing"
+    const poster = res.body.errors.filter((e: { path: string }) => e.path === "movie.posterAssetId");
+    expect(poster).toEqual([{ path: "movie.posterAssetId", message: "Poster is required." }]);
   });
 
   it("publishes a complete movie: DRAFT -> PUBLISHED, sets publishedAt", async () => {
@@ -185,11 +188,44 @@ describe("admin movie publish validation and status transitions", () => {
     expect(archived.body.data.status).toBe("ARCHIVED");
   });
 
-  it("rejects an invalid transition (archive straight from draft)", async () => {
+  it("publishing a movie that is already published succeeds and keeps it live (edit a live movie, press Publish)", async () => {
     const { accessToken } = await createAdmin(app, db);
-    const created = await request(app).post("/api/v1/admin/movies").set("Authorization", `Bearer ${accessToken}`).send({ title: "Fresh Draft" });
-    const res = await request(app).post(`/api/v1/admin/movies/${created.body.data.id}/archive`).set("Authorization", `Bearer ${accessToken}`).send({});
-    expect(res.status).toBe(409);
+    const id = await makePublishableMovie(accessToken);
+    const first = await request(app).post(`/api/v1/admin/movies/${id}/publish`).set("Authorization", `Bearer ${accessToken}`).send({});
+    expect(first.body.data.status).toBe("PUBLISHED");
+    const again = await request(app).post(`/api/v1/admin/movies/${id}/publish`).set("Authorization", `Bearer ${accessToken}`).send({});
+    expect(again.status).toBe(200);
+    expect(again.body.data.status).toBe("PUBLISHED");
+  });
+
+  it("the last wizard step can pick any outcome for a title in any state (no 'cannot move from X to Y')", async () => {
+    const { accessToken } = await createAdmin(app, db);
+    const id = await makePublishableMovie(accessToken);
+    const auth = { Authorization: `Bearer ${accessToken}` };
+    const future = new Date(Date.now() + 86_400_000).toISOString();
+    const step = async (action: string, body: object = {}) => {
+      const res = await request(app).post(`/api/v1/admin/movies/${id}/${action}`).set(auth).send(body);
+      expect(res.status, `${action}: ${JSON.stringify(res.body)}`).toBe(200);
+      return res.body.data.status as string;
+    };
+    expect(await step("archive")).toBe("ARCHIVED"); // straight from draft
+    expect(await step("archive")).toBe("ARCHIVED"); // again
+    expect(await step("publish")).toBe("PUBLISHED"); // restore an archived title
+    expect(await step("publish")).toBe("PUBLISHED"); // again
+    expect(await step("schedule", { publishAt: future })).toBe("SCHEDULED"); // a live title scheduled
+    expect(await step("schedule", { publishAt: future })).toBe("SCHEDULED"); // re-scheduled
+    expect(await step("archive")).toBe("ARCHIVED");
+    expect(await step("schedule", { publishAt: future })).toBe("SCHEDULED"); // an archived title scheduled
+  });
+
+  it("the stamp a save returns is accepted by the status call that follows it", async () => {
+    const { accessToken } = await createAdmin(app, db);
+    const id = await makePublishableMovie(accessToken);
+    const auth = { Authorization: `Bearer ${accessToken}` };
+    const saved = await request(app).patch(`/api/v1/admin/movies/${id}`).set(auth).send({ summary: "Edited summary" });
+    expect(saved.status).toBe(200);
+    const res = await request(app).post(`/api/v1/admin/movies/${id}/schedule`).set(auth).send({ publishAt: new Date(Date.now() + 86_400_000).toISOString(), expectedUpdatedAt: saved.body.data.updatedAt });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
   });
 
   it("cancel-schedule returns a scheduled title to DRAFT", async () => {

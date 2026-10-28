@@ -3,6 +3,7 @@ import * as movieService from "../services/movie.service";
 import * as contentStatusService from "../services/contentStatus.service";
 import { toMovieAdminDto } from "../mappers/movie.mapper";
 import { mapContentListRow } from "../mappers/content.mapper";
+import { signCoversByContentId } from "../services/catalog.service";
 import { auditContext } from "../services/auditLog.service";
 import { sendPaginated, sendSuccess } from "../utils/apiResponse";
 import type { movieListQuerySchema } from "../validators/movie.validator";
@@ -27,7 +28,8 @@ export async function getOne(req: Request, res: Response) {
 
 export async function list(req: Request, res: Response) {
   const { rows, pagination } = await movieService.listMovies(req.query as unknown as z.infer<typeof movieListQuerySchema>);
-  sendPaginated(res, rows.map(mapContentListRow), pagination);
+  const covers = await signCoversByContentId(rows.map((r) => r.id), "MOVIE");
+  sendPaginated(res, rows.map((r) => mapContentListRow(r, covers.get(r.id) ?? null)), pagination);
 }
 
 export async function remove(req: Request, res: Response) {

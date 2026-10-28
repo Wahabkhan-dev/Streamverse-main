@@ -1,3 +1,4 @@
+import { AuthGate } from "@/components/sv/AuthGate";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { mediaApi } from "@/api/media.api";
@@ -13,7 +14,11 @@ import { apiBookToLocal } from "@/lib/api-mappers";
 
 export const Route = createFileRoute("/read/$slug")({
   head: ({ params }) => ({ meta: [{ title: `${findEbook(params.slug)?.title ?? "Read"} — StreamVerse` }, { name: "robots", content: "noindex" }] }),
-  component: ReadPage,
+  component: () => (
+    <AuthGate fullScreen>
+      <ReadPage />
+    </AuthGate>
+  ),
 });
 
 type AccessState = "idle" | "loading" | "ok" | "error";
@@ -25,6 +30,7 @@ function accessErrorMessage(err: unknown): string {
   if (msg.includes("PLAN_DOES_NOT_INCLUDE_EBOOKS")) return "Your current plan doesn't include eBooks. Upgrade to access.";
   if (msg.includes("AGE_RESTRICTED")) return "This content is age-restricted.";
   if (msg.includes("CONTENT_NOT_AVAILABLE")) return "This title is not currently available.";
+  if (msg.includes("expired")) return "This download has expired. Connect to the internet to renew it.";
   if (msg.includes("MEDIA_NOT_READY")) return "This eBook file is not yet ready. Please try again later.";
   return "Unable to access this eBook. Please try again.";
 }
@@ -39,11 +45,13 @@ function ReadPage() {
   const [accessError, setAccessError] = useState<string | null>(null);
 
   // Fetch signed access URL in API mode
+  // The media API is keyed by content id, not slug, so wait for the book itself to load first.
+  const contentId = apiQuery.data?.id;
   useEffect(() => {
-    if (DEMO_MODE) return;
+    if (DEMO_MODE || !contentId) return;
     setAccessState("loading");
     mediaApi
-      .getEbookAccess(slug)
+      .getEbookAccess(contentId)
       .then((res) => {
         const data = res.data;
         // signedUrl or fileType being null means media not ready / access denied
@@ -63,7 +71,7 @@ function ReadPage() {
         setAccessError(accessErrorMessage(err));
         setAccessState("error");
       });
-  }, [slug]);
+  }, [contentId]);
 
   if (!DEMO_MODE && apiQuery.isLoading) return <div className="h-screen" aria-busy="true" />;
   if (!DEMO_MODE && apiQuery.isError) return <GeneralError />;

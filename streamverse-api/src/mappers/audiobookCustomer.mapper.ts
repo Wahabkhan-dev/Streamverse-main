@@ -6,12 +6,13 @@ interface AudiobookListRow {
   author: string | null;
   narrator: string | null;
   coverAssetId: string | null;
+  coverAsset?: { storageKey: string | null } | null;
   thumbnailAssetId: string | null;
   durationSeconds: number | null;
 }
 
-/** Card data for GET /audiobooks — Section 9. */
-export function toAudiobookCard(row: AudiobookListRow) {
+/** Card data for GET /audiobooks — Section 9. `coverUrl` is the signed cover URL, batched in by the caller. */
+export function toAudiobookCard(row: AudiobookListRow, coverUrl?: string | null) {
   const base = mapCustomerBase(row.content);
   return {
     id: base.id,
@@ -19,6 +20,7 @@ export function toAudiobookCard(row: AudiobookListRow) {
     title: base.title,
     author: row.author,
     narrator: row.narrator,
+    image: coverUrl ?? null,
     coverAssetId: row.coverAssetId,
     thumbnailAssetId: row.thumbnailAssetId,
     durationSeconds: row.durationSeconds,

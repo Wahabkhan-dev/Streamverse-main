@@ -10,7 +10,6 @@ import {
 import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
-import { reportLovableError } from "../lib/lovable-error-reporting";
 import { hydrateDrafts } from "../lib/drafts";
 import { hydrateLegal } from "../lib/legal";
 import { hydrateStore } from "../lib/store";
@@ -21,9 +20,12 @@ import { GeneralError, NotFoundScreen } from "../components/sv/states";
 import { Toaster } from "../components/ui/sonner";
 import { DEMO_MODE } from "../lib/config";
 import { initSentry } from "../lib/sentry";
-import { authApi } from "../api/auth.api";
-import { getAccessToken, setAccessToken } from "../api/client";
-import { setAuthUser, clearAuthUser } from "../lib/authState";
+import { useAuthState } from "../lib/authState";
+import { bootstrapAuth, mirrorAuthUser } from "../lib/authSession";
+import { ConnectionBanner } from "../components/sv/ConnectionBanner";
+import { InternetDialog } from "../components/sv/InternetDialog";
+import { renewDownloads } from "../lib/offline/downloads";
+import { mirrorSubscription } from "../lib/billingSync";
 
 // Initialize Sentry as early as possible
 initSentry();
@@ -39,12 +41,9 @@ function NotFoundComponent() {
 function ErrorComponent({ error, reset }: ErrorComponentProps) {
   console.error(error);
   const router = useRouter();
-  useEffect(() => {
-    reportLovableError(error, { boundary: "tanstack_root_error_component" });
-  }, [error]);
 
   return (
-    <div className="min-h-dvh bg-background">
+    <div className="min-h-dvh bg-background" data-testid="app-crash">
       <GeneralError
         onRetry={() => {
           router.invalidate();
@@ -60,14 +59,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Stream Verse" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Stream Verse" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "StreamVerse" },
+      { name: "description", content: "Movies, eBooks and audiobooks in one place." },
+      { property: "og:title", content: "StreamVerse" },
+      { property: "og:description", content: "Movies, eBooks and audiobooks in one place." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:site", content: "@Lovable" },
+      // installable app (PWA)
+      { name: "theme-color", content: "#070707" },
+      { name: "mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-title", content: "StreamVerse" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
     ],
     links: [
       {
@@ -75,6 +78,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         href: appCss,
       },
       { rel: "icon", href: "/favicon.png", type: "image/png" },
+      { rel: "manifest", href: "/manifest.webmanifest" },
+      { rel: "apple-touch-icon", href: "/icons/apple-touch-icon.png" },
     ],
   }),
   shellComponent: RootShell,
@@ -97,37 +102,58 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+// Start checking the existing session the moment the app loads, long before any header or page mounts. Every screen reads
+// the one shared auth state (lib/authState); nothing else asks the server who is signed in.
+if (typeof window !== "undefined" && !DEMO_MODE) void bootstrapAuth();
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const auth = useAuthState();
   useEffect(() => {
     // Always hydrate localStorage stores (demo mode + fallback data)
     hydrateStore();
     hydrateUser();
     hydrateDrafts();
     hydrateLegal();
-
-    // In real-API mode, bootstrap auth state on every page load.
-    // Try /auth/me first (uses stored access token). If no token, try refresh
-    // (uses the httpOnly sv_refresh_token cookie that survives page reloads).
-    if (!DEMO_MODE) {
-      const token = getAccessToken();
-      const attempt = token ? authApi.me().then((res) => res.data) : Promise.reject(new Error("no token"));
-      attempt
-        .catch(() =>
-          authApi.refresh().then((res) => {
-            setAccessToken(res.data.accessToken);
-            return authApi.me().then((r) => r.data);
-          }),
-        )
-        .then((user) => setAuthUser(user))
-        .catch(() => clearAuthUser());
-    }
   }, []);
+
+  // Installable app + our own "can't reach StreamVerse" screen instead of the browser's error page. The worker only handles
+  // page loads and built files, so it is harmless in development too.
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    void navigator.serviceWorker
+      .register("/sw.js")
+      .then(() => navigator.serviceWorker.ready)
+      // once per visit: the worker re-saves the app's files (a new release has new file names)
+      .then((reg) => reg.active?.postMessage("precache"))
+      .catch(() => undefined);
+  }, []);
+
+  // The screens that still read the browser store (role, profile name) follow the server's answer once it is known.
+  useEffect(() => {
+    if (DEMO_MODE) return;
+    if (auth.status === "authenticated") mirrorAuthUser(auth.user);
+    else if (auth.status === "unauthenticated") mirrorAuthUser(null);
+  }, [auth.status, auth.user]);
+
+  // ...and so does the membership shown in the header and on the signup pages (once per signed-in customer)
+  const userId = auth.user?.id;
+  useEffect(() => {
+    if (DEMO_MODE || !userId) return undefined;
+    void mirrorSubscription().catch(() => undefined);
+    // downloads stay valid only while the customer is entitled: checked now and whenever the connection comes back
+    void renewDownloads();
+    const onBack = () => void renewDownloads();
+    window.addEventListener("online", onBack);
+    return () => window.removeEventListener("online", onBack);
+  }, [userId]);
 
   return (
     <QueryClientProvider client={queryClient}>
       <ErrorBoundary>
         {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+        <ConnectionBanner />
+        <InternetDialog />
         <Outlet />
         <Toaster theme="dark" />
         <BackendNoticeHost />

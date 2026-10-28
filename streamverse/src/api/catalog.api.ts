@@ -1,3 +1,4 @@
+import { detailOf, withLocalCopy } from "@/lib/offline/shim";
 import { api } from "./client";
 import type {
   ApiResponse,
@@ -43,7 +44,7 @@ export const catalogApi = {
   },
 
   getMovie(idOrSlug: string) {
-    return api.get<ApiResponse<ApiMovie>>(`/movies/${idOrSlug}`);
+    return withLocalCopy(idOrSlug, () => api.get<ApiResponse<ApiMovie>>(`/movies/${idOrSlug}`), (r) => detailOf<ApiMovie>(r));
   },
 
   /* ─────── eBooks ─────── */
@@ -53,7 +54,7 @@ export const catalogApi = {
   },
 
   getEbook(idOrSlug: string) {
-    return api.get<ApiResponse<ApiBook>>(`/ebooks/${idOrSlug}`);
+    return withLocalCopy(idOrSlug, () => api.get<ApiResponse<ApiBook>>(`/ebooks/${idOrSlug}`), (r) => detailOf<ApiBook>(r));
   },
 
   /* ─────── Audiobooks ─────── */
@@ -63,19 +64,21 @@ export const catalogApi = {
   },
 
   getAudiobook(idOrSlug: string) {
-    return api.get<ApiResponse<ApiBook>>(`/audiobooks/${idOrSlug}`);
+    return withLocalCopy(idOrSlug, () => api.get<ApiResponse<ApiBook>>(`/audiobooks/${idOrSlug}`), (r) => detailOf<ApiBook>(r));
   },
 
   /* ─────── Homepage ─────── */
 
-  getHomepage() {
-    return api.get<ApiResponse<ApiHomeSection[]>>("/homepage");
+  /** Sections are returned in displayOrder; `offset`/`limit` page through them so the first screenful can load first. */
+  getHomepage(page?: { offset: number; limit: number }) {
+    const q = page ? `?offset=${page.offset}&limit=${page.limit}` : "";
+    return api.get<ApiResponse<ApiHomeSection[]> & { meta?: { total?: number } }>(`/homepage${q}`);
   },
 
   /* ─────── Banners ─────── */
 
-  getBanners() {
-    return api.get<ApiResponse<ApiBanner[]>>("/banners");
+  getBanners(placement?: "MOVIES" | "EBOOKS" | "AUDIOBOOKS") {
+    return api.get<ApiResponse<ApiBanner[]>>(`/banners${placement ? `?placement=${placement}` : ""}`);
   },
 
   /* ─────── Collections ─────── */

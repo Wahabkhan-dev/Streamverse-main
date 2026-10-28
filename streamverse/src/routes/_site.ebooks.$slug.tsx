@@ -1,12 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { BookDetail } from "@/components/sv/BookDetail";
-import { Gated } from "@/components/sv/Gate";
+import { Gated, PreviewBanner } from "@/components/sv/Gate";
 import { ContentUnavailable, GeneralError } from "@/components/sv/states";
 import { useApiEbookQuery } from "@/hooks/useApiCatalog";
 import { DEMO_MODE } from "@/lib/config";
 import { findEbook, type Book } from "@/lib/data";
 import { itemEntity, toItem, useCatalog } from "@/lib/items";
-import { apiBookToLocal } from "@/lib/api-mappers";
+import { apiBookToLocal, mixedCardToItem } from "@/lib/api-mappers";
 import { relatedTo } from "@/lib/related";
 
 export const Route = createFileRoute("/_site/ebooks/$slug")({
@@ -23,10 +23,10 @@ export const Route = createFileRoute("/_site/ebooks/$slug")({
         }
       : { meta: [{ title: "eBook — StreamVerse" }] };
   },
-  component: eBookDetail,
+  component: EbookDetailPage,
 });
 
-function eBookDetail() {
+function EbookDetailPage() {
   const { slug } = Route.useParams();
   const cat = useCatalog();
   const apiQuery = useApiEbookQuery(slug);
@@ -42,11 +42,19 @@ function eBookDetail() {
 
   if (!DEMO_MODE && !b) return <ContentUnavailable />;
 
-  const related = b ? relatedTo(toItem("eBook", b), cat.listed, 12).map((i) => itemEntity(i) as Book) : [];
+  // live mode: the server's list of real titles (the local catalog only holds demo titles)
+  const related = DEMO_MODE
+    ? b
+      ? relatedTo(toItem("eBook", b), cat.listed, 12).map((i) => itemEntity(i) as Book)
+      : []
+    : (apiQuery.data?.related ?? []).map((c) => itemEntity(mixedCardToItem(c)) as Book);
 
   return (
-    <Gated item={b ? toItem("eBook", b) : undefined}>
-      {b && <BookDetail b={b} kind="ebook" related={related} />}
-    </Gated>
+    <>
+      <PreviewBanner status={apiQuery.data?.previewStatus} />
+      <Gated item={b ? toItem("eBook", b) : undefined}>
+        {b && <BookDetail b={b} kind="ebook" related={related} />}
+      </Gated>
+    </>
   );
 }

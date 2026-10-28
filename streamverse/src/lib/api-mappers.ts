@@ -2,32 +2,59 @@
  * Utility functions to convert API response types to the local UI types
  * used by the demo mode catalog. These are used when DEMO_MODE=false.
  */
-import type { ApiMovie, ApiBook, ApiCollection } from "@/api/types";
+import placeholder from "@/assets/placeholder.svg";
+import type { ApiMovie, ApiBook, ApiCollection, ApiMixedCard } from "@/api/types";
 import type { Movie, Book, Status, ItemRef } from "@/lib/data";
 import { toItem, type Item } from "@/lib/items";
 import type { Collection } from "@/lib/store";
 
 /** Convert an ApiMovie to the local Movie shape expected by UI components. */
+/** Backend content status (DB enum, upper-case) -> the label the UI uses. */
+export function uiStatus(status: string | undefined): Status {
+  switch ((status ?? "PUBLISHED").toUpperCase()) {
+    case "PUBLISHED": return "Published";
+    case "SCHEDULED": return "Scheduled";
+    case "UNPUBLISHED": return "Unpublished";
+    case "ARCHIVED": return "Archived";
+    case "PROCESSING": return "Processing";
+    case "PROCESSING_FAILED": return "Failed";
+    default: return "Draft";
+  }
+}
+
+/** The customer API sends `releaseDate`; the admin/legacy shape sent `year`. */
+const yearOf = (x: { year?: number | undefined; releaseDate?: string | null | undefined }): number =>
+  x.year ?? (x.releaseDate ? new Date(x.releaseDate).getUTCFullYear() : new Date().getFullYear());
+
+const hm = (totalMinutes: number) => {
+  const h = Math.floor(totalMinutes / 60);
+  const min = Math.round(totalMinutes % 60);
+  return h > 0 ? `${h}h ${min}m` : `${min}m`;
+};
+
 export function apiMovieToLocal(m: ApiMovie): Movie {
-  const mins = m.duration ?? 0;
-  const h = Math.floor(mins / 60);
-  const min = mins % 60;
+  const mins = m.runtimeMinutes ?? m.duration ?? 0;
+  const year = yearOf(m);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return {
     slug: m.slug,
     title: m.title,
-    year: m.year,
+    year,
     genres: m.genres,
-    runtime: h > 0 ? `${h}h ${min}m` : `${min}m`,
-    rating: m.rating ?? "PG",
+    runtime: hm(mins),
+    // age classification (e.g. "13+"); the API's own `rating` is a numeric user score, not this
+    rating: m.ageRating ?? (typeof m.rating === "string" ? m.rating : "NR"),
     badges: [],
-    description: m.description,
-    image: m.image,
-    status: (m.status ?? "Published") as Status,
+    description: m.description ?? m.summary ?? "",
+    image: m.image ?? placeholder,
+    status: uiStatus(m.status),
     views: m.views ?? 0,
-    release: `${m.year}-01-01`,
-    cast: m.cast.map((c) => ({ name: c.name, role: c.role })),
+    release: m.releaseDate ? m.releaseDate.slice(0, 10) : `${year}-01-01`,
+    // detail responses name the character `characterName`; the legacy shape called it `role`
+    cast: (m.cast ?? []).map((c) => ({ name: c.name, role: c.role ?? (c as { characterName?: string }).characterName ?? "" })),
     cid: m.id,
+    ...(m.hasTrailer !== undefined ? { hasTrailer: m.hasTrailer } : {}),
+    ...(m.hasTeaser !== undefined ? { hasTeaser: m.hasTeaser } : {}),
     ...(m.promo !== undefined ? { promo: m.promo } : {}),
     ...(m.restrictions
       ? {
@@ -56,21 +83,22 @@ export function apiBookToLocal(b: ApiBook): Book {
   return {
     slug: b.slug,
     title: b.title,
-    author: b.author,
+    author: b.author ?? "",
     genre: b.genres[0] ?? "Fiction",
     rating: 4.0,
     reviews: 0,
-    pages: b.pages ?? 0,
-    year: b.year ?? new Date().getFullYear(),
-    description: b.description,
+    pages: b.pageCount ?? b.pages ?? 0,
+    year: yearOf(b),
+    description: b.description ?? b.summary ?? "",
     palette: ["oklch(0.3 0.05 240)", "oklch(0.2 0.05 240)", "oklch(0.8 0.1 240)"] as [string, string, string],
     motif: "sun",
-    status: (b.status ?? "Published") as Status,
+    status: uiStatus(b.status),
     isbn: "",
     count: 0,
-    ...(b.narrator !== undefined ? { narrator: b.narrator } : {}),
+    ...(b.narrator ? { narrator: b.narrator } : {}),
     ...(b.image ? { cover: b.image } : {}),
     cid: b.id,
+    ...(b.flipbook ? { flipbook: true } : {}),
     ...(b.promo !== undefined ? { promo: b.promo } : {}),
     ...(b.restrictions
       ? {
@@ -86,12 +114,12 @@ export function apiBookToLocal(b: ApiBook): Book {
           info: {
             ...(b.language !== undefined ? { language: b.language } : {}),
             ...(b.languages !== undefined ? { languages: b.languages } : {}),
-            ...(b.publisher !== undefined ? { publisher: b.publisher } : {}),
+            ...(b.publisher ? { publisher: b.publisher } : {}),
             ...(b.tags !== undefined ? { tags: b.tags } : {}),
           },
         }
       : {}),
-    ...(b.duration !== undefined ? { duration: `${Math.floor(b.duration / 60)}h ${b.duration % 60}m` } : {}),
+    ...(b.durationSeconds ? { duration: hm(b.durationSeconds / 60) } : b.duration !== undefined ? { duration: hm(b.duration) } : {}),
   } as Book;
 }
 
@@ -153,4 +181,25 @@ export function apiEbookToItem(b: ApiBook): Item {
 /** Convert an ApiBook to an Item for audiobooks. */
 export function apiAudiobookToItem(b: ApiBook): Item {
   return toItem("Audiobook", apiBookToLocal(b));
+}
+
+/** Any mixed content card (My List / Library / History / Continue / search / collections) -> a typed catalog Item. */
+export function mixedCardToItem(c: ApiMixedCard): Item {
+  const shared = {
+    id: c.id,
+    slug: c.slug,
+    title: c.title,
+    summary: c.summary ?? null,
+    genres: c.genres,
+    releaseDate: c.releaseDate ?? null,
+    ageRating: c.ageRating ?? null,
+    image: c.image ?? null,
+    ...(c.description ? { description: c.description } : {}),
+  };
+  if (c.type === "MOVIE") {
+    const mins = /^(\d+)\s*min/.exec(c.headline ?? "")?.[1];
+    return toItem("Movie", apiMovieToLocal({ ...shared, ...(mins ? { runtimeMinutes: Number(mins) } : {}) }));
+  }
+  const isBook = c.type === "EBOOK";
+  return toItem(isBook ? "eBook" : "Audiobook", apiBookToLocal({ ...shared, author: isBook ? (c.headline ?? null) : null, ...(isBook || !c.headline ? {} : { narrator: c.headline }) }));
 }

@@ -1,6 +1,8 @@
 import * as playbackSessionRepository from "../repositories/playbackSession.repository";
 import * as subscriptionRepository from "../repositories/subscription.repository";
-import { ForbiddenError } from "../utils/errors";
+import { runLockedForUser } from "../repositories/userLock.repository";
+import { ERROR_CODES } from "../constants/errors";
+import { AppError } from "../utils/errors";
 import type { ContentType } from "@prisma/client";
 
 export async function startPlaybackSession(
@@ -9,24 +11,27 @@ export async function startPlaybackSession(
   contentType: ContentType,
   deviceId?: string,
 ): Promise<{ sessionId: string }> {
-  if (contentType !== "EBOOK") {
-    const subscription = await subscriptionRepository.findByUserId(userId);
-    const maxStreams = subscription?.plan?.maxConcurrentStreams;
-    if (maxStreams !== null && maxStreams !== undefined) {
-      const activeCount = await playbackSessionRepository.countActiveSessions(userId);
-      if (activeCount >= maxStreams) {
-        throw new ForbiddenError("CONCURRENT_STREAM_LIMIT_REACHED");
-      }
-    }
+  // eBooks do not occupy a stream slot. Everything else checks + inserts under a per-user lock so two
+  // simultaneous starts cannot both see a free slot.
+  if (contentType === "EBOOK") {
+    const session = await playbackSessionRepository.createSession({ userId, contentId, contentType: contentType as string, ...(deviceId ? { deviceId } : {}) });
+    return { sessionId: session.id };
   }
 
-  const session = await playbackSessionRepository.createSession({
-    userId,
-    contentId,
-    contentType: contentType as string,
-    deviceId,
+  // Plan read happens before the lock (a second pooled connection inside the transaction could exhaust the pool).
+  const subscription = await subscriptionRepository.findByUserId(userId);
+  const maxStreams = subscription?.plan?.maxConcurrentStreams;
+
+  return runLockedForUser(userId, async (tx) => {
+    if (maxStreams !== null && maxStreams !== undefined) {
+      const activeCount = await playbackSessionRepository.countActiveSessions(userId, tx);
+      if (activeCount >= maxStreams) {
+        throw new AppError("CONCURRENT_STREAM_LIMIT_REACHED", 403, ERROR_CODES.CONCURRENT_STREAM_LIMIT_REACHED);
+      }
+    }
+    const session = await playbackSessionRepository.createSession({ userId, contentId, contentType: contentType as string, ...(deviceId ? { deviceId } : {}) }, tx);
+    return { sessionId: session.id };
   });
-  return { sessionId: session.id };
 }
 
 export async function heartbeatSession(sessionId: string, userId: string): Promise<void> {

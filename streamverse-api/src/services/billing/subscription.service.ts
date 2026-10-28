@@ -86,7 +86,18 @@ export async function applyStripeSubscriptionSnapshot(stripeSub: Stripe.Subscrip
     canceledAt: toDate(stripeSub.canceled_at),
     trialEnd: toDate(stripeSub.trial_end),
   };
-  await subscriptionRepository.upsertByStripeSubscriptionId(stripeSub.id, data, data);
+  // One row per customer (userId is unique): a new Stripe subscription takes over the row of an earlier one that no longer
+  // grants access (an abandoned attempt, a cancelled plan). A customer who already has a working subscription keeps it.
+  const current = await subscriptionRepository.findByUserId(userId);
+  if (current && current.stripeSubscriptionId !== stripeSub.id) {
+    if (statusGrantsAccess(current.status)) {
+      logger.warn({ userId, kept: current.stripeSubscriptionId, ignored: stripeSub.id }, "subscription: customer already has an active subscription; ignoring another one");
+      return;
+    }
+    await subscriptionRepository.upsertByUserId(userId, data, data);
+  } else {
+    await subscriptionRepository.upsertByStripeSubscriptionId(stripeSub.id, data, data);
+  }
   entitlementCache.invalidateUser(userId);
 }
 
@@ -154,7 +165,7 @@ export async function getMySubscription(userId: string) {
 }
 
 /** Section 16/17/76/77: validates the plan, refuses a duplicate active subscription, and lets Stripe control every billing value. */
-export async function createCheckoutSession(userId: string, planId: string, ctx: AuditContext = NO_ACTOR) {
+export async function createCheckoutSession(userId: string, planId: string, ctx: AuditContext = NO_ACTOR, popup = false) {
   const plan = await resolveActivePlanOrThrow(planId);
   const existing = await subscriptionRepository.findByUserId(userId);
   if (existing && statusGrantsAccess(existing.status)) {
@@ -165,10 +176,57 @@ export async function createCheckoutSession(userId: string, planId: string, ctx:
   // Deterministic key: same user+plan within a short window produces the same Stripe session
   // instead of spawning two billable subscriptions on a double-click.
   const windowMinute = Math.floor(Date.now() / 60_000);
-  const session = await stripeService.createCheckoutSession({ stripeCustomerId, priceId: plan.stripePriceId, userId, planId: plan.id, idempotencyKey: `checkout-${userId}-${plan.id}-${windowMinute}` });
+  const session = await stripeService.createCheckoutSession({ stripeCustomerId, priceId: plan.stripePriceId, userId, planId: plan.id, popup, idempotencyKey: `checkout-${userId}-${plan.id}-${popup ? "popup" : "page"}-${windowMinute}` });
 
   await recordAudit(ctx, { action: "subscription.checkout_created", entityType: "SUBSCRIPTION", entityId: userId, metadata: { planId: plan.id } });
   return { checkoutUrl: session.url, sessionId: session.id };
+}
+
+/**
+ * The embedded payment box: validates exactly like checkout, then returns the client secret the browser confirms with
+ * Stripe.js. Nothing is granted here; access starts when Stripe confirms the payment (webhook, or `syncMySubscription`).
+ */
+export async function createPaymentIntentForPlan(userId: string, planId: string, ctx: AuditContext = NO_ACTOR) {
+  const plan = await resolveActivePlanOrThrow(planId);
+  const existing = await subscriptionRepository.findByUserId(userId);
+  if (existing && statusGrantsAccess(existing.status)) {
+    throw new ConflictError("You already have an active subscription. Use change-plan to switch plans instead.");
+  }
+  const stripeCustomerId = await getOrCreateStripeCustomer(userId);
+  // an earlier unpaid attempt must not linger as a second billable subscription
+  if (existing && (existing.status === "INCOMPLETE") && existing.stripeSubscriptionId) {
+    await stripeService.cancelSubscriptionNow(existing.stripeSubscriptionId).catch(() => undefined);
+  }
+  const sub = await stripeService.createSubscriptionForEmbeddedPayment({ stripeCustomerId, priceId: plan.stripePriceId, userId, planId: plan.id, idempotencyKey: `embedded-${userId}-${plan.id}-${randomUUID()}` });
+  const invoice = sub.latest_invoice;
+  const clientSecret = invoice && typeof invoice !== "string" ? (invoice.confirmation_secret?.client_secret ?? null) : null;
+  if (!clientSecret) throw new ValidationError([{ path: "planId", message: "This plan cannot be paid for online right now." }]);
+  await applyStripeSubscriptionSnapshot(sub);
+  await recordAudit(ctx, { action: "subscription.payment_intent_created", entityType: "SUBSCRIPTION", entityId: userId, metadata: { planId: plan.id } });
+  return { clientSecret, subscriptionId: sub.id };
+}
+
+/** Pulls the latest state from Stripe right after a payment (does not depend on a webhook reaching this machine). */
+export async function syncMySubscription(userId: string) {
+  try {
+    const user = await userRepository.findById(userId);
+    if (user?.stripeCustomerId) {
+      // A hosted Checkout (the popup) creates the subscription on Stripe's side and tells us by webhook; ask Stripe directly
+      // so the customer does not depend on a webhook reaching this server. An active one wins over an abandoned attempt.
+      const all = await stripeService.listCustomerSubscriptions(user.stripeCustomerId);
+      const live = all.find((s) => s.status === "active" || s.status === "trialing") ?? all.find((s) => s.status === "past_due");
+      if (live) await applyStripeSubscriptionSnapshot(live);
+      else {
+        const local = await subscriptionRepository.findByUserId(userId);
+        const known = local && all.find((s) => s.id === local.stripeSubscriptionId);
+        if (known) await applyStripeSubscriptionSnapshot(known);
+      }
+    }
+  } catch (err) {
+    // Stripe is unreachable or no longer knows this customer: report what is stored rather than failing the page
+    logger.warn({ userId, err }, "billing: could not sync subscription from Stripe");
+  }
+  return getMySubscription(userId);
 }
 
 async function requireActiveSubscription(userId: string) {

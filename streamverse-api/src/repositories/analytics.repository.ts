@@ -59,9 +59,12 @@ export async function getRevenueSummary() {
   const now = new Date();
   const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
+  // Gross counts every charge that was actually collected — including ones since (partially) refunded —
+  // so that subtracting SUCCEEDED refunds below nets a fully refunded payment to zero, never negative.
+  const collected = ["SUCCEEDED", "PARTIALLY_REFUNDED", "REFUNDED"] as const;
   const [allPayments, monthPayments, allRefunds] = await Promise.all([
-    prisma.payment.findMany({ where: { status: "SUCCEEDED" }, select: { amount: true } }),
-    prisma.payment.findMany({ where: { status: "SUCCEEDED", paidAt: { gte: firstOfMonth } }, select: { amount: true } }),
+    prisma.payment.findMany({ where: { status: { in: [...collected] } }, select: { amount: true } }),
+    prisma.payment.findMany({ where: { status: { in: [...collected] }, paidAt: { gte: firstOfMonth } }, select: { amount: true } }),
     prisma.refund.findMany({ where: { status: "SUCCEEDED" }, select: { amount: true } }),
   ]);
 

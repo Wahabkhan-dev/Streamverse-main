@@ -5,6 +5,7 @@ import { NotFoundError, ValidationError } from "../utils/errors";
 import { buildPagination, toSkipTake } from "../utils/pagination";
 import { isCustomerVisible } from "./contentAccess.service";
 import { assertAssetRef } from "./mediaAsset.service";
+import { signAssetsById } from "./assetUrl.service";
 import type { CreateBannerInput, UpdateBannerInput } from "../validators/banner.validator";
 import type { AuditContext } from "./auditLog.service";
 import { recordAudit } from "./auditLog.service";
@@ -20,9 +21,15 @@ async function assertLinkedContentValid(linkedContentId: string | undefined) {
 // Banner.type PROMOTIONAL has no dedicated MediaAssetType of its own — it reuses NORMAL_BANNER artwork.
 const DESKTOP_BANNER_ASSET_TYPES = ["HERO_BANNER", "NORMAL_BANNER", "LATEST_RELEASE_BANNER"] as const;
 
+/** The banner's own kind decides which minimum size a library image must meet (the first type listed is the one measured). */
+const desktopTypesFor = (bannerType: string | undefined): Array<(typeof DESKTOP_BANNER_ASSET_TYPES)[number]> => {
+  const first = bannerType === "HERO" ? "HERO_BANNER" : bannerType === "LATEST_RELEASE" ? "LATEST_RELEASE_BANNER" : "NORMAL_BANNER";
+  return [first, ...DESKTOP_BANNER_ASSET_TYPES.filter((t) => t !== first)];
+};
+
 export async function createBanner(input: CreateBannerInput, ctx: AuditContext = NO_ACTOR) {
   await assertLinkedContentValid(input.linkedContentId);
-  await Promise.all([assertAssetRef("desktopAssetId", input.desktopAssetId, [...DESKTOP_BANNER_ASSET_TYPES]), assertAssetRef("mobileAssetId", input.mobileAssetId, ["MOBILE_BANNER"])]);
+  await Promise.all([assertAssetRef("desktopAssetId", input.desktopAssetId, desktopTypesFor(input.type)), assertAssetRef("mobileAssetId", input.mobileAssetId, ["MOBILE_BANNER"])]);
   const banner = await bannerRepository.create(input);
   await recordAudit(ctx, { action: "banner.created", entityType: "BANNER", entityId: banner.id, metadata: { type: banner.type, title: banner.title } });
   return banner;
@@ -32,8 +39,8 @@ export async function updateBanner(id: string, input: UpdateBannerInput, ctx: Au
   const existing = await bannerRepository.findById(id);
   if (!existing) throw new NotFoundError("Banner not found");
   assertNotStale(existing.updatedAt, input.expectedUpdatedAt);
-  await assertLinkedContentValid(input.linkedContentId);
-  await Promise.all([assertAssetRef("desktopAssetId", input.desktopAssetId, [...DESKTOP_BANNER_ASSET_TYPES]), assertAssetRef("mobileAssetId", input.mobileAssetId, ["MOBILE_BANNER"])]);
+  await assertLinkedContentValid(input.linkedContentId ?? undefined);
+  await Promise.all([assertAssetRef("desktopAssetId", input.desktopAssetId ?? undefined, desktopTypesFor(input.type ?? existing.type)), assertAssetRef("mobileAssetId", input.mobileAssetId ?? undefined, ["MOBILE_BANNER"])]);
   const { expectedUpdatedAt: _drop, ...data } = input;
   void _drop;
   const updated = await bannerRepository.update(id, data);
@@ -62,19 +69,27 @@ export async function listBanners(filters: { page: number; limit: number; sortBy
  * whole banner is dropped from the response — never shown with a dead link, and never silently shown
  * "unlinked" either (that would misrepresent what it was supposed to point at).
  */
-export async function listActiveBannersForCustomer(type?: "HERO" | "NORMAL" | "LATEST_RELEASE" | "PROMOTIONAL") {
-  const banners = await bannerRepository.listActiveWithinWindow(type);
-  return banners
-    .filter((b) => !b.linkedContentId || (b.linkedContent && isCustomerVisible(b.linkedContent)))
-    .map((b) => ({
-      id: b.id,
-      type: b.type,
-      title: b.title,
-      description: b.description,
-      desktopAssetId: b.desktopAssetId,
-      mobileAssetId: b.mobileAssetId,
-      buttonText: b.buttonText,
-      priority: b.priority,
-      linkedContent: b.linkedContent ? { id: b.linkedContent.id, type: b.linkedContent.type, slug: b.linkedContent.slug, title: b.linkedContent.title } : null,
-    }));
+export async function listActiveBannersForCustomer(type?: "HERO" | "NORMAL" | "LATEST_RELEASE" | "PROMOTIONAL", placement?: "MOVIES" | "EBOOKS" | "AUDIOBOOKS") {
+  const banners = (await bannerRepository.listActiveWithinWindow(type, placement)).filter((b) => !b.linkedContentId || (b.linkedContent && isCustomerVisible(b.linkedContent)));
+  // signed picture URLs for the whole list in one batch (never one query or signature per banner)
+  const urls = await signAssetsById(banners.flatMap((b) => [b.desktopAssetId, b.mobileAssetId]));
+  return banners.map((b) => ({
+    id: b.id,
+    type: b.type,
+    title: b.title,
+    description: b.description,
+    desktopAssetId: b.desktopAssetId,
+    mobileAssetId: b.mobileAssetId,
+    image: b.desktopAssetId ? (urls.get(b.desktopAssetId) ?? null) : null,
+    mobileImage: b.mobileAssetId ? (urls.get(b.mobileAssetId) ?? null) : null,
+    buttonText: b.buttonText,
+    priority: b.priority,
+    placement: b.placement,
+    linkToSubscription: b.linkToSubscription,
+    showOnHomepage: b.showOnHomepage,
+    homepageAfter: b.homepageAfter,
+    startsAt: b.startsAt,
+    endsAt: b.endsAt,
+    linkedContent: b.linkedContent ? { id: b.linkedContent.id, type: b.linkedContent.type, slug: b.linkedContent.slug, title: b.linkedContent.title } : null,
+  }));
 }

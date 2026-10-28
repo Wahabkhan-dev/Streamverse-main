@@ -20,7 +20,6 @@ import {
   adminSubscriptionsApi,
   adminPaymentsApi,
   adminAnalyticsApi,
-  adminMediaApi,
   type AdminListParams,
 } from "@/api/admin.api";
 import { DEMO_MODE } from "@/lib/config";
@@ -28,8 +27,9 @@ import { DEMO_MODE } from "@/lib/config";
 const E = !DEMO_MODE; // shorthand: only enable when not in demo mode
 
 /* ─────────── Movies ─────────── */
-export const useAdminMoviesQuery = (p?: AdminListParams) =>
-  useQuery({ queryKey: ["admin", "movies", p], queryFn: () => adminMoviesApi.list(p), enabled: E });
+// with no params the whole list is loaded (every page), so the admin list never stops at the server's first page
+export const useAdminMoviesQuery = (p?: AdminListParams, opts?: { enabled?: boolean }) =>
+  useQuery({ queryKey: ["admin", "movies", p], queryFn: () => (p ? adminMoviesApi.list(p) : adminMoviesApi.listAll()), enabled: E && (opts?.enabled ?? true) });
 
 export const useAdminMovieMutation = () => {
   const qc = useQueryClient();
@@ -40,12 +40,13 @@ export const useAdminMovieMutation = () => {
     remove: useMutation({ mutationFn: adminMoviesApi.delete, onSuccess: inv }),
     publish: useMutation({ mutationFn: adminMoviesApi.publish, onSuccess: inv }),
     unpublish: useMutation({ mutationFn: adminMoviesApi.unpublish, onSuccess: inv }),
+    archive: useMutation({ mutationFn: adminMoviesApi.archive, onSuccess: inv }),
   };
 };
 
 /* ─────────── eBooks ─────────── */
-export const useAdminEbooksQuery = (p?: AdminListParams) =>
-  useQuery({ queryKey: ["admin", "ebooks", p], queryFn: () => adminEbooksApi.list(p), enabled: E });
+export const useAdminEbooksQuery = (p?: AdminListParams, opts?: { enabled?: boolean }) =>
+  useQuery({ queryKey: ["admin", "ebooks", p], queryFn: () => (p ? adminEbooksApi.list(p) : adminEbooksApi.listAll()), enabled: E && (opts?.enabled ?? true) });
 
 export const useAdminEbookMutation = () => {
   const qc = useQueryClient();
@@ -56,12 +57,13 @@ export const useAdminEbookMutation = () => {
     remove: useMutation({ mutationFn: adminEbooksApi.delete, onSuccess: inv }),
     publish: useMutation({ mutationFn: adminEbooksApi.publish, onSuccess: inv }),
     unpublish: useMutation({ mutationFn: adminEbooksApi.unpublish, onSuccess: inv }),
+    archive: useMutation({ mutationFn: adminEbooksApi.archive, onSuccess: inv }),
   };
 };
 
 /* ─────────── Audiobooks ─────────── */
-export const useAdminAudiobooksQuery = (p?: AdminListParams) =>
-  useQuery({ queryKey: ["admin", "audiobooks", p], queryFn: () => adminAudiobooksApi.list(p), enabled: E });
+export const useAdminAudiobooksQuery = (p?: AdminListParams, opts?: { enabled?: boolean }) =>
+  useQuery({ queryKey: ["admin", "audiobooks", p], queryFn: () => (p ? adminAudiobooksApi.list(p) : adminAudiobooksApi.listAll()), enabled: E && (opts?.enabled ?? true) });
 
 export const useAdminAudiobookMutation = () => {
   const qc = useQueryClient();
@@ -72,6 +74,7 @@ export const useAdminAudiobookMutation = () => {
     remove: useMutation({ mutationFn: adminAudiobooksApi.delete, onSuccess: inv }),
     publish: useMutation({ mutationFn: adminAudiobooksApi.publish, onSuccess: inv }),
     unpublish: useMutation({ mutationFn: adminAudiobooksApi.unpublish, onSuccess: inv }),
+    archive: useMutation({ mutationFn: adminAudiobooksApi.archive, onSuccess: inv }),
   };
 };
 
@@ -102,6 +105,24 @@ export const useAdminCollectionMutation = () => {
 /* ─────────── Homepage ─────────── */
 export const useAdminHomepageQuery = () =>
   useQuery({ queryKey: ["admin", "homepage"], queryFn: adminHomepageApi.list, enabled: E });
+
+export const useAdminHomepageMutation = () => {
+  const qc = useQueryClient();
+  const inv = () => {
+    void qc.invalidateQueries({ queryKey: ["admin", "homepage"] });
+    void qc.invalidateQueries({ queryKey: ["homepage"] });
+  };
+  return {
+    create: useMutation({ mutationFn: adminHomepageApi.create, onSuccess: inv }),
+    update: useMutation({
+      mutationFn: ({ id, data }: { id: string; data: Parameters<typeof adminHomepageApi.updateSection>[1] }) =>
+        adminHomepageApi.updateSection(id, data),
+      onSuccess: inv,
+    }),
+    reorder: useMutation({ mutationFn: adminHomepageApi.reorder, onSuccess: inv }),
+    remove: useMutation({ mutationFn: adminHomepageApi.remove, onSuccess: inv }),
+  };
+};
 
 /* ─────────── Banners ─────────── */
 export const useAdminBannersQuery = () =>
@@ -187,12 +208,18 @@ export const useAdminDashboardQuery = () =>
 export const useAdminRevenueQuery = (params?: Parameters<typeof adminAnalyticsApi.getRevenue>[0]) =>
   useQuery({ queryKey: ["admin", "analytics", params], queryFn: () => adminAnalyticsApi.getRevenue(params), enabled: E, staleTime: 5 * 60 * 1000 });
 
+export const useAdminSummaryQuery = () =>
+  useQuery({ queryKey: ["admin", "dashboard", "summary"], queryFn: adminAnalyticsApi.getSummary, enabled: E, staleTime: 30 * 1000 });
+
+export const useAdminPlatformStatusQuery = () =>
+  useQuery({ queryKey: ["admin", "dashboard", "platform-status"], queryFn: adminAnalyticsApi.getPlatformStatus, enabled: E, staleTime: 30 * 1000 });
+
+export const useAdminUserGrowthQuery = (params: Parameters<typeof adminAnalyticsApi.getUserGrowth>[0]) =>
+  useQuery({ queryKey: ["admin", "analytics", "users", params], queryFn: () => adminAnalyticsApi.getUserGrowth(params), enabled: E, staleTime: 5 * 60 * 1000 });
+
+/** One analytics report (subscriptions, movies, top-content, ...) for the filters chosen on the Analytics page. */
+export const useAdminReportQuery = <T,>(kind: string, params: Record<string, string>) =>
+  useQuery({ queryKey: ["admin", "analytics", kind, params], queryFn: async () => (await adminAnalyticsApi.report<T>(kind, params)).data, enabled: E, staleTime: 60 * 1000 });
+
 export const useAdminAuditLogsQuery = (p?: AdminListParams) =>
   useQuery({ queryKey: ["admin", "audit-logs", p], queryFn: () => adminAnalyticsApi.getAuditLogs(p), enabled: E });
-
-/* ─────────── Media uploads ─────────── */
-export const useAdminRequestUploadMutation = () =>
-  useMutation({ mutationFn: adminMediaApi.requestUpload });
-
-export const useAdminConfirmUploadMutation = () =>
-  useMutation({ mutationFn: ({ key, contentId }: { key: string; contentId?: string }) => adminMediaApi.confirmUpload(key, contentId) });

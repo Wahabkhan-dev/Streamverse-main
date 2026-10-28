@@ -23,11 +23,14 @@ export async function getOrCreateStripeCustomer(userId: string): Promise<string>
     // Another request won the race — fetch the canonical customer ID it stored
     const updated = await userRepository.findById(userId);
     if (updated?.stripeCustomerId) {
-      // Best-effort cleanup: delete the orphaned Stripe Customer we just created
-      try {
-        await stripeService.deleteCustomer(customer.id);
-      } catch (err) {
-        logger.warn({ stripeCustomerId: customer.id, userId, err }, "stripeCustomer: failed to delete orphaned Stripe customer after race");
+      // Best-effort cleanup of the orphan we just created. Stripe replays one customer for both racing calls (same
+      // idempotency key), so when the ids match this IS the winner's customer and must not be deleted.
+      if (customer.id !== updated.stripeCustomerId) {
+        try {
+          await stripeService.deleteCustomer(customer.id);
+        } catch (err) {
+          logger.warn({ stripeCustomerId: customer.id, userId, err }, "stripeCustomer: failed to delete orphaned Stripe customer after race");
+        }
       }
       return updated.stripeCustomerId;
     }

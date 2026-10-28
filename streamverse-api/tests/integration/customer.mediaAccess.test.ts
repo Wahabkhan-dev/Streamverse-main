@@ -33,6 +33,33 @@ async function readyAsset(type: string, contentId: string, extra: Record<string,
 
 const NO_ACTOR = { userId: undefined, ip: undefined, userAgent: undefined, requestId: undefined };
 
+describe("Movie trailer / teaser", () => {
+  it("is offered only when the admin added one: 404 without, a signed URL (never a storage key) with", async () => {
+    const { content } = await makePublishedMovie();
+    const headers = await auth();
+    const none = await request(app).post(`/api/v1/media/movies/${content.id}/trailer`).set(headers).send({ variant: "trailer" });
+    expect(none.status).toBe(404);
+
+    const detail0 = await request(app).get(`/api/v1/movies/${content.slug}`);
+    expect(detail0.body.data.hasTrailer).toBe(false);
+    expect(detail0.body.data.hasTeaser).toBe(false);
+
+    const trailer = await readyAsset("TRAILER", content.id, { storageKey: `media/movie/trailer/${content.id}.mp4`, mimeType: "video/mp4" });
+    await updateMovie(content.id, updateMovieSchema.parse({ movie: { trailerAssetId: trailer.id } }), NO_ACTOR);
+
+    const ok = await request(app).post(`/api/v1/media/movies/${content.id}/trailer`).set(headers).send({ variant: "trailer" });
+    expect(ok.status).toBe(200);
+    expect(ok.body.data.url).toBeTruthy();
+    expect(JSON.stringify(ok.body)).not.toMatch(/storageKey/i);
+    const teaser = await request(app).post(`/api/v1/media/movies/${content.id}/trailer`).set(headers).send({ variant: "teaser" });
+    expect(teaser.status).toBe(404);
+
+    const detail = await request(app).get(`/api/v1/movies/${content.slug}`);
+    expect(detail.body.data.hasTrailer).toBe(true);
+    expect(detail.body.data.hasTeaser).toBe(false);
+  });
+});
+
 describe("Private movie playback (Section 53-56/101)", () => {
   it("blocks an unauthenticated request", async () => {
     const { content } = await makePublishedMovie();

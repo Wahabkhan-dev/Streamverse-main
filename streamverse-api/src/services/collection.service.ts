@@ -8,6 +8,7 @@ import type { AddCollectionItemInput, CreateCollectionInput, ReorderCollectionIt
 import type { AuditContext } from "./auditLog.service";
 import { recordAudit } from "./auditLog.service";
 import { toMixedCards } from "./mixedContent.service";
+import { assertAssetRef } from "./mediaAsset.service";
 import { isCustomerVisible } from "./contentAccess.service";
 
 const NO_ACTOR: AuditContext = { userId: undefined, ip: undefined, userAgent: undefined, requestId: undefined };
@@ -19,6 +20,7 @@ async function uniqueCollectionSlug(base: string, excludeId?: string): Promise<s
 }
 
 export async function createCollection(input: CreateCollectionInput, ctx: AuditContext = NO_ACTOR) {
+  await assertAssetRef("bannerAssetId", input.bannerAssetId, ["NORMAL_BANNER", "HERO_BANNER"]);
   const slug = await uniqueCollectionSlug(input.manualSlug ? normalizeSlug(input.manualSlug) : createSlugFromTitle(input.name));
   const collection = await collectionRepository.create({ name: input.name, slug, description: input.description, bannerAssetId: input.bannerAssetId });
   await recordAudit(ctx, { action: "collection.created", entityType: "COLLECTION", entityId: collection.id, metadata: { name: collection.name } });
@@ -29,6 +31,7 @@ export async function updateCollection(id: string, input: UpdateCollectionInput,
   const existing = await collectionRepository.findById(id);
   if (!existing) throw new NotFoundError("Collection not found");
   assertNotStale(existing.updatedAt, input.expectedUpdatedAt);
+  await assertAssetRef("bannerAssetId", input.bannerAssetId ?? undefined, ["NORMAL_BANNER", "HERO_BANNER"]);
 
   const data: Parameters<typeof collectionRepository.update>[1] = { name: input.name, description: input.description, bannerAssetId: input.bannerAssetId, status: input.status };
   if (input.manualSlug) data.slug = await uniqueCollectionSlug(normalizeSlug(input.manualSlug), id);

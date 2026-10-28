@@ -12,12 +12,17 @@ export async function list(filters: { type?: Prisma.BannerWhereInput["type"]; ac
   return { rows, total };
 }
 
+/** Active banners that chose to appear on the homepage (the service still applies the schedule window and linked-title checks). */
+export const listHomepageBanners = () =>
+  prisma.banner.findMany({ where: { active: true, showOnHomepage: true, type: { not: "HERO" } }, orderBy: [{ priority: "asc" }, { createdAt: "asc" }], select: { id: true, homepageAfter: true } });
+
 /** Section 15: active + inside its start/end window. Linked content's visibility is checked by the service. */
-export function listActiveWithinWindow(type: Prisma.BannerWhereInput["type"] | undefined, now = new Date()) {
+export function listActiveWithinWindow(type: Prisma.BannerWhereInput["type"] | undefined, placement?: Prisma.BannerWhereInput["placement"], now = new Date()) {
   return prisma.banner.findMany({
     where: {
       active: true,
       ...(type ? { type } : {}),
+      ...(placement ? { placement } : {}),
       AND: [{ OR: [{ startsAt: null }, { startsAt: { lte: now } }] }, { OR: [{ endsAt: null }, { endsAt: { gte: now } }] }],
     },
     orderBy: { priority: "asc" },

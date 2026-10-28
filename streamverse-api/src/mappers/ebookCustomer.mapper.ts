@@ -5,11 +5,12 @@ interface EbookListRow {
   content: CustomerContentBaseRow;
   author: string | null;
   frontCoverAssetId: string | null;
+  frontCoverAsset?: { storageKey: string | null } | null;
   thumbnailAssetId: string | null;
 }
 
-/** Card data for GET /ebooks — Section 7. */
-export function toEbookCard(row: EbookListRow) {
+/** Card data for GET /ebooks — Section 7. `coverUrl` is the signed front-cover URL, batched in by the caller. */
+export function toEbookCard(row: EbookListRow, coverUrl?: string | null) {
   const base = mapCustomerBase(row.content);
   return {
     id: base.id,
@@ -17,6 +18,7 @@ export function toEbookCard(row: EbookListRow) {
     title: base.title,
     author: row.author,
     summary: base.summary,
+    image: coverUrl ?? null,
     coverAssetId: row.frontCoverAssetId,
     thumbnailAssetId: row.thumbnailAssetId,
     genres: base.genres,
@@ -43,6 +45,7 @@ interface EbookDetailRow extends EbookListRow {
   backCoverAssetId: string | null;
   spineAssetId: string | null;
   fullWrapAssetId: string | null;
+  flipbookEnabled: boolean;
   editions: { translatedTitle: string; translator: string | null; language: { code: string; name: string } }[];
 }
 
@@ -70,6 +73,8 @@ export function toEbookDetail(row: EbookDetailRow, access: AccessResult) {
     fullWrapAssetId: row.fullWrapAssetId,
     // the readable file is never named until access.canConsume is true — see Section 56/8
     readingReady: access.canConsume && (!!row.epubAssetId || !!row.pdfAssetId),
+    // a page-turn version exists (shown as an extra button on the book's page; opening it still needs access)
+    flipbook: row.flipbookEnabled && !!row.pdfAssetId,
     editions: row.editions.map((e) => ({ translatedTitle: e.translatedTitle, translator: e.translator, language: e.language.code })),
     access,
   };

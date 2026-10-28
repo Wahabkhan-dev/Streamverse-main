@@ -7,7 +7,13 @@ export async function getMySubscription(req: Request, res: Response) {
   sendSuccess(res, await subscriptionService.getMySubscription(req.auth!.userId), "Subscription status");
 }
 export async function checkout(req: Request, res: Response) {
-  sendSuccess(res, await subscriptionService.createCheckoutSession(req.auth!.userId, req.body.planId, auditContext(req)), "Checkout session created", 201);
+  sendSuccess(res, await subscriptionService.createCheckoutSession(req.auth!.userId, req.body.planId, auditContext(req), req.body.popup === true), "Checkout session created", 201);
+}
+export async function paymentIntent(req: Request, res: Response) {
+  sendSuccess(res, await subscriptionService.createPaymentIntentForPlan(req.auth!.userId, req.body.planId, auditContext(req)), "Payment ready", 201);
+}
+export async function sync(req: Request, res: Response) {
+  sendSuccess(res, await subscriptionService.syncMySubscription(req.auth!.userId), "Subscription status");
 }
 export async function cancel(req: Request, res: Response) {
   sendSuccess(res, await subscriptionService.cancelSubscription(req.auth!.userId, auditContext(req)), "Cancellation scheduled");

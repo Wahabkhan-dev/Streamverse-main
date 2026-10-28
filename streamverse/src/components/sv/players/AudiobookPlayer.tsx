@@ -1,6 +1,6 @@
 ﻿import { useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Check, Moon, Pause, Play, RotateCcw, RotateCw, SkipBack, SkipForward, Volume1, Volume2, VolumeX } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { isApiError } from "@/api/client";
 import { mediaApi } from "@/api/media.api";
@@ -13,6 +13,7 @@ import { clock } from "@/lib/runtime";
 import { getUser, refKey, saveProgress, usePrefs } from "@/lib/user";
 import { cn } from "@/lib/utils";
 import { BookCover } from "../media";
+import { usePlaybackSession } from "@/hooks/usePlaybackSession";
 import { IconBtn, Range, SPEEDS, fmtSpeed, useBeat, useKey } from "./common";
 
 const SLEEP = [
@@ -29,15 +30,21 @@ const SLEEP = [
 export function AudiobookPlayer({ b, startChapter }: { b: Book; startChapter?: number | undefined }) {
   const navigate = useNavigate();
   const prefs = usePrefs();
-  const chapters = chaptersOf(b);
+  const [realAudioLen, setRealAudioLen] = useState(0);
+  // Demo titles get generated sample chapters. A real title only shows chapters that really exist: its own list
+  // when it has one, otherwise a single chapter spanning the actual file (never invented titles or lengths).
+  const chapters = useMemo(
+    () => (DEMO_MODE || b.info?.chapters?.length ? chaptersOf(b) : [{ title: b.title, seconds: Math.max(1, Math.round(realAudioLen)), startPage: 1, known: realAudioLen > 0 }]),
+    [b, realAudioLen],
+  );
   const starts = chapterStarts(chapters);
   // Presigned audio URL (non-demo)
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [chapterUrls, setChapterUrls] = useState<Record<number, string> | null>(null);
   const [audioFailed, setAudioFailed] = useState(false);
   const [audioError, setAudioError] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [audioLoading, setAudioLoading] = useState(!DEMO_MODE);
-  const [realAudioLen, setRealAudioLen] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
   const realAudio = !DEMO_MODE && !!audioUrl && !audioFailed;
   // Use real audio duration when available; fall back to calculated from chapter metadata
@@ -46,7 +53,7 @@ export function AudiobookPlayer({ b, startChapter }: { b: Book; startChapter?: n
 
   const [pos, setPos] = useState(() => {
     if (startChapter !== undefined && startChapter >= 0 && startChapter < chapters.length) return starts[startChapter]!;
-    if (saved && !saved.completed) return Math.min(saved.seconds ?? 0, total - 1);
+    if (saved && !saved.completed) return Math.max(0, Math.min(saved.seconds ?? 0, total - 1));
     return 0;
   });
   const [playing, setPlaying] = useState(false);
@@ -60,6 +67,10 @@ export function AudiobookPlayer({ b, startChapter }: { b: Book; startChapter?: n
   posRef.current = pos;
   const totalRef = useRef(total);
   totalRef.current = total;
+  // Until the file's real length is known the total is a 1-second stand-in, and a save then would record "100%,
+  // finished" (closing before the audio loaded, or React's double start in development), so the server is not told.
+  const lengthKnownRef = useRef(false);
+  lengthKnownRef.current = DEMO_MODE || (realAudio && realAudioLen > 0) || !!b.info?.chapters?.length;
   const finishedRef = useRef(pos >= total);
   finishedRef.current = pos >= total;
   const apiSave = useSaveProgressMutation();
@@ -75,10 +86,10 @@ export function AudiobookPlayer({ b, startChapter }: { b: Book; startChapter?: n
   }, [b.slug, total]);
 
   const persistApi = useCallback(() => {
-    if (DEMO_MODE) return;
+    if (DEMO_MODE || !lengthKnownRef.current) return;
     const { chapter: c, into: i } = locate(chapters, posRef.current);
     apiSave.mutate(
-      { type: "audiobook", contentId: b.slug, data: { percentage: (posRef.current / totalRef.current) * 100, positionSeconds: posRef.current, chapterIndex: c, chapterSeconds: i, completed: finishedRef.current } },
+      { type: "audiobook", contentId: b.cid ?? b.slug, data: { percentage: (posRef.current / totalRef.current) * 100, positionSeconds: posRef.current, durationSeconds: totalRef.current, chapterIndex: c, chapterSeconds: i, completed: finishedRef.current } },
       { onError: () => undefined },
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -121,13 +132,18 @@ export function AudiobookPlayer({ b, startChapter }: { b: Book; startChapter?: n
   });
   useBeat(playing && !finished, 5000, persist);
   useBeat(playing && !finished && !DEMO_MODE, 30000, persistApi);
+  usePlaybackSession(sessionId, playing && !finished);
+  // once per ending: `apiSave` is a new object after every save, so without this the save re-ran itself in a loop
+  const endSaved = useRef(false);
   useEffect(() => {
-    if (finished) {
+    if (!finished) endSaved.current = false;
+    else if (!endSaved.current && lengthKnownRef.current) {
+      endSaved.current = true;
       setPlaying(false);
       persist();
       if (!DEMO_MODE) {
         apiSave.mutate(
-          { type: "audiobook", contentId: b.slug, data: { percentage: 100, positionSeconds: totalRef.current, completed: true } },
+          { type: "audiobook", contentId: b.cid ?? b.slug, data: { percentage: 100, positionSeconds: totalRef.current, durationSeconds: totalRef.current, completed: true } },
           { onError: () => undefined },
         );
       }
@@ -143,9 +159,9 @@ export function AudiobookPlayer({ b, startChapter }: { b: Book; startChapter?: n
   }, [playing, persistApi]);
   useEffect(() => () => {
     persist();
-    if (!DEMO_MODE) {
+    if (!DEMO_MODE && lengthKnownRef.current) {
       const { chapter: c, into: i } = locate(chapters, posRef.current);
-      void meApi.saveProgress("audiobook", b.slug, { percentage: (posRef.current / totalRef.current) * 100, positionSeconds: posRef.current, chapterIndex: c, chapterSeconds: i, completed: finishedRef.current }).catch(() => undefined);
+      void meApi.saveProgress("audiobook", b.cid ?? b.slug, { percentage: (posRef.current / totalRef.current) * 100, positionSeconds: posRef.current, durationSeconds: totalRef.current, chapterIndex: c, chapterSeconds: i, completed: finishedRef.current }).catch(() => undefined);
     }
   }, [persist, b.slug]);
 
@@ -154,16 +170,21 @@ export function AudiobookPlayer({ b, startChapter }: { b: Book; startChapter?: n
     if (DEMO_MODE) return;
     let cancelled = false;
     setAudioLoading(true);
-    mediaApi.getAudiobookPlayback(b.slug)
+    mediaApi.getAudiobookPlayback(b.cid ?? b.slug)
       .then((res) => {
+        // an answer nobody will use (the player closed, or React ran this twice) gives its stream slot back at once
+        if (cancelled && res.data.sessionId) void meApi.endSession(res.data.sessionId).catch(() => undefined);
         if (!cancelled) {
           const p = res.data;
+          setSessionId(p.sessionId ?? null);
+          // resume from the server-side position (works on any device); metadata load then seeks to it
+          if (p.progress?.positionSeconds) setPos(p.progress.positionSeconds);
           if (!p.mediaReady || !p.playback) {
             setAudioError("This audiobook is not yet ready for playback.");
           } else if (p.playback.mode === "SINGLE_FILE") {
             setAudioUrl(p.playback.url);
           } else {
-            // CHAPTER_FILES: build a map from chapterNumber â†’ url
+            // CHAPTER_FILES: build a map from chapterNumber → url
             const urlMap: Record<number, string> = {};
             for (const ch of p.playback.chapters) urlMap[ch.chapterNumber] = ch.url;
             setChapterUrls(urlMap);
@@ -180,6 +201,7 @@ export function AudiobookPlayer({ b, startChapter }: { b: Book; startChapter?: n
           setAudioError(
             code === "NO_ACTIVE_SUBSCRIPTION" ? "A subscription is required to listen to this audiobook." :
             code === "CONTENT_TYPE_NOT_IN_PLAN" ? "Your plan does not include audiobooks." :
+            code === "DOWNLOAD_EXPIRED" ? "This download has expired. Connect to the internet to renew it." :
             code === "CONCURRENT_STREAM_LIMIT_REACHED" ? "You have reached your concurrent stream limit." :
             "Unable to load audio.",
           );
@@ -314,7 +336,7 @@ export function AudiobookPlayer({ b, startChapter }: { b: Book; startChapter?: n
               <Range value={pos} max={total} onChange={seek} label="Timeline" valueText={`${clock(pos)} of ${clock(total)}`} />
               <div className="mt-2 flex justify-between text-xs tabular-nums text-muted-foreground">
                 <span>{clock(pos)}</span>
-                <span>{Math.round((pos / total) * 100)}% Â· {clock(total)}</span>
+                <span>{Math.round((pos / total) * 100)}% · {clock(total)}</span>
               </div>
               <div className="mt-3 flex flex-wrap items-center justify-center gap-1 sm:gap-3">
                 <IconBtn label="Previous chapter" onClick={() => jumpChapter(into > 5 ? chapter : chapter - 1)}>
@@ -376,7 +398,7 @@ export function AudiobookPlayer({ b, startChapter }: { b: Book; startChapter?: n
           </div>
 
           <aside aria-label="Chapters" className="rounded-xl border border-border bg-surface lg:max-h-[640px] lg:overflow-hidden">
-            <div className="border-b border-border px-5 py-4 text-sm font-bold">Chapters <span className="font-normal text-muted-foreground">Â· {chapters.length}</span></div>
+            <div className="border-b border-border px-5 py-4 text-sm font-bold">Chapters <span className="font-normal text-muted-foreground">· {chapters.length}</span></div>
             <ol className="max-h-[520px] overflow-auto lg:max-h-[580px]">
               {chapters.map((c, i) => (
                 <li key={c.title}>

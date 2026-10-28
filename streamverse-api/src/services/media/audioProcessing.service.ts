@@ -17,7 +17,7 @@ function sanitizeError(err: unknown): string {
  */
 export async function processAudioAsset(assetId: string): Promise<void> {
   const asset = await mediaAssetRepository.findById(assetId);
-  if (!asset || asset.status !== "UPLOADED" || !asset.storageKey) return;
+  if (!asset || (asset.status !== "UPLOADED" && asset.status !== "FAILED") || !asset.storageKey) return;
 
   await mediaAssetRepository.update(assetId, { status: "PROCESSING" });
   const storage = getStorageProvider();
@@ -41,5 +41,6 @@ export async function processAudioAsset(assetId: string): Promise<void> {
     // Section 31: extraction failing is not fatal to the upload — leave duration null, mark the error, let Admin retry.
     await mediaAssetRepository.update(assetId, { status: "FAILED", processingError: sanitizeError(err) });
     logger.error({ assetId, err: sanitizeError(err) }, "media: audio processing failed");
+    throw err; // let the queue's retry/backoff policy see the failure
   }
 }

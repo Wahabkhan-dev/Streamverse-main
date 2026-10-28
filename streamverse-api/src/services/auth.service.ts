@@ -96,7 +96,12 @@ export async function refresh(presentedToken: string, req: Request): Promise<Aut
     throw new UnauthorizedError("Invalid session. Please log in again.");
   }
 
-  await authSessionRepository.markUsedAndRevoke(session.id);
+  // Conditional claim: of two concurrent refreshes with the same token, only one may rotate it.
+  if (!(await authSessionRepository.claimForRotation(session.id))) {
+    logAuthEvent("token.reuse_detected", req, { userId: session.userId });
+    await authSessionRepository.revokeAllForUser(session.userId);
+    throw new UnauthorizedError("This session is no longer valid. Please log in again.");
+  }
   logAuthEvent("token.refresh", req, { userId: user.id });
 
   const next = await issueSession(user.id, user.role, req);
@@ -138,7 +143,8 @@ export async function resetPassword(token: string, newPassword: string, req: Req
   if (!record || record.usedAt || record.expiresAt < new Date()) throw new ValidationError([{ path: "body.token", message: "This reset link is invalid or has expired." }]);
 
   const passwordHash = await hashPassword(newPassword);
-  await Promise.all([userRepository.updatePasswordHash(record.userId, passwordHash), passwordResetRepository.markUsed(record.id), passwordResetRepository.invalidateAllForUser(record.userId), authSessionRepository.revokeAllForUser(record.userId)]);
+  const applied = await passwordResetRepository.consumeAndSetPassword(record.id, record.userId, passwordHash);
+  if (!applied) throw new ValidationError([{ path: "body.token", message: "This reset link is invalid or has expired." }]);
   logAuthEvent("password.reset_success", req, { userId: record.userId });
   // No session is issued here on purpose: the person has to log in again with the new password.
 }

@@ -10,8 +10,12 @@ import type { Plan } from "@/lib/store";
 import { DEMO_MODE } from "@/lib/config";
 import { useApiPlansQuery, planPriceDollars, planInterval } from "@/hooks/useApiPlans";
 import { meApi } from "@/api/me.api";
+import { useApiSubscriptionQuery } from "@/hooks/useApiSubscription";
 import { isApiError } from "@/api/client";
 import type { ApiPlan } from "@/api/types";
+import { StripePayBox } from "@/components/sv/billing/StripePayBox";
+import { StripePopupButton } from "@/components/sv/billing/StripePopupButton";
+import { stripeConfigured } from "@/lib/stripe";
 
 export const Route = createFileRoute("/signup/payment")({
   head: () => ({ meta: [{ title: "Set Up Payment — StreamVerse" }] }),
@@ -27,7 +31,11 @@ function PaymentStep() {
   const localPlans = usePlans();
   const apiPlansQuery = useApiPlansQuery();
   const isGuest = profile.email === "alex@streamverse.tv" && profile.name === "Alex Morgan";
-  const isActive = !isGuest && sub.status === "active";
+  // Live: the server says whether this customer already has a membership (the browser store only holds demo data)
+  const serverSub = useApiSubscriptionQuery();
+  const serverActive = ["ACTIVE", "TRIALING"].includes(String((serverSub.data as { status?: string } | undefined)?.status ?? ""));
+  const isActive = DEMO_MODE ? !isGuest && sub.status === "active" : serverActive;
+  const subKnown = DEMO_MODE || !serverSub.isLoading;
 
   const hydrated = useUserHydrated();
   const [planName, setPlanName] = useState<string>("");
@@ -35,7 +43,7 @@ function PaymentStep() {
   const [apiError, setApiError] = useState<string>("");
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || !subKnown) return;
     if (isActive) {
       void navigate({ to: "/", replace: true });
       return;
@@ -56,7 +64,7 @@ function PaymentStep() {
       return;
     }
     setPlanName(saved);
-  }, [hydrated, isActive, isGuest, navigate]);
+  }, [hydrated, subKnown, isActive, isGuest, navigate]);
 
   // In real-API mode resolve plan from backend data (keyed by name for now; ID stored in sessionStorage once we switch to ID-based selection)
   const apiPlans: ApiPlan[] = apiPlansQuery.data ?? [];
@@ -69,29 +77,19 @@ function PaymentStep() {
       ? { name: apiSelectedPlan.name, price: planPriceDollars(apiSelectedPlan), interval: planInterval(apiSelectedPlan), features: apiSelectedPlan.features.join(", "), active: apiSelectedPlan.active, subs: 0 }
       : localPlans.find((p) => p.name === planName);
 
+  /** The customer paid (in the box or in the Stripe popup): the plan choice is used up, on to the welcome page. */
+  function onPaid() {
+    try { sessionStorage.removeItem(SIGNUP_PLAN_KEY); } catch { /* ignore */ }
+    void navigate({ to: "/signup/complete" });
+  }
+
   async function onStartMembership() {
     if (!selectedPlan || payState === "processing") return;
     setPayState("processing");
     setApiError("");
 
-    if (!DEMO_MODE && apiSelectedPlan) {
-      // Real mode: redirect to Stripe checkout
-      try {
-        const res = await meApi.checkout(apiSelectedPlan.id);
-        if (res.data.url) {
-          try { sessionStorage.removeItem(SIGNUP_PLAN_KEY); } catch { /* ignore */ }
-          window.location.href = res.data.url;
-        }
-      } catch (err) {
-        setPayState("failed");
-        if (isApiError(err)) {
-          setApiError(err.message);
-        } else {
-          setApiError("Payment setup failed. Please try again.");
-        }
-      }
-      return;
-    }
+    // Live payments happen in the Stripe box / popup (see below); this button only exists in demo mode.
+    if (!DEMO_MODE) return;
 
     // Demo mode: simulate payment
     await new Promise((r) => setTimeout(r, 1500));
@@ -200,14 +198,19 @@ function PaymentStep() {
                 Click "Start Membership" to simulate a successful payment and activate your plan.
               </p>
             </div>
-          ) : (
-            <div className="rounded-lg border border-border/50 bg-surface-3 p-4 text-center">
-              <p className="font-medium text-soft">Secure Stripe checkout</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                You will be redirected to Stripe's secure payment page to complete your subscription.
-              </p>
+          ) : !stripeConfigured ? (
+            <p className="rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning" role="alert">
+              Online payment is not available right now. Please try again later.
+            </p>
+          ) : apiSelectedPlan ? (
+            <div className="space-y-4">
+              <StripePayBox planId={apiSelectedPlan.id} label={`Pay $${selectedPlan?.price ?? ""} and start membership`} onPaid={onPaid} onProblem={setApiError} />
+              <div className="flex items-center gap-3 text-[11px] uppercase tracking-wider text-muted-foreground">
+                <span className="h-px flex-1 bg-border" /> or <span className="h-px flex-1 bg-border" />
+              </div>
+              <StripePopupButton planId={apiSelectedPlan.id} onPaid={onPaid} onProblem={setApiError} />
             </div>
-          )}
+          ) : null}
 
           {apiError && (
             <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3">
@@ -247,6 +250,7 @@ function PaymentStep() {
         </div>
 
         {/* CTA */}
+        {DEMO_MODE && (
         <button
           onClick={() => void onStartMembership()}
           disabled={payState === "processing" || !selectedPlan}
@@ -257,6 +261,7 @@ function PaymentStep() {
         >
           {payState === "processing" ? "Processing payment…" : "Start Membership"}
         </button>
+        )}
 
         <button
           onClick={() => void navigate({ to: "/signup/account" })}

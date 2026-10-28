@@ -8,16 +8,18 @@ import { assertReadyToPublish } from "./contentPublishValidation.service";
 
 /**
  * Section 58/59: every legal status change, for every content type, goes through here — nothing else
- * decides whether a transition makes sense. ARCHIVED is terminal in this phase (nothing un-archives it);
+ * decides whether a transition makes sense. The edit wizard ends with a free choice (publish / schedule / archive), so an
+ * admin can pick any of them for a title in any state: an archived title can be restored (published, scheduled, or put back
+ * to draft/unpublished), a live one can be scheduled or archived, and a scheduled one can be re-scheduled.
  * PROCESSING/PROCESSING_FAILED aren't reachable yet (no media pipeline exists before Phase 6), but are
  * listed for completeness.
  */
 const ALLOWED_TRANSITIONS: Record<ContentStatus, ContentStatus[]> = {
-  DRAFT: ["PUBLISHED", "SCHEDULED"],
-  SCHEDULED: ["PUBLISHED", "DRAFT", "UNPUBLISHED"],
-  PUBLISHED: ["UNPUBLISHED", "ARCHIVED"],
-  UNPUBLISHED: ["PUBLISHED", "ARCHIVED"],
-  ARCHIVED: [],
+  DRAFT: ["PUBLISHED", "SCHEDULED", "ARCHIVED"],
+  SCHEDULED: ["PUBLISHED", "DRAFT", "UNPUBLISHED", "SCHEDULED", "ARCHIVED"],
+  PUBLISHED: ["UNPUBLISHED", "ARCHIVED", "SCHEDULED"],
+  UNPUBLISHED: ["PUBLISHED", "ARCHIVED", "SCHEDULED"],
+  ARCHIVED: ["PUBLISHED", "SCHEDULED", "DRAFT", "UNPUBLISHED"],
   PROCESSING: [],
   PROCESSING_FAILED: [],
 };
@@ -35,6 +37,12 @@ async function loadActive(id: string): Promise<Content> {
 export async function publishContent(type: ContentType, id: string, ctx: AuditContext, expectedUpdatedAt?: Date) {
   const content = await loadActive(id);
   assertNotStale(content.updatedAt, expectedUpdatedAt);
+  // Publishing again after an edit is allowed: the title is checked once more (an edit may have removed something required)
+  // and stays live, instead of the admin getting "cannot move from PUBLISHED to PUBLISHED".
+  if (content.status === "PUBLISHED") {
+    await assertReadyToPublish(type, id);
+    return content;
+  }
   assertTransition(content.status, "PUBLISHED");
   await assertReadyToPublish(type, id);
   const updated = await contentRepository.update(id, { status: "PUBLISHED", publishedAt: new Date(), publishAt: null });
@@ -54,8 +62,9 @@ export async function unpublishContent(type: ContentType, id: string, ctx: Audit
 export async function archiveContent(type: ContentType, id: string, ctx: AuditContext, expectedUpdatedAt?: Date) {
   const content = await loadActive(id);
   assertNotStale(content.updatedAt, expectedUpdatedAt);
+  if (content.status === "ARCHIVED") return content; // already archived: pressing Archive again changes nothing
   assertTransition(content.status, "ARCHIVED");
-  const updated = await contentRepository.update(id, { status: "ARCHIVED" });
+  const updated = await contentRepository.update(id, { status: "ARCHIVED", publishAt: null });
   await recordAudit(ctx, { action: "content.archived", entityType: type, entityId: id, metadata: { from: content.status } });
   return updated;
 }

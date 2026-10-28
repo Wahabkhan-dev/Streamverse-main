@@ -46,14 +46,17 @@ export async function checkSubscriptionAccess(userId: string): Promise<{
   hasAccess: boolean;
   hasSubscription: boolean;
   status: SubscriptionStatus | null;
+  /** What the plan includes. Null when there is no subscription (or the plan row is gone: then nothing is withheld). */
+  plan: { moviesEnabled: boolean; ebooksEnabled: boolean; audiobooksEnabled: boolean } | null;
 }> {
   const subscription = await subscriptionRepository.findByUserId(userId);
-  if (!subscription) return { hasAccess: false, hasSubscription: false, status: null };
+  if (!subscription) return { hasAccess: false, hasSubscription: false, status: null, plan: null };
 
   let hasAccess = statusGrantsAccess(subscription.status);
   if (!hasAccess && subscription.status === "PAST_DUE") {
     hasAccess = pastDueGrantsAccess(subscription.currentPeriodEnd, env.SUBSCRIPTION_PAST_DUE_GRACE_DAYS);
   }
 
-  return { hasAccess, hasSubscription: true, status: subscription.status };
+  const p = (subscription as { plan?: { moviesEnabled: boolean; ebooksEnabled: boolean; audiobooksEnabled: boolean } | null }).plan;
+  return { hasAccess, hasSubscription: true, status: subscription.status, plan: p ? { moviesEnabled: p.moviesEnabled, ebooksEnabled: p.ebooksEnabled, audiobooksEnabled: p.audiobooksEnabled } : null };
 }

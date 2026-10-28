@@ -11,6 +11,8 @@ export const presignUploadSchema = z.object({
   sizeBytes: z.number().int().min(1),
   languageId: z.string().min(1).optional(),
   chapterId: z.string().min(1).optional(),
+  /** Media Library upload: not attached to any title yet (contentId/languageId/chapterId are not required). */
+  library: z.boolean().optional(),
 });
 export type PresignUploadInput = z.infer<typeof presignUploadSchema>;
 
@@ -22,5 +24,5 @@ export const attachMediaParamsSchema = z.object({ contentId: z.string().min(1), 
 
 export const multipartInitiateSchema = presignUploadSchema;
 export const multipartPartSchema = z.object({ partNumber: z.number().int().min(1).max(10_000) });
-export const multipartCompleteSchema = z.object({ parts: z.array(z.object({ partNumber: z.number().int().min(1), etag: z.string().min(1) })).min(1) });
+export const multipartCompleteSchema = z.object({ parts: z.array(z.object({ partNumber: z.number().int().min(1), etag: z.string().min(1).optional() })).min(1) });
 export const multipartUploadIdParamSchema = z.object({ uploadId: z.string().min(1) });

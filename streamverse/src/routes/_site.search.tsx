@@ -7,7 +7,7 @@ import { SearchField } from "@/components/sv/SearchField";
 import { Btn, EmptyState, Skel, useRovingTabs } from "@/components/sv/ui";
 import { itemAge, itemGenres, itemLanguage, useCatalog, type Item } from "@/lib/items";
 import { NO_FILTERS, filtersActive, peopleOf, searchItems, searchPeople, type Filters } from "@/lib/search";
-import { useGenres } from "@/lib/store";
+import { useGenreCatalog } from "@/hooks/useGenreNames";
 import { addRecentSearch, clearRecentSearches, useRecentSearches } from "@/lib/user";
 import { cn } from "@/lib/utils";
 import { DEMO_MODE } from "@/lib/config";
@@ -15,6 +15,7 @@ import { searchApi } from "@/api/search.api";
 import type { ApiMovie, ApiBook } from "@/api/types";
 import type { Movie, Book, Status } from "@/lib/data";
 import { toItem } from "@/lib/items";
+import { apiBookToLocal, apiMovieToLocal } from "@/lib/api-mappers";
 
 type Tab = "all" | "movies" | "ebooks" | "audiobooks" | "people";
 const TABS: { id: Tab; label: string }[] = [
@@ -54,43 +55,15 @@ const Select = ({ label, value, onChange, options }: { label: string; value: str
   </label>
 );
 
-function apiMovieToItem(m: ApiMovie): Item {
-  const mins = m.duration ?? 0;
-  const h = Math.floor(mins / 60);
-  const min = mins % 60;
-  const movie: Movie = {
-    slug: m.slug, title: m.title, year: m.year, genres: m.genres,
-    runtime: h > 0 ? `${h}h ${min}m` : `${min}m`,
-    rating: m.rating ?? "PG", badges: [], description: m.description,
-    image: m.image, status: (m.status ?? "Published") as Status,
-    views: m.views ?? 0, release: `${m.year}-01-01`,
-    cast: m.cast.map((c) => ({ name: c.name, role: c.role })),
-    ...(m.promo !== undefined ? { promo: m.promo } : {}),
-    cid: m.id,
-  } as Movie;
-  return toItem("Movie", movie);
-}
+const apiMovieToItem = (m: ApiMovie): Item => toItem("Movie", apiMovieToLocal(m));
 
-function apiBookToItem(b: ApiBook, type: "eBook" | "Audiobook"): Item {
-  const book = {
-    slug: b.slug, title: b.title, author: b.author,
-    ...(b.narrator !== undefined ? { narrator: b.narrator } : {}),
-    genre: b.genres[0] ?? "Fiction", rating: 4.0, reviews: 0, pages: b.pages ?? 0,
-    year: b.year ?? new Date().getFullYear(), description: b.description,
-    palette: ["oklch(0.3 0.05 240)", "oklch(0.2 0.05 240)", "oklch(0.8 0.1 240)"] as [string, string, string],
-    motif: "sun" as const, status: (b.status ?? "Published") as Status,
-    isbn: "", count: 0,
-    ...(b.image ? { cover: b.image } : {}),
-    cid: b.id,
-  } as Book;
-  return toItem(type, book);
-}
+const apiBookToItem = (b: ApiBook, type: "eBook" | "Audiobook"): Item => toItem(type, apiBookToLocal(b));
 
 function SearchPage() {
   const { q = "", tab = "all" } = Route.useSearch();
   const navigate = useNavigate();
   const cat = useCatalog();
-  const genres = useGenres();
+  const genres = useGenreCatalog();
   const recent = useRecentSearches();
   const [text, setText] = useState(q);
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
@@ -178,7 +151,8 @@ function SearchPage() {
   const gridWide = "grid grid-cols-1 gap-x-3 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
 
   // In API mode, show loading while searching
-  const isSearching = !DEMO_MODE && applied && (loading || apiSearchQuery.isLoading);
+  // busy while the visitor is still typing (debounce) and, in live mode, while the server answers
+  const isSearching = loading || (!DEMO_MODE && Boolean(applied) && apiSearchQuery.isLoading);
 
   const peopleList = (list: typeof peopleHits) => (
     <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

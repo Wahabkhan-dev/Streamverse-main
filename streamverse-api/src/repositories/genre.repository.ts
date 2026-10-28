@@ -11,4 +11,9 @@ export const list = () => prisma.genre.findMany({ orderBy: { name: "asc" } });
 export const listActive = () => prisma.genre.findMany({ where: { active: true }, orderBy: { name: "asc" } });
 /** Section 16: a genre in use cannot be renamed into oblivion — deletion is blocked while any title still uses it. */
 export const usageCount = (id: string) => prisma.contentGenre.count({ where: { genreId: id } });
+/** How many titles use each genre, in one query (genreId -> count). */
+export async function usageCounts(): Promise<Map<string, number>> {
+  const rows = await prisma.contentGenre.groupBy({ by: ["genreId"], _count: { _all: true } });
+  return new Map(rows.map((r) => [r.genreId, r._count._all]));
+}
 export const remove = (id: string) => prisma.genre.delete({ where: { id } });

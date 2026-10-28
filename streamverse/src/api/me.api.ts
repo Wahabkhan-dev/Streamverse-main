@@ -7,11 +7,11 @@ import type {
   ApiInvoice,
   ApiPaymentMethod,
   ApiSetupIntent,
+  ApiSyncedSubscription,
   ApiCheckoutSession,
   ApiBillingPortal,
-  ApiListItem,
+  ApiMixedCard,
   ApiProgress,
-  ApiHistoryEntry,
   ApiBookmark,
   ApiNotification,
 } from "./types";
@@ -41,9 +41,19 @@ export const meApi = {
     return api.get<ApiResponse<ApiSubscription>>("/me/subscription");
   },
 
+  /** POST /me/subscription/payment-intent — client secret for the embedded payment box (Stripe Elements) */
+  createPaymentIntent(planId: string) {
+    return api.post<ApiResponse<{ clientSecret: string; subscriptionId: string }>>("/me/subscription/payment-intent", { planId });
+  },
+
+  /** POST /me/subscription/sync — pull the latest state from Stripe right after a payment (no webhook needed) */
+  syncSubscription() {
+    return api.post<ApiResponse<ApiSyncedSubscription>>("/me/subscription/sync");
+  },
+
   /** POST /me/subscription/checkout — returns Stripe checkout URL */
-  checkout(planId: string) {
-    return api.post<ApiResponse<ApiCheckoutSession>>("/me/subscription/checkout", { planId });
+  checkout(planId: string, opts: { popup?: boolean } = {}) {
+    return api.post<ApiResponse<ApiCheckoutSession>>("/me/subscription/checkout", { planId, ...opts });
   },
 
   cancelSubscription() {
@@ -75,11 +85,11 @@ export const meApi = {
 
   /** POST /me/payment-methods/setup-intent — returns Stripe SetupIntent client secret */
   createSetupIntent() {
-    return api.post<ApiResponse<ApiSetupIntent>>("/me/payment-methods/setup-intent");
+    return api.post<ApiResponse<ApiSetupIntent>>("/me/payment-methods/setup");
   },
 
   setDefaultPaymentMethod(paymentMethodId: string) {
-    return api.patch<ApiResponse<ApiPaymentMethod>>(
+    return api.post<ApiResponse<ApiPaymentMethod>>(
       `/me/payment-methods/${paymentMethodId}/default`,
     );
   },
@@ -93,11 +103,11 @@ export const meApi = {
   /* ────────── My List ────────── */
 
   getMyList() {
-    return api.get<ApiResponse<ApiListItem[]>>("/me/my-list");
+    return api.get<ApiResponse<ApiMixedCard[]>>("/me/my-list");
   },
 
   addToMyList(contentId: string, contentType: "movie" | "ebook" | "audiobook") {
-    return api.post<ApiResponse<ApiListItem>>(`/me/my-list/${contentId}`, { contentType });
+    return api.post<ApiResponse<null>>(`/me/my-list/${contentId}`, { contentType });
   },
 
   removeFromMyList(contentId: string) {
@@ -107,11 +117,11 @@ export const meApi = {
   /* ────────── Library ────────── */
 
   getLibrary() {
-    return api.get<ApiResponse<ApiListItem[]>>("/me/library");
+    return api.get<ApiResponse<ApiMixedCard[]>>("/me/library");
   },
 
   addToLibrary(contentId: string, contentType: "movie" | "ebook" | "audiobook") {
-    return api.post<ApiResponse<ApiListItem>>(`/me/library/${contentId}`, { contentType });
+    return api.post<ApiResponse<null>>(`/me/library/${contentId}`, { contentType });
   },
 
   removeFromLibrary(contentId: string) {
@@ -124,31 +134,63 @@ export const meApi = {
     return api.get<ApiResponse<ApiProgress[]>>("/me/continue");
   },
 
+  /** POST /me/playback-sessions/:id/heartbeat — keeps a stream slot alive while playing */
+  heartbeatSession(sessionId: string) {
+    return api.post<ApiResponse<null>>(`/me/playback-sessions/${sessionId}/heartbeat`, {});
+  },
+  /** POST /me/playback-sessions/:id/end — gives a stream slot back */
+  endSession(sessionId: string) {
+    return api.post<ApiResponse<null>>(`/me/playback-sessions/${sessionId}/end`, {});
+  },
+
   /** GET /me/progress/:type/:id */
   getProgress(type: "movie" | "ebook" | "audiobook", contentId: string) {
     return api.get<ApiResponse<ApiProgress>>(`/me/progress/${type}/${contentId}`);
   },
 
-  /** PUT /me/progress/:type/:id */
+  /**
+   * PUT /me/progress/:type/:id
+   *
+   * Callers describe progress in one friendly shape; this maps it onto each backend schema (which differ per
+   * type: movies/audiobooks take whole seconds + optional duration, eBooks take an EPUB `location` or a PDF
+   * `page`). The backend derives percentage/completion itself from position and duration.
+   */
   saveProgress(
     type: "movie" | "ebook" | "audiobook",
     contentId: string,
     data: {
       percentage: number;
       positionSeconds?: number;
+      durationSeconds?: number;
       positionPage?: number;
+      /** EPUB CFI (or any reader-defined location string) */
+      location?: string;
       chapterIndex?: number;
       chapterSeconds?: number;
       completed?: boolean;
     },
   ) {
-    return api.put<ApiResponse<ApiProgress>>(`/me/progress/${type}/${contentId}`, data);
+    let body: Record<string, unknown>;
+    if (type === "ebook") {
+      body = {
+        percentage: Math.max(0, Math.min(100, data.percentage)),
+        ...(data.location ? { location: data.location } : {}),
+        ...(data.positionPage ? { page: Math.max(1, Math.round(data.positionPage)) } : {}),
+      };
+      // the backend requires a location OR a page; an unknown spot is recorded as the start of the book
+      if (body["location"] === undefined && body["page"] === undefined) body["page"] = 1;
+    } else {
+      const duration = data.durationSeconds ? Math.max(1, Math.round(data.durationSeconds)) : undefined;
+      const position = Math.max(0, Math.floor(data.positionSeconds ?? 0));
+      body = { positionSeconds: duration ? Math.min(position, duration) : position, ...(duration ? { durationSeconds: duration } : {}) };
+    }
+    return api.put<ApiResponse<ApiProgress>>(`/me/progress/${type}/${contentId}`, body);
   },
 
   /* ────────── History ────────── */
 
   getHistory(page = 1, limit = 20) {
-    return api.get<ApiResponse<ApiHistoryEntry[]> & { meta: ApiMeta }>(
+    return api.get<ApiResponse<ApiMixedCard[]> & { meta: ApiMeta }>(
       `/me/history?page=${page}&limit=${limit}`,
     );
   },

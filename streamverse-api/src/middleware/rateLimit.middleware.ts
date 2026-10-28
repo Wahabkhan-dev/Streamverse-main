@@ -1,5 +1,7 @@
 import type { Request, RequestHandler } from "express";
 import { rateLimit } from "express-rate-limit";
+import { env } from "../config/env";
+import { normalizeEmail } from "../utils/email";
 import { ERROR_CODES } from "../constants/errors";
 import { sendError } from "../utils/apiResponse";
 
@@ -29,7 +31,7 @@ export const RATE_POLICIES = {
 export function createRateLimiter(policy: Policy, keyBy?: (req: Request) => string): RequestHandler {
   return rateLimit({
     windowMs: policy.windowMs,
-    limit: policy.limit,
+    limit: policy.limit * env.RATE_LIMIT_MULTIPLIER,
     standardHeaders: "draft-7",
     legacyHeaders: false,
     ...(keyBy ? { keyGenerator: (req) => keyBy(req as Request) } : {}),
@@ -42,8 +44,11 @@ export function createRateLimiter(policy: Policy, keyBy?: (req: Request) => stri
 export const generalLimiter = () => createRateLimiter(RATE_POLICIES.general);
 // Keyed by email+IP, not IP alone: one person mistyping a password repeatedly doesn't lock out everyone
 // on the same NAT/office network, but still can't be brute-forced against a single account from many IPs.
-export const loginLimiter = () => createRateLimiter(RATE_POLICIES.login, (req) => `${req.ip}:${String((req.body as { email?: string })?.email ?? "")}`);
-export const forgotPasswordLimiter = () => createRateLimiter(RATE_POLICIES.passwordReset, (req) => `${req.ip}:${String((req.body as { email?: string })?.email ?? "")}`);
+/** IP + normalized email, so case/whitespace variants of one address share a bucket. */
+const emailKey = (req: Request) => `${req.ip}:${normalizeEmail(String((req.body as { email?: string })?.email ?? ""))}`;
+
+export const loginLimiter = () => createRateLimiter(RATE_POLICIES.login, (req) => emailKey(req));
+export const forgotPasswordLimiter = () => createRateLimiter(RATE_POLICIES.passwordReset, (req) => emailKey(req));
 // reset-password has no email in its body (only a token) — keyed by the token itself, so brute-forcing
 // one token is limited without one shared bucket collapsing every unrelated reset in the same window.
 export const resetPasswordLimiter = () => createRateLimiter(RATE_POLICIES.passwordReset, (req) => `${req.ip}:${String((req.body as { token?: string })?.token ?? "")}`);

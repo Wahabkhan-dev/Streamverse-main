@@ -85,6 +85,20 @@ const schema = z
     /** Seconds expensive analytics queries are cached in memory. 0 = disabled. */
     ANALYTICS_CACHE_TTL_SECONDS: z.coerce.number().int().min(0).default(30),
 
+    /** Local load testing only: scales every rate-limit policy. Refused when NODE_ENV=production (see superRefine). */
+    RATE_LIMIT_MULTIPLIER: z.coerce.number().int().min(1).max(1000).default(1),
+
+    /** Seconds the public homepage payload is cached in memory (must stay well under DOWNLOAD_URL_TTL_SECONDS — it embeds signed image URLs). 0 = disabled. */
+    HOMEPAGE_CACHE_TTL_SECONDS: z.coerce.number().int().min(0).max(120).default(15),
+
+    /** How long a movie playback token (and so the right to fetch its playlists) lasts. */
+    HLS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(300).max(24 * 60 * 60).default(4 * 60 * 60),
+    /**
+     * Lifetime of each signed segment URL embedded in a served playlist. A VOD playlist is fetched once at the start of
+     * playback, so this must outlast the longest movie. Each URL is single-object and read-only.
+     */
+    HLS_SEGMENT_URL_TTL_SECONDS: z.coerce.number().int().min(300).max(7 * 24 * 60 * 60).default(6 * 60 * 60),
+
     // Email delivery.
     EMAIL_PROVIDER: z.enum(["console", "resend"]).default("console"),
     EMAIL_FROM: z.string().default("noreply@streamverse.com"),
@@ -118,6 +132,7 @@ const schema = z
       }
     }
     if (env.NODE_ENV === "production") {
+      if (env.RATE_LIMIT_MULTIPLIER !== 1) ctx.addIssue({ code: "custom", path: ["RATE_LIMIT_MULTIPLIER"], message: "RATE_LIMIT_MULTIPLIER must be 1 in production" });
       for (const key of ["JWT_SECRET", "JWT_REFRESH_SECRET"] as const) {
         if (PLACEHOLDER.test(env[key])) ctx.addIssue({ code: "custom", path: [key], message: `${key} still looks like a placeholder; set a long random value` });
       }

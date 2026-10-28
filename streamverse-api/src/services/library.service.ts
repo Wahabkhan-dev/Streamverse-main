@@ -21,7 +21,7 @@ export async function removeFromLibrary(userId: string, contentId: string) {
 
 /** Section 78: same documented behavior as My List — content no longer visible is hidden, not shown broken. */
 export async function listLibrary(userId: string) {
-  const items = await libraryRepository.list(userId);
-  const visible = items.map((i) => i.content).filter((c) => isCustomerVisible(c));
-  return toMixedCards(visible);
+  const items = (await libraryRepository.list(userId)).filter((i) => isCustomerVisible(i.content));
+  const cards = await toMixedCards(items.map((i) => i.content));
+  return cards.map((card, i) => ({ ...card, addedAt: items[i]!.addedAt }));
 }

@@ -45,7 +45,9 @@ export async function createSetupIntent(userId: string, ctx: AuditContext = NO_A
 }
 
 export async function listPaymentMethods(userId: string) {
-  const stripeCustomerId = await requireStripeCustomerId(userId);
+  const user = await userRepository.findById(userId);
+  if (!user?.stripeCustomerId) return [];
+  const stripeCustomerId = user.stripeCustomerId;
   const [methods, defaultId] = await Promise.all([stripeService.listPaymentMethods(stripeCustomerId), defaultPaymentMethodId(stripeCustomerId)]);
   return methods.map((m) => toSafePaymentMethod(m, defaultId));
 }

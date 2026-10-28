@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { itemTitle, useCatalog, type Item } from "@/lib/items";
 import { detailTarget } from "@/lib/links";
 import { peopleOf, suggest } from "@/lib/search";
-import { useGenres } from "@/lib/store";
+import { useGenreCatalog } from "@/hooks/useGenreNames";
 import { addRecentSearch, clearRecentSearches, useRecentSearches } from "@/lib/user";
 import { cn } from "@/lib/utils";
 
@@ -20,7 +20,7 @@ const TypeGlyph = ({ item }: { item: Item }) => {
 export function SearchField({ value, onChange, onSubmit, className, inputClassName, autoFocus, id = "global-search", label = "Search movies, books, audiobooks" }: { value: string; onChange: (v: string) => void; onSubmit?: (q: string) => void; className?: string; inputClassName?: string; autoFocus?: boolean; id?: string; label?: string }) {
   const navigate = useNavigate();
   const cat = useCatalog();
-  const genres = useGenres();
+  const genres = useGenreCatalog();
   const recent = useRecentSearches();
   const [open, setOpen] = useState(false);
   const closeTimer = useRef<number>(undefined);

@@ -9,6 +9,6 @@ export async function list(req: Request, res: Response) {
 }
 
 export async function getOne(req: Request, res: Response) {
-  const audiobook = await catalogService.getAudiobookBySlug(req.params["slug"]!, req.auth?.userId);
+  const audiobook = await catalogService.getAudiobookBySlug(req.params["slug"]!, req.auth?.userId, req.auth?.role === "ADMIN");
   sendSuccess(res, audiobook, "Audiobook");
 }

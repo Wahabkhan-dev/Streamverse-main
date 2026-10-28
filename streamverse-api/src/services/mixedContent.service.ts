@@ -1,5 +1,6 @@
 import * as catalogRepository from "../repositories/catalog.repository";
 import { mapMixedCard, type CustomerContentBaseRow } from "../mappers/customerContent.mapper";
+import { signAssetsById } from "./assetUrl.service";
 
 /**
  * Turns a list of customer-visible `Content` rows (any mix of types, already in the right order — e.g.
@@ -17,16 +18,23 @@ export async function toMixedCards(contents: (CustomerContentBaseRow & { id: str
   const ebookById = new Map(ebooks.map((b) => [b.contentId, b]));
   const audiobookById = new Map(audiobooks.map((b) => [b.contentId, b]));
 
-  return contents.map((content) => {
+  const withCover = contents.map((content) => {
     if (content.type === "MOVIE") {
       const m = movieById.get(content.id);
-      return mapMixedCard(content, { coverAssetId: m?.posterAssetId ?? null, headline: m?.runtimeMinutes ? `${m.runtimeMinutes} min` : null });
+      return { content, coverAssetId: m?.posterAssetId ?? null, headline: m?.runtimeMinutes ? `${m.runtimeMinutes} min` : null };
     }
     if (content.type === "EBOOK") {
       const b = ebookById.get(content.id);
-      return mapMixedCard(content, { coverAssetId: b?.frontCoverAssetId ?? null, headline: b?.author ?? null });
+      return { content, coverAssetId: b?.frontCoverAssetId ?? null, headline: b?.author ?? null };
     }
     const b = audiobookById.get(content.id);
-    return mapMixedCard(content, { coverAssetId: b?.coverAssetId ?? null, headline: b?.narrator ?? b?.author ?? null });
+    return { content, coverAssetId: b?.coverAssetId ?? null, headline: b?.narrator ?? b?.author ?? null };
   });
+
+  // every card on every surface gets the same canonical, signed image — signed in ONE batch for the whole list
+  const urls = await signAssetsById(withCover.map((c) => c.coverAssetId));
+  return withCover.map(({ content, coverAssetId, headline }) => ({
+    ...mapMixedCard(content, { coverAssetId, headline }),
+    image: (coverAssetId && urls.get(coverAssetId)) || null,
+  }));
 }

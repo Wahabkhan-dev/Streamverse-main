@@ -1,6 +1,8 @@
 import type { MediaAssetType } from "@prisma/client";
 import * as mediaAssetRepository from "../repositories/mediaAsset.repository";
+import { KIND, PURPOSE_RULES } from "../constants/upload";
 import { ValidationError } from "../utils/errors";
+import { usedAssetIds } from "./media/assetSlots";
 
 /**
  * Section 56 (Phase 4) + Section 69/100 (Phase 6): Admin APIs attach an existing MediaAsset by id into a
@@ -14,6 +16,17 @@ export async function assertAssetRef(field: string, id: string | undefined, allo
   if (!id) return;
   const asset = await mediaAssetRepository.findById(id);
   if (!asset || asset.deletedAt) throw new ValidationError([{ path: field, message: "This media asset does not exist." }]);
+  // A Media Library image is not tied to any title, so it may fill any artwork (image) slot — provided it is big enough for that slot.
+  const slotRule = PURPOSE_RULES[allowed[0]!];
+  const isArtworkSlot = slotRule?.kind === KIND.IMAGE;
+  if (asset.type === "LIBRARY_IMAGE" && isArtworkSlot) {
+    const min = slotRule.minDimensions;
+    if (min && asset.width && asset.height && (asset.width < min.width || asset.height < min.height)) {
+      throw new ValidationError([{ path: field, message: `This image is ${asset.width}x${asset.height}px; this slot needs at least ${min.width}x${min.height}px.` }]);
+    }
+    if (asset.status !== "READY") throw new ValidationError([{ path: field, message: `This media asset is not ready yet (status: ${asset.status}).` }]);
+    return;
+  }
   if (!allowed.includes(asset.type)) throw new ValidationError([{ path: field, message: `Expected a ${allowed.join(" or ")} asset, got ${asset.type}.` }]);
   if (contentId && asset.contentId && asset.contentId !== contentId) throw new ValidationError([{ path: field, message: "This media asset was uploaded for different content and cannot be attached here." }]);
   if (asset.status !== "READY") throw new ValidationError([{ path: field, message: `This media asset is not ready yet (status: ${asset.status}).` }]);
@@ -29,6 +42,9 @@ export async function scheduleReplacementCleanup(oldAssetId: string | null | und
   if (!oldAssetId || oldAssetId === newAssetId) return;
   const old = await mediaAssetRepository.findById(oldAssetId);
   if (!old || old.deletedAt) return;
+  // Library images (no owning title) and anything still used by another slot belong to the Media Library: never retire them here.
+  if (old.type === "LIBRARY_IMAGE" || !old.contentId) return;
+  if ((await usedAssetIds([oldAssetId])).size) return;
   await mediaAssetRepository.softDelete(oldAssetId);
 }
 

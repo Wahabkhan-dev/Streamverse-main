@@ -9,6 +9,8 @@ import { asyncHandler } from "../utils/asyncHandler";
 export const subscriptionRouter = Router();
 subscriptionRouter.get("/", asyncHandler(subscriptionController.getMySubscription));
 subscriptionRouter.post("/checkout", billingWriteLimiter(), validate({ body: checkoutSchema }), asyncHandler(subscriptionController.checkout));
+subscriptionRouter.post("/payment-intent", billingWriteLimiter(), validate({ body: checkoutSchema }), asyncHandler(subscriptionController.paymentIntent));
+subscriptionRouter.post("/sync", billingWriteLimiter(), asyncHandler(subscriptionController.sync));
 subscriptionRouter.post("/cancel", billingWriteLimiter(), asyncHandler(subscriptionController.cancel));
 subscriptionRouter.post("/resume", billingWriteLimiter(), asyncHandler(subscriptionController.resume));
 subscriptionRouter.post("/change-plan", billingWriteLimiter(), validate({ body: changePlanSchema }), asyncHandler(subscriptionController.changePlan));

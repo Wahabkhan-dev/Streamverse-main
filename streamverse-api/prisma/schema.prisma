@@ -110,6 +110,7 @@ model User {
 
   @@index([role])
   @@index([status])
+  @@index([createdAt])
 }
 
 /// One row per issued refresh token. Rotation revokes the row used and inserts a new one; a revoked row is
@@ -195,6 +196,8 @@ enum TerritoryMode {
 }
 
 enum MediaAssetType {
+  /// An image uploaded to the Media Library without a fixed role; usable in any artwork slot (size-checked on attach).
+  LIBRARY_IMAGE
   MOVIE_MASTER
   POSTER
   BACKDROP
@@ -248,6 +251,13 @@ enum CollectionStatus {
   PUBLISHED
   UNPUBLISHED
   ARCHIVED
+}
+
+/// Which sub-page a HERO banner leads. The homepage hero is NOT a banner: it is managed in the Homepage settings.
+enum BannerPlacement {
+  MOVIES
+  EBOOKS
+  AUDIOBOOKS
 }
 
 enum BannerType {
@@ -350,6 +360,7 @@ model Content {
   @@index([publishedAt])
   @@index([releaseDate])
   @@index([deletedAt])
+  @@index([createdAt])
 }
 
 /// Movie-only metadata. One-to-one with Content; cascades with it (meaningless on its own).
@@ -366,17 +377,17 @@ model Movie {
 
   /// Phase 4: the named asset slots Admin attaches an existing MediaAsset id to (Section 56); publish
   /// readiness checks these specific fields, not just "any asset of this type exists somewhere".
-  posterAssetId    String?     @unique
+  posterAssetId    String?
   posterAsset      MediaAsset? @relation("MoviePoster", fields: [posterAssetId], references: [id], onDelete: SetNull)
-  backdropAssetId  String?     @unique
+  backdropAssetId  String?
   backdropAsset    MediaAsset? @relation("MovieBackdrop", fields: [backdropAssetId], references: [id], onDelete: SetNull)
-  thumbnailAssetId String?     @unique
+  thumbnailAssetId String?
   thumbnailAsset   MediaAsset? @relation("MovieThumbnail", fields: [thumbnailAssetId], references: [id], onDelete: SetNull)
-  masterAssetId    String?     @unique
+  masterAssetId    String?
   masterAsset      MediaAsset? @relation("MovieMaster", fields: [masterAssetId], references: [id], onDelete: SetNull)
-  trailerAssetId   String?     @unique
+  trailerAssetId   String?
   trailerAsset     MediaAsset? @relation("MovieTrailer", fields: [trailerAssetId], references: [id], onDelete: SetNull)
-  teaserAssetId    String?     @unique
+  teaserAssetId    String?
   teaserAsset      MediaAsset? @relation("MovieTeaser", fields: [teaserAssetId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
@@ -387,6 +398,13 @@ model Movie {
   cast        MovieCast[]
   crew        MovieCrew[]
   progress    MovieProgress[]
+
+  @@index([posterAssetId])
+  @@index([backdropAssetId])
+  @@index([thumbnailAssetId])
+  @@index([masterAssetId])
+  @@index([trailerAssetId])
+  @@index([teaserAssetId])
 }
 
 model MovieCaption {
@@ -396,7 +414,7 @@ model MovieCaption {
   languageId   String
   language     Language        @relation(fields: [languageId], references: [id], onDelete: Restrict)
   type         CaptionType
-  mediaAssetId String?         @unique
+  mediaAssetId String?
   mediaAsset   MediaAsset?     @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
   status       AssetLinkStatus @default(PENDING)
   createdAt    DateTime        @default(now())
@@ -404,6 +422,7 @@ model MovieCaption {
 
   @@unique([movieId, languageId, type])
   @@index([movieId])
+  @@index([mediaAssetId])
 }
 
 model MovieAudioTrack {
@@ -412,7 +431,7 @@ model MovieAudioTrack {
   movie        Movie           @relation(fields: [movieId], references: [contentId], onDelete: Cascade)
   languageId   String
   language     Language        @relation(fields: [languageId], references: [id], onDelete: Restrict)
-  mediaAssetId String?         @unique
+  mediaAssetId String?
   mediaAsset   MediaAsset?     @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
   status       AssetLinkStatus @default(PENDING)
   createdAt    DateTime        @default(now())
@@ -420,6 +439,7 @@ model MovieAudioTrack {
 
   @@unique([movieId, languageId])
   @@index([movieId])
+  @@index([mediaAssetId])
 }
 
 model MovieCast {
@@ -428,13 +448,14 @@ model MovieCast {
   movie         Movie       @relation(fields: [movieId], references: [contentId], onDelete: Cascade)
   name          String
   characterName String?
-  imageAssetId  String?     @unique
+  imageAssetId  String?
   imageAsset    MediaAsset? @relation(fields: [imageAssetId], references: [id], onDelete: SetNull)
   displayOrder  Int         @default(0)
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
   @@index([movieId])
+  @@index([imageAssetId])
 }
 
 model MovieCrew {
@@ -471,21 +492,23 @@ model Ebook {
   rightsNotes     String?
 
   /// Phase 4: the primary-language file set lives here; EbookEdition is for additional languages only.
-  epubAssetId       String?     @unique
+  epubAssetId       String?
   epubAsset         MediaAsset? @relation("EbookEpub", fields: [epubAssetId], references: [id], onDelete: SetNull)
-  pdfAssetId        String?     @unique
+  /// Offer a page-turn (flipbook) version of the book, built from its PDF.
+  flipbookEnabled   Boolean     @default(false)
+  pdfAssetId        String?
   pdfAsset          MediaAsset? @relation("EbookPdf", fields: [pdfAssetId], references: [id], onDelete: SetNull)
-  sampleAssetId     String?     @unique
+  sampleAssetId     String?
   sampleAsset       MediaAsset? @relation("EbookSample", fields: [sampleAssetId], references: [id], onDelete: SetNull)
-  frontCoverAssetId String?     @unique
+  frontCoverAssetId String?
   frontCoverAsset   MediaAsset? @relation("EbookFrontCover", fields: [frontCoverAssetId], references: [id], onDelete: SetNull)
-  backCoverAssetId  String?     @unique
+  backCoverAssetId  String?
   backCoverAsset    MediaAsset? @relation("EbookBackCover", fields: [backCoverAssetId], references: [id], onDelete: SetNull)
-  spineAssetId      String?     @unique
+  spineAssetId      String?
   spineAsset        MediaAsset? @relation("EbookSpine", fields: [spineAssetId], references: [id], onDelete: SetNull)
-  fullWrapAssetId   String?     @unique
+  fullWrapAssetId   String?
   fullWrapAsset     MediaAsset? @relation("EbookFullWrap", fields: [fullWrapAssetId], references: [id], onDelete: SetNull)
-  thumbnailAssetId  String?     @unique
+  thumbnailAssetId  String?
   thumbnailAsset    MediaAsset? @relation("EbookThumbnail", fields: [thumbnailAssetId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
@@ -494,6 +517,15 @@ model Ebook {
   editions  EbookEdition[]
   progress  EbookProgress[]
   bookmarks EbookBookmark[]
+
+  @@index([frontCoverAssetId])
+  @@index([backCoverAssetId])
+  @@index([spineAssetId])
+  @@index([fullWrapAssetId])
+  @@index([thumbnailAssetId])
+  @@index([epubAssetId])
+  @@index([pdfAssetId])
+  @@index([sampleAssetId])
 }
 
 model EbookEdition {
@@ -504,17 +536,20 @@ model EbookEdition {
   language        Language    @relation(fields: [languageId], references: [id], onDelete: Restrict)
   translatedTitle String
   translator      String?
-  epubAssetId     String?     @unique
+  epubAssetId     String?
   epubAsset       MediaAsset? @relation("EbookEditionEpub", fields: [epubAssetId], references: [id], onDelete: SetNull)
-  pdfAssetId      String?     @unique
+  pdfAssetId      String?
   pdfAsset        MediaAsset? @relation("EbookEditionPdf", fields: [pdfAssetId], references: [id], onDelete: SetNull)
-  coverAssetId    String?     @unique
+  coverAssetId    String?
   coverAsset      MediaAsset? @relation("EbookEditionCover", fields: [coverAssetId], references: [id], onDelete: SetNull)
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
   @@unique([ebookId, languageId])
   @@index([ebookId])
+  @@index([coverAssetId])
+  @@index([epubAssetId])
+  @@index([pdfAssetId])
 }
 
 /// Audiobook-only metadata. `durationSeconds` stays null until real media exists - never a guessed value.
@@ -536,13 +571,13 @@ model Audiobook {
   rightsNotes     String?
 
   /// Phase 4: used when deliveryMode = SINGLE_FILE (mainAsset); chapter audio lives on AudiobookChapter instead.
-  mainAssetId      String?     @unique
+  mainAssetId      String?
   mainAsset        MediaAsset? @relation("AudiobookMain", fields: [mainAssetId], references: [id], onDelete: SetNull)
-  previewAssetId   String?     @unique
+  previewAssetId   String?
   previewAsset     MediaAsset? @relation("AudiobookPreview", fields: [previewAssetId], references: [id], onDelete: SetNull)
-  coverAssetId     String?     @unique
+  coverAssetId     String?
   coverAsset       MediaAsset? @relation("AudiobookCover", fields: [coverAssetId], references: [id], onDelete: SetNull)
-  thumbnailAssetId String?     @unique
+  thumbnailAssetId String?
   thumbnailAsset   MediaAsset? @relation("AudiobookThumbnail", fields: [thumbnailAssetId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
@@ -551,6 +586,11 @@ model Audiobook {
   editions AudiobookEdition[]
   chapters AudiobookChapter[]
   progress AudiobookProgress[]
+
+  @@index([coverAssetId])
+  @@index([thumbnailAssetId])
+  @@index([mainAssetId])
+  @@index([previewAssetId])
 }
 
 model AudiobookEdition {
@@ -561,9 +601,9 @@ model AudiobookEdition {
   language             Language    @relation(fields: [languageId], references: [id], onDelete: Restrict)
   narrator             String
   narratorBio          String?
-  narratorImageAssetId String?     @unique
+  narratorImageAssetId String?
   narratorImageAsset   MediaAsset? @relation("AudiobookEditionNarratorImage", fields: [narratorImageAssetId], references: [id], onDelete: SetNull)
-  audioAssetId         String?     @unique
+  audioAssetId         String?
   audioAsset           MediaAsset? @relation("AudiobookEditionAudio", fields: [audioAssetId], references: [id], onDelete: SetNull)
   durationSeconds      Int?
   createdAt            DateTime    @default(now())
@@ -571,6 +611,8 @@ model AudiobookEdition {
 
   @@unique([audiobookId, languageId])
   @@index([audiobookId])
+  @@index([narratorImageAssetId])
+  @@index([audioAssetId])
 }
 
 model AudiobookChapter {
@@ -579,7 +621,7 @@ model AudiobookChapter {
   audiobook        Audiobook   @relation(fields: [audiobookId], references: [contentId], onDelete: Cascade)
   chapterNumber    Int
   title            String
-  audioAssetId     String?     @unique
+  audioAssetId     String?
   audioAsset       MediaAsset? @relation(fields: [audioAssetId], references: [id], onDelete: SetNull)
   durationSeconds  Int?
   startTimeSeconds Int?
@@ -592,6 +634,7 @@ model AudiobookChapter {
 
   @@unique([audiobookId, chapterNumber])
   @@index([audiobookId])
+  @@index([audioAssetId])
 }
 
 /// One row per spoken/written language, referenced by id everywhere - never a free-text "English, Spanish".
@@ -724,6 +767,14 @@ model MediaAsset {
   status           MediaAssetStatus @default(PENDING)
   processingError  String?          @db.Text
 
+  /// Media Library metadata (all optional; editable by Admin — never the object key / MIME / size).
+  displayTitle String?
+  altText      String?
+  caption      String?
+  notes        String? @db.Text
+  /// Logical grouping only ("Marketing", "Homepage", ...) — the R2 object key stays the canonical path.
+  folder       String?
+
   /// Phase 6: who created this upload (Section 6/75) — nullable so the row survives if the account is removed.
   createdById String?
   createdBy   User?   @relation("MediaAssetCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
@@ -764,45 +815,47 @@ model MediaAsset {
 
   multipartUpload MultipartUpload?
 
-  movieCaptionFor           MovieCaption?     @relation
-  movieAudioTrackFor        MovieAudioTrack?  @relation
-  movieCastImageFor         MovieCast?        @relation
-  ebookEpubFor              EbookEdition?     @relation("EbookEditionEpub")
-  ebookPdfFor               EbookEdition?     @relation("EbookEditionPdf")
-  ebookCoverFor             EbookEdition?     @relation("EbookEditionCover")
-  audiobookNarratorImageFor AudiobookEdition? @relation("AudiobookEditionNarratorImage")
-  audiobookAudioFor         AudiobookEdition? @relation("AudiobookEditionAudio")
-  audiobookChapterFor       AudiobookChapter? @relation
-  collectionBannerFor       Collection?       @relation
-  bannerDesktopFor          Banner?           @relation("BannerDesktop")
-  bannerMobileFor           Banner?           @relation("BannerMobile")
+  movieCaptionFor           MovieCaption[]     @relation
+  movieAudioTrackFor        MovieAudioTrack[]  @relation
+  movieCastImageFor         MovieCast[]        @relation
+  ebookEpubFor              EbookEdition[]     @relation("EbookEditionEpub")
+  ebookPdfFor               EbookEdition[]     @relation("EbookEditionPdf")
+  ebookCoverFor             EbookEdition[]     @relation("EbookEditionCover")
+  audiobookNarratorImageFor AudiobookEdition[] @relation("AudiobookEditionNarratorImage")
+  audiobookAudioFor         AudiobookEdition[] @relation("AudiobookEditionAudio")
+  audiobookChapterFor       AudiobookChapter[] @relation
+  collectionBannerFor       Collection[]       @relation
+  bannerDesktopFor          Banner[]           @relation("BannerDesktop")
+  bannerMobileFor           Banner[]           @relation("BannerMobile")
 
-  moviePosterFor    Movie? @relation("MoviePoster")
-  movieBackdropFor  Movie? @relation("MovieBackdrop")
-  movieThumbnailFor Movie? @relation("MovieThumbnail")
-  movieMasterFor    Movie? @relation("MovieMaster")
-  movieTrailerFor   Movie? @relation("MovieTrailer")
-  movieTeaserFor    Movie? @relation("MovieTeaser")
+  moviePosterFor    Movie[] @relation("MoviePoster")
+  movieBackdropFor  Movie[] @relation("MovieBackdrop")
+  movieThumbnailFor Movie[] @relation("MovieThumbnail")
+  movieMasterFor    Movie[] @relation("MovieMaster")
+  movieTrailerFor   Movie[] @relation("MovieTrailer")
+  movieTeaserFor    Movie[] @relation("MovieTeaser")
 
-  ebookPrimaryEpubFor Ebook? @relation("EbookEpub")
-  ebookPrimaryPdfFor  Ebook? @relation("EbookPdf")
-  ebookSampleFor      Ebook? @relation("EbookSample")
-  ebookFrontCoverFor  Ebook? @relation("EbookFrontCover")
-  ebookBackCoverFor   Ebook? @relation("EbookBackCover")
-  ebookSpineFor       Ebook? @relation("EbookSpine")
-  ebookFullWrapFor    Ebook? @relation("EbookFullWrap")
-  ebookThumbnailFor   Ebook? @relation("EbookThumbnail")
+  ebookPrimaryEpubFor Ebook[] @relation("EbookEpub")
+  ebookPrimaryPdfFor  Ebook[] @relation("EbookPdf")
+  ebookSampleFor      Ebook[] @relation("EbookSample")
+  ebookFrontCoverFor  Ebook[] @relation("EbookFrontCover")
+  ebookBackCoverFor   Ebook[] @relation("EbookBackCover")
+  ebookSpineFor       Ebook[] @relation("EbookSpine")
+  ebookFullWrapFor    Ebook[] @relation("EbookFullWrap")
+  ebookThumbnailFor   Ebook[] @relation("EbookThumbnail")
 
-  audiobookMainFor      Audiobook? @relation("AudiobookMain")
-  audiobookPreviewFor   Audiobook? @relation("AudiobookPreview")
-  audiobookCoverFor     Audiobook? @relation("AudiobookCover")
-  audiobookThumbnailFor Audiobook? @relation("AudiobookThumbnail")
+  audiobookMainFor      Audiobook[] @relation("AudiobookMain")
+  audiobookPreviewFor   Audiobook[] @relation("AudiobookPreview")
+  audiobookCoverFor     Audiobook[] @relation("AudiobookCover")
+  audiobookThumbnailFor Audiobook[] @relation("AudiobookThumbnail")
 
   @@index([contentId])
   @@index([type])
   @@index([status])
   @@index([sourceAssetId])
   @@index([expiresAt])
+  @@index([createdAt])
+  @@index([folder])
 }
 
 /// Phase 6 (Section 47/48/49): tracks one in-progress S3-compatible multipart upload per MediaAsset.
@@ -813,7 +866,8 @@ model MultipartUpload {
   id               String     @id @default(cuid())
   assetId          String     @unique
   asset            MediaAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  providerUploadId String
+  /// R2/S3 multipart upload ids are long (well over 191 characters): TEXT, not VARCHAR(191)
+  providerUploadId String     @db.Text
   parts            Json?
   expiresAt        DateTime
   createdAt        DateTime   @default(now())
@@ -888,18 +942,32 @@ model AppSetting {
  */
 
 model HomepageSection {
-  id           String   @id @default(cuid())
+  id           String       @id @default(cuid())
   /// Never changes; only displayTitle does. Renaming the section can't break anything that points at it.
-  key          String   @unique
+  key          String       @unique
   displayTitle String
-  enabled      Boolean  @default(true)
-  displayOrder Int      @default(0)
-  itemLimit    Int      @default(12)
+  enabled      Boolean      @default(true)
+  displayOrder Int          @default(0)
+  itemLimit    Int          @default(12)
   type         String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  /// Which catalog a DYNAMIC section (type != MANUAL) resolves against — e.g. "Featured eBooks" must only
+  /// ever pull EBOOK rows, never a movie that happens to share the `featured` flag. Null for MANUAL
+  /// sections, which mix content types by the admin's own item picks instead.
+  contentType  ContentType?
+  /// BANNER sections show one banner picked from the Banner library; where it sits is just this row's displayOrder.
+  bannerId     String?
+  banner       Banner?      @relation(fields: [bannerId], references: [id], onDelete: SetNull)
+  /// COLLECTION sections show one collection's titles.
+  collectionId String?
+  collection   Collection?  @relation(fields: [collectionId], references: [id], onDelete: SetNull)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
   items HomepageSectionItem[]
+
+  @@index([displayOrder])
+  @@index([bannerId])
+  @@index([collectionId])
 }
 
 model HomepageSectionItem {
@@ -919,16 +987,18 @@ model Collection {
   name          String
   slug          String           @unique
   description   String?
-  bannerAssetId String?          @unique
+  bannerAssetId String?
   bannerAsset   MediaAsset?      @relation(fields: [bannerAssetId], references: [id], onDelete: SetNull)
   status        CollectionStatus @default(DRAFT)
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 
-  items CollectionItem[]
+  items            CollectionItem[]
+  homepageSections HomepageSection[]
 
   @@index([slug])
   @@index([status])
+  @@index([bannerAssetId])
 }
 
 model CollectionItem {
@@ -944,26 +1014,38 @@ model CollectionItem {
 }
 
 model Banner {
-  id              String      @id @default(cuid())
-  type            BannerType
-  title           String
-  description     String?
-  desktopAssetId  String?     @unique
-  desktopAsset    MediaAsset? @relation("BannerDesktop", fields: [desktopAssetId], references: [id], onDelete: SetNull)
-  mobileAssetId   String?     @unique
-  mobileAsset     MediaAsset? @relation("BannerMobile", fields: [mobileAssetId], references: [id], onDelete: SetNull)
-  linkedContentId String?
-  linkedContent   Content?    @relation(fields: [linkedContentId], references: [id], onDelete: SetNull)
-  buttonText      String?
-  priority        Int         @default(1)
-  startsAt        DateTime?
-  endsAt          DateTime?
-  active          Boolean     @default(true)
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  id                 String           @id @default(cuid())
+  type               BannerType
+  title              String
+  description        String?
+  /// Only meaningful for HERO banners.
+  placement          BannerPlacement?
+  /// Button opens the Subscription (plans) page instead of a title.
+  linkToSubscription Boolean          @default(false)
+  /// The banner itself decides to appear on the customer homepage (never for HERO banners, which lead sub-pages).
+  showOnHomepage     Boolean          @default(false)
+  /// NULL = bottom of the page, "top" = above every section, otherwise the key of the homepage section it follows.
+  homepageAfter      String?          @db.VarChar(100)
+  desktopAssetId     String?
+  desktopAsset       MediaAsset?      @relation("BannerDesktop", fields: [desktopAssetId], references: [id], onDelete: SetNull)
+  mobileAssetId      String?
+  mobileAsset        MediaAsset?      @relation("BannerMobile", fields: [mobileAssetId], references: [id], onDelete: SetNull)
+  linkedContentId    String?
+  linkedContent      Content?         @relation(fields: [linkedContentId], references: [id], onDelete: SetNull)
+  buttonText         String?
+  priority           Int              @default(1)
+  startsAt           DateTime?
+  endsAt             DateTime?
+  active             Boolean          @default(true)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  homepageSections HomepageSection[]
 
   @@index([linkedContentId])
   @@index([active])
+  @@index([desktopAssetId])
+  @@index([mobileAssetId])
 }
 
 /**
@@ -1280,6 +1362,7 @@ model Payment {
 
   @@index([userId])
   @@index([status])
+  @@index([paidAt])
 }
 
 /// One row per Stripe refund (full or partial) against a Payment (Section 57). Admin-initiated only.

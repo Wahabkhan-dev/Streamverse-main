@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import type { EmailProvider, PasswordResetPayload, WelcomePayload, BillingNotificationPayload } from "./types";
+import { logger } from "../../config/logger";
 
 function safeToken(token: string): string {
   return token.length > 8 ? `${token.slice(0, 4)}…${token.slice(-4)}` : "[token]";
@@ -25,10 +26,10 @@ export function createResendProvider(apiKey: string, fromAddress: string): Email
         ].join("\n"),
       });
       if (error) {
-        console.error(`[email:resend] password-reset failed to=${to} token=${safeToken(resetToken)} error=${error.message}`);
+        logger.error(`[email:resend] password-reset failed to=${to} token=${safeToken(resetToken)} error=${error.message}`);
         throw new Error(`Email delivery failed: ${error.message}`);
       }
-      console.log(`[email:resend] password-reset sent to=${to} token=${safeToken(resetToken)}`);
+      logger.info(`[email:resend] password-reset sent to=${to} token=${safeToken(resetToken)}`);
     },
 
     async sendWelcome({ to, name }: WelcomePayload) {
@@ -39,10 +40,10 @@ export function createResendProvider(apiKey: string, fromAddress: string): Email
         html: `<h2>Welcome, ${name}!</h2><p>Your account is ready. Start watching movies, reading eBooks, and more.</p>`,
       });
       if (error) {
-        console.error(`[email:resend] welcome failed to=${to} name=${name} error=${error.message}`);
+        logger.error(`[email:resend] welcome failed to=${to} name=${name} error=${error.message}`);
         // Non-fatal: welcome email failure should not block registration
       } else {
-        console.log(`[email:resend] welcome sent to=${to}`);
+        logger.info(`[email:resend] welcome sent to=${to}`);
       }
     },
 
@@ -54,10 +55,10 @@ export function createResendProvider(apiKey: string, fromAddress: string): Email
         html: body,
       });
       if (error) {
-        console.error(`[email:resend] billing-notification failed to=${to} subject="${subject}" error=${error.message}`);
+        logger.error(`[email:resend] billing-notification failed to=${to} subject="${subject}" error=${error.message}`);
         // Non-fatal
       } else {
-        console.log(`[email:resend] billing-notification sent to=${to}`);
+        logger.info(`[email:resend] billing-notification sent to=${to}`);
       }
     },
   };

@@ -6,6 +6,7 @@ import * as languageRepository from "../repositories/language.repository";
 import * as mediaAssetRepository from "../repositories/mediaAsset.repository";
 import { captionValidationSummary, imageValidationSummary, pdfOrEpubValidationSummary } from "./media/uploadValidation.service";
 import { buildStorageKey, sanitizeFileName } from "./media/storageKey.service";
+import { processingProgressOf } from "./media/processingProgress";
 import { getStorageProvider } from "./storage";
 import { QUEUE_NAMES, getQueueProvider } from "./queue";
 import type { AuditContext } from "./auditLog.service";
@@ -21,7 +22,8 @@ export async function presignUpload(input: PresignUploadInput, ctx: AuditContext
   const purpose = input.purpose as UploadPurpose;
   const rule = PURPOSE_RULES[purpose];
 
-  if (rule.requiresContentId && !input.contentId) throw new ValidationError([{ path: "contentId", message: "contentId is required for this upload purpose." }]);
+  const library = input.library === true && !input.contentId;
+  if (rule.requiresContentId && !input.contentId && !library) throw new ValidationError([{ path: "contentId", message: "contentId is required for this upload purpose." }]);
   let content: Awaited<ReturnType<typeof contentRepository.findActiveById>> = null;
   if (input.contentId) {
     content = await contentRepository.findActiveById(input.contentId);
@@ -29,11 +31,11 @@ export async function presignUpload(input: PresignUploadInput, ctx: AuditContext
     if (!isPurposeAllowedForContentType(purpose, content.type)) throw new ValidationError([{ path: "purpose", message: `"${purpose}" is not a valid upload purpose for ${content.type} content.` }]);
   }
 
-  if (rule.requiresLanguageId) {
+  if (rule.requiresLanguageId && !library) {
     if (!input.languageId) throw new ValidationError([{ path: "languageId", message: "languageId is required for this upload purpose." }]);
     if (!(await languageRepository.findById(input.languageId))) throw new ValidationError([{ path: "languageId", message: "Language not found." }]);
   }
-  if (rule.requiresChapterId) {
+  if (rule.requiresChapterId && !library) {
     if (!input.chapterId) throw new ValidationError([{ path: "chapterId", message: "chapterId is required for this upload purpose." }]);
     const chapter = await audiobookRepository.findChapter(input.chapterId);
     if (!chapter || chapter.audiobookId !== input.contentId) throw new ValidationError([{ path: "chapterId", message: "This chapter does not belong to the given audiobook." }]);
@@ -42,7 +44,7 @@ export async function presignUpload(input: PresignUploadInput, ctx: AuditContext
   if (!ALLOWED_MIME_TYPES[rule.kind].includes(input.mimeType)) throw new ValidationError([{ path: "mimeType", message: `"${input.mimeType}" is not an allowed MIME type for ${rule.kind.toLowerCase()} uploads.` }]);
   if (input.sizeBytes > SIZE_LIMITS_BYTES[rule.kind]) throw new ValidationError([{ path: "sizeBytes", message: `File exceeds the ${Math.round(SIZE_LIMITS_BYTES[rule.kind] / (1024 * 1024))}MB limit for ${rule.kind.toLowerCase()} uploads.` }]);
 
-  const storageKey = buildStorageKey(purpose, input.mimeType, input.contentId);
+  const storageKey = buildStorageKey(purpose, input.mimeType, input.contentId, library);
   const expiresAt = new Date(Date.now() + env.UPLOAD_URL_TTL_SECONDS * 1000);
 
   const asset = await mediaAssetRepository.create({
@@ -169,6 +171,7 @@ function toStatusView(asset: NonNullable<Awaited<ReturnType<typeof mediaAssetRep
     durationSeconds: asset.durationSeconds,
     resolution: asset.resolution,
     processingError: asset.status === "FAILED" ? asset.processingError : null,
+    progress: processingProgressOf(asset),
     createdAt: asset.createdAt,
     updatedAt: asset.updatedAt,
   };

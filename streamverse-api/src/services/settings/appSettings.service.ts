@@ -3,7 +3,7 @@
  * Wraps the existing settings.service.ts with convenience methods, public/private filtering,
  * and an in-memory cache with 30s TTL (invalidated on any update).
  */
-import { getSetting, listSettings, setSetting } from "../settings.service";
+import { assertKnownSetting, getSetting, listSettings, setSetting } from "../settings.service";
 import { PUBLIC_SETTING_KEYS, getSettingDefault } from "../../config/settings.registry";
 import type { AuditContext } from "../auditLog.service";
 import { ValidationError } from "../../utils/errors";
@@ -40,13 +40,8 @@ export async function getAllSettings(): Promise<Record<string, unknown>> {
 }
 
 export async function updateSettings(entries: { key: string; value: unknown }[], ctx?: AuditContext): Promise<Record<string, unknown>> {
-  // Validate ALL entries before committing any
-  for (const { key, value } of entries) {
-    if (!SETTING_KEYS.includes(key as (typeof SETTING_KEYS)[number])) {
-      throw new ValidationError([{ path: "key", message: `Unknown setting key "${key}"` }]);
-    }
-    // type check is done by setSetting/assertKnownSetting
-  }
+  // Validate ALL entries (known key AND correct value type) before committing any.
+  for (const { key, value } of entries) assertKnownSetting(key, value);
   for (const { key, value } of entries) {
     await setSetting({ key, value }, ctx);
   }

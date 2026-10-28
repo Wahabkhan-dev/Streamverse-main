@@ -1,8 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Film, Play, ShieldAlert } from "lucide-react";
 import { useState } from "react";
-import { Gated } from "@/components/sv/Gate";
+import { Gated, PreviewBanner } from "@/components/sv/Gate";
 import { MediaRow, MovieCard, MovieMeta } from "@/components/sv/media";
+import { DownloadButton } from "@/components/sv/DownloadButton";
 import { MyListButton } from "@/components/sv/SaveButtons";
 import { ContentUnavailable, GeneralError } from "@/components/sv/states";
 import { EmptyState, TabBar, Tag } from "@/components/sv/ui";
@@ -10,7 +11,7 @@ import { useApiMovieQuery } from "@/hooks/useApiCatalog";
 import { DEMO_MODE } from "@/lib/config";
 import { findMovie, type Movie } from "@/lib/data";
 import { itemEntity, toItem, useCatalog } from "@/lib/items";
-import { apiMovieToLocal } from "@/lib/api-mappers";
+import { apiMovieToLocal, mixedCardToItem } from "@/lib/api-mappers";
 import { relatedTo } from "@/lib/related";
 import { useProgressOf } from "@/lib/user";
 
@@ -55,7 +56,19 @@ function MovieDetailPage() {
 
   if (!DEMO_MODE && !m) return <ContentUnavailable />;
 
-  return <Gated item={m ? toItem("Movie", m) : undefined}>{m && <MovieDetail m={m} />}</Gated>;
+  // live mode: the server's list of real titles (the local catalog only holds demo titles)
+  const related = DEMO_MODE
+    ? m
+      ? relatedTo(toItem("Movie", m), cat.listed, 12).map((i) => itemEntity(i) as Movie)
+      : []
+    : (apiQuery.data?.related ?? []).map((c) => itemEntity(mixedCardToItem(c)) as Movie);
+
+  return (
+    <>
+      <PreviewBanner status={apiQuery.data?.previewStatus} />
+      <Gated item={m ? toItem("Movie", m) : undefined}>{m && <MovieDetail m={m} related={related} />}</Gated>
+    </>
+  );
 }
 
 function Fact({ k, children }: { k: string; children: React.ReactNode }) {
@@ -67,19 +80,20 @@ function Fact({ k, children }: { k: string; children: React.ReactNode }) {
   );
 }
 
-function MovieDetail({ m }: { m: Movie }) {
+function MovieDetail({ m, related }: { m: Movie; related: Movie[] }) {
   const [tab, setTab] = useState<TabId>("overview");
-  const cat = useCatalog();
   const progress = useProgressOf({ type: "Movie", slug: m.slug });
-  const related = relatedTo(toItem("Movie", m), cat.listed, 12).map((i) => itemEntity(i) as Movie);
   const info = m.info ?? {};
   const warnings = m.restrictions?.warnings ?? [];
   const resuming = !!progress && !progress.completed && progress.pct > 0;
-  const trailers: { id: "official" | "teaser" | "bts"; label: string }[] = [
+  // live mode: only what the admin really added is offered (behind-the-scenes has no upload slot, so it is demo-only)
+  const allTrailers: { id: "official" | "teaser" | "bts"; label: string }[] = [
     { id: "official", label: "Official Trailer" },
     { id: "teaser", label: "Teaser" },
     { id: "bts", label: "Behind the Scenes" },
   ];
+  const trailers = DEMO_MODE ? allTrailers : allTrailers.filter((t) => (t.id === "official" ? m.hasTrailer : t.id === "teaser" ? m.hasTeaser : false));
+  const tabs = DEMO_MODE || trailers.length > 0 ? [...TABS] : TABS.filter((x) => x.id !== "trailers");
 
   return (
     <>
@@ -104,22 +118,25 @@ function MovieDetail({ m }: { m: Movie }) {
               <Link to="/watch/$slug" params={{ slug: m.slug }} className="inline-flex h-12 items-center gap-2 rounded-md bg-primary px-6 text-sm font-bold tracking-wide text-primary-foreground uppercase shadow-red transition-colors hover:bg-primary-hover [&_svg]:size-4">
                 <Play className="fill-current" /> {resuming ? "Resume" : "Play"}
               </Link>
-              <MyListButton item={{ type: "Movie", slug: m.slug }} />
-              <Link
-                to="/watch/$slug"
-                params={{ slug: m.slug }}
-                search={{ trailer: "official" }}
-                className="inline-flex h-12 items-center gap-2 rounded-md border border-border bg-foreground/15 px-6 text-sm font-bold tracking-wide uppercase backdrop-blur transition-colors hover:bg-foreground/25 [&_svg]:size-4"
-              >
-                <Film /> Trailer
-              </Link>
+              <MyListButton item={{ type: "Movie", slug: m.slug, ...(m.cid ? { id: m.cid } : {}) }} />
+              <DownloadButton item={{ type: "Movie", slug: m.slug, ...(m.cid ? { id: m.cid } : {}) }} />
+              {(DEMO_MODE || m.hasTrailer) && (
+                <Link
+                  to="/watch/$slug"
+                  params={{ slug: m.slug }}
+                  search={{ trailer: "official" }}
+                  className="inline-flex h-12 items-center gap-2 rounded-md border border-border bg-foreground/15 px-6 text-sm font-bold tracking-wide uppercase backdrop-blur transition-colors hover:bg-foreground/25 [&_svg]:size-4"
+                >
+                  <Film /> Trailer
+                </Link>
+              )}
             </div>
           </div>
         </div>
       </section>
 
       <div className="mx-auto max-w-[1600px] px-4 md:px-8">
-        <TabBar tabs={[...TABS]} value={tab} onChange={setTab} label="Movie sections" />
+        <TabBar tabs={tabs} value={tab} onChange={setTab} label="Movie sections" />
         <div className="py-8">
           {tab === "overview" && (
             <div className="grid gap-10 lg:grid-cols-[1.4fr_1fr]">

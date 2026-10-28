@@ -2,7 +2,7 @@ import { z } from "zod";
 import { listQuery } from "../utils/pagination";
 
 /** Section 17: planId only — amount/currency/price are NEVER accepted from the frontend. */
-export const checkoutSchema = z.object({ planId: z.string().min(1) });
+export const checkoutSchema = z.object({ planId: z.string().min(1), /** the checkout runs in a popup window: Stripe returns there and the page closes itself */ popup: z.boolean().optional() });
 export const changePlanSchema = z.object({ planId: z.string().min(1) });
 
 /** Section 55: amount is optional (full refund) and, when present, validated against the remaining refundable amount server-side — never trusted blindly. */

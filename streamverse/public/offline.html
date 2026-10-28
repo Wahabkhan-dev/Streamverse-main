@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#070707" />
+    <title>Can't reach StreamVerse</title>
+    <style>
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #070707; color: #f4f4f5; font-family: system-ui, sans-serif; text-align: center; padding: 24px; }
+      img { width: 72px; height: 72px; border-radius: 16px; }
+      h1 { margin: 20px 0 8px; font-size: 24px; }
+      p { margin: 0 auto 24px; color: #a1a1aa; max-width: 380px; line-height: 1.5; }
+      button { background: #e50914; color: #fff; border: 0; border-radius: 8px; padding: 12px 24px; font-size: 15px; font-weight: 700; cursor: pointer; }
+      small { display: block; margin-top: 20px; color: #71717a; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="/icons/icon-192.png" alt="" />
+      <h1 id="title">You're offline</h1>
+      <p id="message">StreamVerse needs a connection to load movies, eBooks and audiobooks. Check your internet and try again.</p>
+      <button onclick="location.reload()">Try again</button>
+      <small id="status" aria-live="polite"></small>
+    </main>
+    <script>
+      // no internet at all, or the internet works but StreamVerse itself cannot be reached (server down, blocked network)
+      function describe() {
+        var online = navigator.onLine;
+        document.getElementById("title").textContent = online ? "We can't reach StreamVerse" : "You're offline";
+        document.getElementById("message").textContent = online
+          ? "Your connection is working, but StreamVerse isn't answering right now. It may be down for a moment, or blocked on this network. Please try again shortly."
+          : "StreamVerse needs a connection to load movies, eBooks and audiobooks. Check your internet and try again.";
+      }
+      describe();
+      // when the connection comes back, try the site again by itself
+      window.addEventListener("online", function () {
+        describe();
+        document.getElementById("status").textContent = "Back online. Reconnecting…";
+        setTimeout(function () { location.reload(); }, 800);
+      });
+      window.addEventListener("offline", describe);
+    </script>
+  </body>
+</html>

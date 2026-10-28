@@ -33,3 +33,13 @@ export const revokeAllForUser = (userId: string): Promise<{ count: number }> => 
  */
 export const deleteExpiredAndRevoked = (expiredBefore: Date, revokedBefore: Date): Promise<{ count: number }> =>
   prisma.authSession.deleteMany({ where: { OR: [{ expiresAt: { lt: expiredBefore } }, { revokedAt: { lt: revokedBefore } }] } });
+
+/**
+ * Atomically claims a still-active session for rotation: the conditional update succeeds for exactly one
+ * of any number of concurrent callers. Returns false if someone else already revoked/rotated it.
+ */
+export const claimForRotation = async (id: string): Promise<boolean> => {
+  const now = new Date();
+  const { count } = await prisma.authSession.updateMany({ where: { id, revokedAt: null }, data: { lastUsedAt: now, revokedAt: now } });
+  return count === 1;
+};

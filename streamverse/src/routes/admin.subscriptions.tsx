@@ -146,7 +146,7 @@ function Subscriptions() {
             <Toggle checked={draft.active} onChange={(v) => setDraft({ ...draft, active: v })} label="Plan active" />
             <div className="flex justify-end gap-2">
               <Btn onClick={() => setEdit(null)}>Cancel</Btn>
-              <Btn variant="primary" onClick={save}>Save plan</Btn>
+              <Btn variant="primary" disabled={apiMutation.create.isPending || apiMutation.update.isPending} onClick={save}>Save plan</Btn>
             </div>
           </div>
         </DialogContent>

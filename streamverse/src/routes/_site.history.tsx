@@ -9,8 +9,9 @@ import { detailTarget, playTarget } from "@/lib/links";
 import { refKey, removeFromHistory, updateUser, useHistory, useProgressMap } from "@/lib/user";
 import { DEMO_MODE } from "@/lib/config";
 import { useApiHistoryQuery, useDeleteHistoryMutation, useClearHistoryMutation } from "@/hooks/useApiMe";
-import type { ApiHistoryEntry, ApiMovie, ApiBook } from "@/api/types";
+import type { ApiMixedCard } from "@/api/types";
 import type { Movie, Book, Status } from "@/lib/data";
+import { mixedCardToItem } from "@/lib/api-mappers";
 
 type Tab = "all" | "watched" | "read" | "listened";
 const typeOf = { watched: "Movie", read: "eBook", listened: "Audiobook" } as const;
@@ -22,43 +23,8 @@ export const Route = createFileRoute("/_site/history")({
   component: HistoryPage,
 });
 
-function apiMovieToItem(m: ApiMovie): Item {
-  const mins = m.duration ?? 0;
-  const h = Math.floor(mins / 60);
-  const min = mins % 60;
-  const movie: Movie = {
-    slug: m.slug, title: m.title, year: m.year, genres: m.genres,
-    runtime: h > 0 ? `${h}h ${min}m` : `${min}m`,
-    rating: m.rating ?? "PG", badges: [], description: m.description,
-    image: m.image, status: (m.status ?? "Published") as Status,
-    views: m.views ?? 0, release: `${m.year}-01-01`,
-    cast: m.cast.map((c) => ({ name: c.name, role: c.role })), cid: m.id,
-  };
-  return toItem("Movie", movie);
-}
-
-function apiBookToItem(b: ApiBook, type: "eBook" | "Audiobook"): Item {
-  const book = {
-    slug: b.slug, title: b.title, author: b.author,
-    ...(b.narrator !== undefined ? { narrator: b.narrator } : {}),
-    genre: b.genres[0] ?? "Fiction", rating: 4.0, reviews: 0, pages: b.pages ?? 0,
-    year: b.year ?? new Date().getFullYear(), description: b.description,
-    palette: ["oklch(0.3 0.05 240)", "oklch(0.2 0.05 240)", "oklch(0.8 0.1 240)"] as [string, string, string],
-    motif: "sun" as const, status: (b.status ?? "Published") as Status,
-    isbn: "", count: 0,
-    ...(b.image ? { cover: b.image } : {}),
-    cid: b.id,
-  } as Book;
-  return toItem(type, book);
-}
-
-function apiHistoryEntryToRow(entry: ApiHistoryEntry): { id: string; contentId: string; item: Item; at: number } | null {
-  let item: Item | null = null;
-  if (entry.contentType === "movie" && entry.movie) item = apiMovieToItem(entry.movie);
-  else if (entry.contentType === "ebook" && entry.ebook) item = apiBookToItem(entry.ebook, "eBook");
-  else if (entry.contentType === "audiobook" && entry.audiobook) item = apiBookToItem(entry.audiobook, "Audiobook");
-  if (!item) return null;
-  return { id: entry.id, contentId: entry.contentId, item, at: new Date(entry.watchedAt).getTime() };
+function apiHistoryEntryToRow(entry: ApiMixedCard): { id: string; contentId: string; item: Item; at: number } {
+  return { id: entry.id, contentId: entry.id, item: mixedCardToItem(entry), at: entry.lastAccessedAt ? new Date(entry.lastAccessedAt).getTime() : 0 };
 }
 
 function Thumb({ item }: { item: Item }) {
@@ -89,7 +55,6 @@ function HistoryPage() {
     }
     return (apiHistoryQuery.data?.data ?? [])
       .map(apiHistoryEntryToRow)
-      .filter((r): r is NonNullable<typeof r> => r !== null)
       .map((r) => ({ ...r, p: progress[refKey(r.item)] }));
   }, [DEMO_MODE, demoHistory, cat, progress, apiHistoryQuery.data]);
 

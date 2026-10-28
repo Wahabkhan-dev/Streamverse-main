@@ -5,7 +5,8 @@ export const createSection = (data: Prisma.HomepageSectionUncheckedCreateInput) 
 export const updateSection = (id: string, data: Prisma.HomepageSectionUncheckedUpdateInput) => prisma.homepageSection.update({ where: { id }, data });
 export const findSectionById = (id: string) => prisma.homepageSection.findUnique({ where: { id } });
 export const findSectionByKey = (key: string) => prisma.homepageSection.findUnique({ where: { key } });
-export const listSections = () => prisma.homepageSection.findMany({ orderBy: { displayOrder: "asc" } });
+export const listSections = () =>
+  prisma.homepageSection.findMany({ orderBy: [{ displayOrder: "asc" }, { createdAt: "asc" }], include: { banner: { select: { id: true, title: true, type: true } }, collection: { select: { id: true, name: true, slug: true } } } });
 export const deleteSection = (id: string) => prisma.homepageSection.delete({ where: { id } });
 export const reorderSections = (items: { id: string; displayOrder: number }[]) => Promise.all(items.map((i) => prisma.homepageSection.update({ where: { id: i.id }, data: { displayOrder: i.displayOrder } })));
 

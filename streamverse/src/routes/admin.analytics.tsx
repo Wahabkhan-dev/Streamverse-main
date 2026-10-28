@@ -10,26 +10,21 @@ import { downloadCsv } from "@/lib/csv";
 import { fmt } from "@/lib/data";
 import { useAudiobooks, useEbooks, useGenres, useMovies, usePlans } from "@/lib/store";
 import { DEMO_MODE } from "@/lib/config";
-import { useAdminRevenueQuery, useAdminDashboardQuery } from "@/hooks/useAdminApi";
+import { LiveAnalytics } from "@/components/sv/LiveAnalytics";
 
-export const Route = createFileRoute("/admin/analytics")({ component: Analytics });
+export const Route = createFileRoute("/admin/analytics")({ component: () => (DEMO_MODE ? <DemoAnalytics /> : <LiveAnalytics />) });
 
 const TYPES: TypeId[] = ["All", "Movies", "eBooks", "Audiobooks"];
 const PERIODS: PeriodId[] = ["Daily", "Weekly", "Monthly"];
 
-function Analytics() {
+/** Demo mode only: sample data that reacts to the filters. */
+function DemoAnalytics() {
   const movies = useMovies();
   const ebooks = useEbooks();
   const audiobooks = useAudiobooks();
   const genres = useGenres();
   const totals = planTotals(usePlans());
 
-  // Real API hooks – data is used to override key metrics when !DEMO_MODE
-  const apiRevenue = useAdminRevenueQuery();
-  const apiDashboard = useAdminDashboardQuery();
-  const isLoading = !DEMO_MODE && (apiRevenue.isLoading || apiDashboard.isLoading);
-  const isError = !DEMO_MODE && (apiRevenue.isError || apiDashboard.isError);
-  void isLoading; void isError; // charts use demo series in both modes; metrics selectively use API below
   const [f, setF] = useState<AnalyticsFilters>(DEFAULT_FILTERS);
   const set = <K extends keyof AnalyticsFilters>(k: K, v: AnalyticsFilters[K]) => setF((x) => ({ ...x, [k]: v }));
   const days = RANGES.find((r) => r.id === f.range)!.days;
@@ -116,12 +111,12 @@ function Analytics() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-        <MetricCard icon={Users} label="Users" value={compact(!DEMO_MODE && apiDashboard.data?.data.newSignups != null ? apiDashboard.data.data.newSignups : lastOf(data.users, "Users"))} trend={trendOf(data.users, "Users")} />
-        <MetricCard icon={CreditCard} label="Subscriptions" value={compact(!DEMO_MODE && apiDashboard.data?.data.activeSubscriptions != null ? apiDashboard.data.data.activeSubscriptions : lastOf(data.subs, "Subscriptions"))} trend={trendOf(data.subs, "Subscriptions")} />
+        <MetricCard icon={Users} label="Users" value={compact(lastOf(data.users, "Users"))} trend={trendOf(data.users, "Users")} />
+        <MetricCard icon={CreditCard} label="Subscriptions" value={compact(lastOf(data.subs, "Subscriptions"))} trend={trendOf(data.subs, "Subscriptions")} />
         <MetricCard icon={Film} label="Movie views" value={compact(sumOf(data.movies, "Views"))} trend={trendOf(data.movies, "Views")} />
         <MetricCard icon={BookOpen} label="Book reads" value={compact(sumOf(data.books, "Reads"))} trend={trendOf(data.books, "Reads")} />
         <MetricCard icon={Headphones} label="Audiobook listens" value={compact(sumOf(data.audio, "Listens"))} trend={trendOf(data.audio, "Listens")} />
-        <MetricCard icon={TrendingUp} label="Revenue" value={usd(!DEMO_MODE && apiDashboard.data?.data.totalRevenue != null ? apiDashboard.data.data.totalRevenue : sumOf(data.revenue, "Revenue"))} trend={trendOf(data.revenue, "Revenue")} />
+        <MetricCard icon={TrendingUp} label="Revenue" value={usd(sumOf(data.revenue, "Revenue"))} trend={trendOf(data.revenue, "Revenue")} />
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-2">

@@ -37,6 +37,20 @@ describe("maintenance mode guard", () => {
     expect(res.status).toBe(200);
   });
 
+  it("an administrator can still SIGN IN during maintenance (otherwise they could never turn it off)", async () => {
+    const { accessToken } = await createAdmin(app, db as never);
+    await setSetting({ key: "maintenanceMode", value: true });
+
+    // signing in is never blocked...
+    const bad = await request(app).post("/api/v1/auth/login").send({ email: "nobody@example.com", password: "wrong-password-123" });
+    expect(bad.status).toBe(401); // refused for the credentials, not 503
+    expect((await request(app).get("/api/v1/settings/public")).status).toBe(200); // the site learns it should show its maintenance screen
+    expect((await request(app).get("/api/v1/auth/me").set("Authorization", `Bearer ${accessToken}`)).status).toBe(200);
+    // ...while everything else stays closed to customers
+    expect((await request(app).get("/api/v1/movies")).status).toBe(503);
+    expect((await request(app).post("/api/v1/auth/register").send({ email: "new@example.com", password: "Str0ng-Passw0rd!", fullName: "New" })).status).toBe(503);
+  });
+
   it("health endpoint is exempt from maintenance mode", async () => {
     await setSetting({ key: "maintenanceMode", value: true });
     const res = await request(app).get("/health");

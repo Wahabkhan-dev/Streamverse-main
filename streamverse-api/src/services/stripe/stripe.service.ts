@@ -23,7 +23,7 @@ export async function updateCustomerDefaultPaymentMethod(stripeCustomerId: strin
 }
 
 export async function createSetupIntent(stripeCustomerId: string, idempotencyKey: string): Promise<Stripe.SetupIntent> {
-  return getStripeClient().setupIntents.create({ customer: stripeCustomerId, usage: "off_session" }, { idempotencyKey });
+  return getStripeClient().setupIntents.create({ customer: stripeCustomerId, usage: "off_session", allowed_payment_method_types: ["card"] }, { idempotencyKey });
 }
 
 export async function listPaymentMethods(stripeCustomerId: string): Promise<Stripe.PaymentMethod[]> {
@@ -39,19 +39,46 @@ export async function detachPaymentMethod(paymentMethodId: string): Promise<Stri
   return getStripeClient().paymentMethods.detach(paymentMethodId);
 }
 
-export async function createCheckoutSession(params: { stripeCustomerId: string; priceId: string; userId: string; planId: string; idempotencyKey: string }): Promise<Stripe.Checkout.Session> {
+export async function createCheckoutSession(params: { stripeCustomerId: string; priceId: string; userId: string; planId: string; popup?: boolean; idempotencyKey: string }): Promise<Stripe.Checkout.Session> {
   return getStripeClient().checkout.sessions.create(
     {
       customer: params.stripeCustomerId,
       mode: "subscription",
       line_items: [{ price: params.priceId, quantity: 1 }],
-      success_url: `${stripeConfig.successUrl}?session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${stripeConfig.successUrl}?session_id={CHECKOUT_SESSION_ID}${params.popup ? "&popup=1" : ""}`,
       cancel_url: stripeConfig.cancelUrl,
       subscription_data: { metadata: { streamVerseUserId: params.userId, streamVersePlanId: params.planId } },
       metadata: { streamVerseUserId: params.userId, streamVersePlanId: params.planId },
     },
     { idempotencyKey: params.idempotencyKey },
   );
+}
+
+/**
+ * A subscription that starts "incomplete" and is paid from an embedded payment box (Stripe Elements) on our own page:
+ * the first invoice carries the client secret the browser confirms with Stripe.js. The card is saved as the default
+ * payment method once the payment succeeds.
+ */
+export async function createSubscriptionForEmbeddedPayment(params: { stripeCustomerId: string; priceId: string; userId: string; planId: string; idempotencyKey: string }): Promise<Stripe.Subscription> {
+  return getStripeClient().subscriptions.create(
+    {
+      customer: params.stripeCustomerId,
+      items: [{ price: params.priceId }],
+      payment_behavior: "default_incomplete",
+      payment_settings: { save_default_payment_method: "on_subscription", payment_method_types: ["card"] },
+      expand: ["latest_invoice.confirmation_secret"],
+      metadata: { streamVerseUserId: params.userId, streamVersePlanId: params.planId },
+    },
+    { idempotencyKey: params.idempotencyKey },
+  );
+}
+
+export async function listCustomerSubscriptions(stripeCustomerId: string): Promise<Stripe.Subscription[]> {
+  return (await getStripeClient().subscriptions.list({ customer: stripeCustomerId, status: "all", limit: 10 })).data;
+}
+
+export async function cancelSubscriptionNow(stripeSubscriptionId: string): Promise<void> {
+  await getStripeClient().subscriptions.cancel(stripeSubscriptionId);
 }
 
 export async function createBillingPortalSession(stripeCustomerId: string): Promise<Stripe.BillingPortal.Session> {

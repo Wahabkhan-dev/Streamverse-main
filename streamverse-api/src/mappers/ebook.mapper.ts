@@ -23,6 +23,7 @@ interface EbookFullRow {
   spineAssetId: string | null;
   fullWrapAssetId: string | null;
   thumbnailAssetId: string | null;
+  flipbookEnabled: boolean;
   editions: { id: string; translatedTitle: string; translator: string | null; epubAssetId: string | null; pdfAssetId: string | null; coverAssetId: string | null; languageId: string; language: { code: string; name: string } }[];
 }
 
@@ -51,6 +52,7 @@ export function toEbookAdminDto(row: EbookFullRow) {
       spineAssetId: row.spineAssetId,
       fullWrapAssetId: row.fullWrapAssetId,
       thumbnailAssetId: row.thumbnailAssetId,
+      flipbookEnabled: row.flipbookEnabled,
     },
     editions: row.editions.map((e) => ({
       id: e.id,

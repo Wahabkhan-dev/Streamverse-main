@@ -43,6 +43,10 @@ export async function deleteGenre(id: string, ctx: AuditContext = NO_ACTOR) {
   return genre;
 }
 
-export const listGenres = genreRepository.list;
+/** The admin list: every genre (active or not) with how many titles use it, so deleting can be refused up front. */
+export async function listGenres() {
+  const [genres, usage] = await Promise.all([genreRepository.list(), genreRepository.usageCounts()]);
+  return genres.map((g) => ({ ...g, usage: usage.get(g.id) ?? 0 }));
+}
 export const getGenre = genreRepository.findById;
 export const listActiveGenres = genreRepository.listActive;

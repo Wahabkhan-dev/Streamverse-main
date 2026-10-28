@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ListTree, Pencil, Plus, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { Btn, ConfirmDialog, Field, PageHeader, Panel, Skel, Tag, TextInput } from "@/components/sv/ui";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -8,18 +8,13 @@ import { cn } from "@/lib/utils";
 import { useCatalog } from "@/lib/items";
 import { genreIdFor, update, useGenres, type Genre } from "@/lib/store";
 import { DEMO_MODE } from "@/lib/config";
-import { useAdminGenresQuery } from "@/hooks/useAdminApi";
+import { LiveGenres } from "@/components/sv/LiveGenres";
 
-export const Route = createFileRoute("/admin/genres")({ component: Genres });
+// live mode: the real, server-backed screen; demo mode keeps the browser-only one below
+export const Route = createFileRoute("/admin/genres")({ component: () => (DEMO_MODE ? <DemoGenres /> : <LiveGenres />) });
 
-function Genres() {
-  const demoGenres = useGenres();
-  const apiQuery = useAdminGenresQuery();
-  const isLoading = !DEMO_MODE && apiQuery.isLoading;
-  const isError = !DEMO_MODE && apiQuery.isError;
-
-  const apiGenres: Genre[] = useMemo(() => (apiQuery.data?.data ?? []).map((g) => ({ id: g.id, name: g.name, type: g.type })), [apiQuery.data]);
-  const genres: Genre[] = DEMO_MODE ? demoGenres : apiGenres;
+function DemoGenres() {
+  const genres: Genre[] = useGenres();
 
   const cat = useCatalog();
   const usedBy = (name: string) => cat.movies.filter((m) => m.genres.includes(name)).length + [...cat.ebooks, ...cat.audiobooks].filter((b) => b.genre === name).length;
@@ -39,23 +34,19 @@ function Genres() {
       toast.warning("That genre already exists");
       return;
     }
-    if (DEMO_MODE) {
-      update((s) =>
-        editing
-          ? {
-              genres: s.genres.map((g) => (g.name === editing ? { ...g, name } : g)),
-              movies: s.movies.map((m) => ({ ...m, genres: m.genres.map((x) => (x === editing ? name : x)) })),
-              ebooks: s.ebooks.map((b) => (b.genre === editing ? { ...b, genre: name } : b)),
-              audiobooks: s.audiobooks.map((b) => (b.genre === editing ? { ...b, genre: name } : b)),
-            }
-          : { genres: [...s.genres, { id: `${genreIdFor(name)}-${Date.now().toString(36)}`, name, type: filter === "All" ? "All" : filter }] },
-      );
-    } else {
-      toast.info("Genre mutations require a backend connection (read-only in API mode).");
-    }
+    update((s) =>
+      editing
+        ? {
+            genres: s.genres.map((g) => (g.name === editing ? { ...g, name } : g)),
+            movies: s.movies.map((m) => ({ ...m, genres: m.genres.map((x) => (x === editing ? name : x)) })),
+            ebooks: s.ebooks.map((b) => (b.genre === editing ? { ...b, genre: name } : b)),
+            audiobooks: s.audiobooks.map((b) => (b.genre === editing ? { ...b, genre: name } : b)),
+          }
+        : { genres: [...s.genres, { id: `${genreIdFor(name)}-${Date.now().toString(36)}`, name, type: filter === "All" ? "All" : filter }] },
+    );
     setDraft(null);
     setEditing(null);
-    if (DEMO_MODE) toast.success("Genre saved");
+    toast.success("Genre saved");
   };
 
   const summary = [
@@ -63,9 +54,6 @@ function Genres() {
     ["eBooks", genres.filter((x) => x.type === "eBook" || x.type === "All").length],
     ["Audiobooks", genres.filter((x) => x.type === "Audiobook" || x.type === "eBook" || x.type === "All").length],
   ] as const;
-
-  if (isLoading) return <div className="space-y-4 p-6"><Skel className="h-8 w-64" /><Skel className="h-64 w-full" /></div>;
-  if (isError) return <div className="p-8 text-center text-sm text-muted-foreground">Failed to load genres.</div>;
 
   return (
     <>
@@ -133,8 +121,8 @@ function Genres() {
         title="Delete genre?"
         description={`"${del}" will be removed from the catalog taxonomy.`}
         onConfirm={() => {
-          if (DEMO_MODE) { update((s) => ({ genres: s.genres.filter((g) => g.name !== del) })); toast.success(`${del} removed`); }
-          else toast.info("Genre mutations require a backend connection (read-only in API mode).");
+          update((s) => ({ genres: s.genres.filter((g) => g.name !== del) }));
+          toast.success(`${del} removed`);
         }}
       />
     </>

@@ -39,7 +39,7 @@ describe("audit log", () => {
     await request(app).post("/api/v1/admin/movies").set("Authorization", `Bearer ${accessToken}`).send({ title: "Audited Movie" });
     await request(app).post("/api/v1/admin/collections").set("Authorization", `Bearer ${accessToken}`).send({ name: "Audited Collection" });
     await request(app).post("/api/v1/admin/homepage/sections").set("Authorization", `Bearer ${accessToken}`).send({ key: "audited_section", displayTitle: "Audited", type: "MANUAL" });
-    await request(app).post("/api/v1/admin/banners").set("Authorization", `Bearer ${accessToken}`).send({ type: "HERO", title: "Audited Banner" });
+    await request(app).post("/api/v1/admin/banners").set("Authorization", `Bearer ${accessToken}`).send({ type: "HERO", placement: "MOVIES", title: "Audited Banner" });
     await request(app).put("/api/v1/admin/settings/registrationEnabled").set("Authorization", `Bearer ${accessToken}`).send({ value: false });
 
     const actions = (await auditEntries()).map((e) => e.action);

@@ -23,7 +23,7 @@ export async function removeFromMyList(userId: string, contentId: string) {
 }
 
 export async function listMyList(userId: string) {
-  const saved = await myListRepository.list(userId);
-  const visible = saved.map((s) => s.content).filter((c) => isCustomerVisible(c));
-  return toMixedCards(visible);
+  const saved = (await myListRepository.list(userId)).filter((s) => isCustomerVisible(s.content));
+  const cards = await toMixedCards(saved.map((s) => s.content));
+  return cards.map((card, i) => ({ ...card, addedAt: saved[i]!.createdAt }));
 }

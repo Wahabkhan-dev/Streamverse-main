@@ -538,9 +538,8 @@ Stripe-synchronized subscription.
 
 ### Money
 
-Amounts are integer minor units throughout (Stripe's own convention — `1999` for $19.99), never floats.
-`utils/money.ts` centralizes which currencies don't use 2 decimal digits (JPY has 0, BHD has 3, ...) for
-the one place a human-readable amount is ever derived; no low-level arithmetic assumes "divide by 100".
+Amounts are integer minor units throughout (Stripe's own convention — `1999` for $19.99), never floats. The web app
+divides by 100 only when it displays a price.
 
 ### Frontend → billing API map
 

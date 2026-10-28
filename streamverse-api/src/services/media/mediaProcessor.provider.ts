@@ -33,10 +33,17 @@ export interface RenditionOutput {
   segments: { name: string; data: Buffer }[];
 }
 
+export interface TranscodeOptions {
+  /** The source length from the probe; without it no fraction can be worked out and `onProgress` is never called. */
+  durationSeconds?: number | null;
+  /** 0..1 of the source converted so far. */
+  onProgress?: (fraction: number) => void;
+}
+
 export interface MediaProcessor {
   /** Works against a URL (signed download URL), never a full in-memory buffer (Section 58/61). */
   probe(sourceUrl: string): Promise<ProbeResult>;
-  transcodeRendition(sourceUrl: string, spec: RenditionSpec): Promise<RenditionOutput>;
+  transcodeRendition(sourceUrl: string, spec: RenditionSpec, opts?: TranscodeOptions): Promise<RenditionOutput>;
 }
 
 /** Section 24: never upscale — only generate renditions the source can actually support. */

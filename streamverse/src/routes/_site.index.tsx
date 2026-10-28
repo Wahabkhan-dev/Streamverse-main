@@ -41,6 +41,8 @@ import { DEMO_MODE } from "@/lib/config";
 import { useApiMoviesQuery, useApiEbooksQuery, useApiAudiobooksQuery, useApiHomepageQuery, useApiBannersQuery, useApiCollectionsQuery } from "@/hooks/useApiCatalog";
 import type { ApiBanner, ApiHomeSection, ApiCollection } from "@/api/types";
 import { apiMovieToLocal, apiBookToLocal } from "@/lib/api-mappers";
+import { apiBannerToLocal } from "@/lib/banner-mapper";
+import { LiveHome } from "@/components/sv/home/LiveHome";
 
 export const Route = createFileRoute("/_site/")({
   head: () => ({
@@ -65,34 +67,25 @@ export const Route = createFileRoute("/_site/")({
 
 // ── API → local type mappers ─────────────────────────────────────────────────
 
-function apiBannerToLocal(b: ApiBanner): Banner {
-  return {
-    id: b.id,
-    type: b.type as BannerType,
-    title: b.title,
-    description: b.description,
-    buttonText: b.buttonText,
-    linkKind: b.linkKind as LinkKind,
-    ...(b.linkId !== undefined ? { linkId: b.linkId } : {}),
-    linkSlug: b.linkSlug ?? "",
-    image: b.image,
-    mobileImage: b.mobileImage,
-    priority: b.priority,
-    start: b.start,
-    end: b.end,
-    active: b.active,
-  };
-}
+const SECTION_TYPE_TO_AUTO_FLAG: Partial<Record<ApiHomeSection["type"], HomeAutoFlag>> = {
+  TRENDING: "trending",
+  POPULAR: "popular",
+  FEATURED: "featured",
+  NEW_RELEASE: "newRelease",
+  LATEST: "newRelease",
+};
 
 function apiSectionToLocal(s: ApiHomeSection): HomeSection {
+  const mode: "auto" | "manual" = s.type === "MANUAL" ? "manual" : "auto";
+  const autoFlag = SECTION_TYPE_TO_AUTO_FLAG[s.type];
   return {
-    id: s.id as HomeSectionId,
-    title: s.title,
+    id: s.key as HomeSectionId,
+    title: s.displayTitle,
     enabled: s.enabled,
-    limit: s.limit,
-    mode: s.mode,
-    ...(s.autoFlag !== undefined ? { autoFlag: s.autoFlag as HomeAutoFlag } : {}),
-    items: s.items.map((item) => ({
+    limit: s.itemLimit,
+    mode,
+    ...(autoFlag !== undefined ? { autoFlag } : {}),
+    items: (s.items ?? []).map((item) => ({
       type: item.contentType === "movie" ? "Movie" : item.contentType === "ebook" ? "eBook" : "Audiobook",
       slug: item.movie?.slug ?? item.ebook?.slug ?? item.audiobook?.slug ?? "",
       id: item.contentId,
@@ -143,6 +136,11 @@ const seeAllOf: Partial<Record<HomeSectionId, SeeAllPath>> = {
 };
 
 function Home() {
+  // Live mode renders the server-resolved, admin-ordered sections; the code below is the demo-mode (browser storage) homepage.
+  return DEMO_MODE ? <DemoHome /> : <LiveHome />;
+}
+
+function DemoHome() {
   // ── Demo-mode data (always call hooks) ────────────────────────────────
   const demoCat = useCatalog();
   const demoSections = useHomepage();
@@ -275,26 +273,7 @@ function Home() {
         .resolveListed(s.items)
         .filter((i): i is Extract<Item, { type: "Movie" }> => i.type === "Movie");
       if (picked.length) return picked.slice(0, s.limit).map((i) => fromMovie(i.m));
-      // Manual with no items: fall through to banners then auto
-      const fromBanners = activeBanners(banners, "Hero Banner")
-        .slice(0, s.limit)
-        .map<HeroSlide>((b) => {
-          const movie =
-            b.linkKind === "movie" ? cat.movies.find((m) => m.slug === b.linkSlug) : undefined;
-          const t = linkFor(b.linkKind, b.linkSlug);
-          return {
-            key: b.id,
-            image: b.image,
-            mobileImage: b.mobileImage,
-            title: b.title,
-            description: b.description,
-            buttonText: b.buttonText || "Watch Now",
-            ...(movie ? { movie } : {}),
-            ...(t ? { target: t } : {}),
-            ...(movie ? { infoTarget: detailTarget("Movie", movie.slug) } : {}),
-          };
-        });
-      if (fromBanners.length) return fromBanners;
+      // Manual with no items: fall through to the automatic source. The homepage hero is managed here, never by Banners.
     }
     // Auto mode
     const flag = s.autoFlag ?? "featured";

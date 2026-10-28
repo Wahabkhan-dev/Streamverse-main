@@ -41,9 +41,10 @@ function DocEditor({ docKey }: { docKey: LegalKey }) {
     return editingVersion(rec);
   });
 
-  if (isLoading) return <div className="mt-6 space-y-4"><Skel className="h-8 w-64" /><Skel className="h-96 w-full" /></div>;
   const [problems, setProblems] = useState<LegalProblem[]>([]);
   const [preview, setPreview] = useState(false);
+
+  if (isLoading) return <div className="mt-6 space-y-4"><Skel className="h-8 w-64" /><Skel className="h-96 w-full" /></div>;
   const err = (f: LegalProblem["field"]) => problems.find((p) => p.field === f)?.message;
   const set = <K extends keyof LegalVersion>(k: K, v: LegalVersion[K]) => {
     setWork((w) => ({ ...w, [k]: v }));

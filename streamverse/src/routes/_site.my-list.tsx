@@ -10,8 +10,8 @@ import { refKey, toggleMyList, useMyList } from "@/lib/user";
 import { UnavailableContent } from "@/components/sv/UnavailableContent";
 import { DEMO_MODE } from "@/lib/config";
 import { useApiMyListQuery, useRemoveFromMyListMutation } from "@/hooks/useApiMe";
-import type { ApiListItem, ApiMovie, ApiBook } from "@/api/types";
 import type { Movie, Book, ItemRef, Status } from "@/lib/data";
+import { mixedCardToItem } from "@/lib/api-mappers";
 
 type Tab = "all" | "movies" | "ebooks" | "audiobooks";
 
@@ -29,44 +29,6 @@ export const Route = createFileRoute("/_site/my-list")({
 
 const typeOf = { movies: "Movie", ebooks: "eBook", audiobooks: "Audiobook" } as const;
 
-function apiMovieToItem(m: ApiMovie): Item {
-  const mins = m.duration ?? 0;
-  const h = Math.floor(mins / 60);
-  const min = mins % 60;
-  const movie: Movie = {
-    slug: m.slug, title: m.title, year: m.year, genres: m.genres,
-    runtime: h > 0 ? `${h}h ${min}m` : `${min}m`,
-    rating: m.rating ?? "PG", badges: [], description: m.description,
-    image: m.image, status: (m.status ?? "Published") as Status,
-    views: m.views ?? 0, release: `${m.year}-01-01`,
-    cast: m.cast.map((c) => ({ name: c.name, role: c.role })),
-    cid: m.id,
-  };
-  return toItem("Movie", movie);
-}
-
-function apiBookToItem(b: ApiBook, type: "eBook" | "Audiobook"): Item {
-  const book = {
-    slug: b.slug, title: b.title, author: b.author,
-    ...(b.narrator !== undefined ? { narrator: b.narrator } : {}),
-    genre: b.genres[0] ?? "Fiction", rating: 4.0, reviews: 0, pages: b.pages ?? 0,
-    year: b.year ?? new Date().getFullYear(), description: b.description,
-    palette: ["oklch(0.3 0.05 240)", "oklch(0.2 0.05 240)", "oklch(0.8 0.1 240)"] as [string, string, string],
-    motif: "sun" as const, status: (b.status ?? "Published") as Status,
-    isbn: "", count: 0,
-    ...(b.image ? { cover: b.image } : {}),
-    cid: b.id,
-  } as Book;
-  return toItem(type, book);
-}
-
-function apiListItemToItem(entry: ApiListItem): Item | null {
-  if (entry.contentType === "movie" && entry.movie) return apiMovieToItem(entry.movie);
-  if (entry.contentType === "ebook" && entry.ebook) return apiBookToItem(entry.ebook, "eBook");
-  if (entry.contentType === "audiobook" && entry.audiobook) return apiBookToItem(entry.audiobook, "Audiobook");
-  return null;
-}
-
 function MyList() {
   const [tab, setTab] = useState<Tab>("all");
 
@@ -83,7 +45,7 @@ function MyList() {
   const items: Item[] = useMemo(() => {
     if (DEMO_MODE) return cat.resolveListed(demoList);
     return (apiMyListQuery.data ?? [])
-      .map(apiListItemToItem)
+      .map(mixedCardToItem)
       .filter((i): i is Item => i !== null);
   }, [DEMO_MODE, demoList, cat, apiMyListQuery.data]);
 
@@ -118,14 +80,10 @@ function MyList() {
 
   const handleRemove = (i: Item, apiItemId?: string) => {
     if (!DEMO_MODE) {
-      // Find the API list entry ID for this item
-      const entry = (apiMyListQuery.data ?? []).find((e) =>
-        e.contentType === "movie" ? e.movie?.slug === i.slug
-        : e.contentType === "ebook" ? e.ebook?.slug === i.slug
-        : e.audiobook?.slug === i.slug,
-      );
+      // Find the API list entry for this item (its `id` is the content id)
+      const entry = (apiMyListQuery.data ?? []).find((e) => e.slug === i.slug);
       if (entry) {
-        removeFromMyListMutation.mutate(entry.contentId, {
+        removeFromMyListMutation.mutate(entry.id, {
           onSuccess: () => toast.success("Removed from My List"),
           onError: () => toast.error("Failed to remove from My List"),
         });

@@ -17,6 +17,7 @@ import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as SignUpRouteImport } from './routes/sign-up'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as SiteIndexRouteImport } from './routes/_site.index'
+import { Route as SiteDownloadsRouteImport } from './routes/_site.downloads'
 import { Route as SiteHistoryRouteImport } from './routes/_site.history'
 import { Route as SiteMyLibraryRouteImport } from './routes/_site.my-library'
 import { Route as SiteMyListRouteImport } from './routes/_site.my-list'
@@ -39,11 +40,13 @@ import { Route as AdminDashboardRouteImport } from './routes/admin.dashboard'
 import { Route as AdminGenresRouteImport } from './routes/admin.genres'
 import { Route as AdminHomepageRouteImport } from './routes/admin.homepage'
 import { Route as AdminLegalRouteImport } from './routes/admin.legal'
+import { Route as AdminMediaRouteImport } from './routes/admin.media'
 import { Route as AdminNotificationsRouteImport } from './routes/admin.notifications'
 import { Route as AdminPaymentsRouteImport } from './routes/admin.payments'
 import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
 import { Route as AdminSubscriptionsRouteImport } from './routes/admin.subscriptions'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
+import { Route as FlipbookSlugRouteImport } from './routes/flipbook.$slug'
 import { Route as ListenSlugRouteImport } from './routes/listen.$slug'
 import { Route as ReadSlugRouteImport } from './routes/read.$slug'
 import { Route as SignupIndexRouteImport } from './routes/signup.index'
@@ -110,6 +113,11 @@ const SignupRoute = SignupRouteImport.update({
 const SiteIndexRoute = SiteIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => SiteRoute,
+} as any)
+const SiteDownloadsRoute = SiteDownloadsRouteImport.update({
+  id: '/downloads',
+  path: '/downloads',
   getParentRoute: () => SiteRoute,
 } as any)
 const SiteHistoryRoute = SiteHistoryRouteImport.update({
@@ -222,6 +230,11 @@ const AdminLegalRoute = AdminLegalRouteImport.update({
   path: '/legal',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminMediaRoute = AdminMediaRouteImport.update({
+  id: '/media',
+  path: '/media',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminNotificationsRoute = AdminNotificationsRouteImport.update({
   id: '/notifications',
   path: '/notifications',
@@ -246,6 +259,11 @@ const AdminUsersRoute = AdminUsersRouteImport.update({
   id: '/users',
   path: '/users',
   getParentRoute: () => AdminRoute,
+} as any)
+const FlipbookSlugRoute = FlipbookSlugRouteImport.update({
+  id: '/flipbook/$slug',
+  path: '/flipbook/$slug',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ListenSlugRoute = ListenSlugRouteImport.update({
   id: '/listen/$slug',
@@ -397,6 +415,7 @@ export interface FileRoutesByFullPath {
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
   '/signup': typeof SignupRouteWithChildren
+  '/downloads': typeof SiteDownloadsRoute
   '/history': typeof SiteHistoryRoute
   '/my-library': typeof SiteMyLibraryRoute
   '/my-list': typeof SiteMyListRoute
@@ -418,11 +437,13 @@ export interface FileRoutesByFullPath {
   '/admin/genres': typeof AdminGenresRoute
   '/admin/homepage': typeof AdminHomepageRoute
   '/admin/legal': typeof AdminLegalRoute
+  '/admin/media': typeof AdminMediaRoute
   '/admin/notifications': typeof AdminNotificationsRoute
   '/admin/payments': typeof AdminPaymentsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/subscriptions': typeof AdminSubscriptionsRoute
   '/admin/users': typeof AdminUsersRoute
+  '/flipbook/$slug': typeof FlipbookSlugRoute
   '/listen/$slug': typeof ListenSlugRoute
   '/read/$slug': typeof ReadSlugRoute
   '/signup/account': typeof SignupAccountRoute
@@ -458,6 +479,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
+  '/downloads': typeof SiteDownloadsRoute
   '/history': typeof SiteHistoryRoute
   '/my-library': typeof SiteMyLibraryRoute
   '/my-list': typeof SiteMyListRoute
@@ -479,11 +501,13 @@ export interface FileRoutesByTo {
   '/admin/genres': typeof AdminGenresRoute
   '/admin/homepage': typeof AdminHomepageRoute
   '/admin/legal': typeof AdminLegalRoute
+  '/admin/media': typeof AdminMediaRoute
   '/admin/notifications': typeof AdminNotificationsRoute
   '/admin/payments': typeof AdminPaymentsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/subscriptions': typeof AdminSubscriptionsRoute
   '/admin/users': typeof AdminUsersRoute
+  '/flipbook/$slug': typeof FlipbookSlugRoute
   '/listen/$slug': typeof ListenSlugRoute
   '/read/$slug': typeof ReadSlugRoute
   '/signup/account': typeof SignupAccountRoute
@@ -524,6 +548,7 @@ export interface FileRoutesById {
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
   '/signup': typeof SignupRouteWithChildren
+  '/_site/downloads': typeof SiteDownloadsRoute
   '/_site/history': typeof SiteHistoryRoute
   '/_site/my-library': typeof SiteMyLibraryRoute
   '/_site/my-list': typeof SiteMyListRoute
@@ -545,11 +570,13 @@ export interface FileRoutesById {
   '/admin/genres': typeof AdminGenresRoute
   '/admin/homepage': typeof AdminHomepageRoute
   '/admin/legal': typeof AdminLegalRoute
+  '/admin/media': typeof AdminMediaRoute
   '/admin/notifications': typeof AdminNotificationsRoute
   '/admin/payments': typeof AdminPaymentsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/subscriptions': typeof AdminSubscriptionsRoute
   '/admin/users': typeof AdminUsersRoute
+  '/flipbook/$slug': typeof FlipbookSlugRoute
   '/listen/$slug': typeof ListenSlugRoute
   '/read/$slug': typeof ReadSlugRoute
   '/signup/account': typeof SignupAccountRoute
@@ -591,6 +618,7 @@ export interface FileRouteTypes {
     | '/sign-in'
     | '/sign-up'
     | '/signup'
+    | '/downloads'
     | '/history'
     | '/my-library'
     | '/my-list'
@@ -612,11 +640,13 @@ export interface FileRouteTypes {
     | '/admin/genres'
     | '/admin/homepage'
     | '/admin/legal'
+    | '/admin/media'
     | '/admin/notifications'
     | '/admin/payments'
     | '/admin/settings'
     | '/admin/subscriptions'
     | '/admin/users'
+    | '/flipbook/$slug'
     | '/listen/$slug'
     | '/read/$slug'
     | '/signup/account'
@@ -652,6 +682,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/sign-in'
     | '/sign-up'
+    | '/downloads'
     | '/history'
     | '/my-library'
     | '/my-list'
@@ -673,11 +704,13 @@ export interface FileRouteTypes {
     | '/admin/genres'
     | '/admin/homepage'
     | '/admin/legal'
+    | '/admin/media'
     | '/admin/notifications'
     | '/admin/payments'
     | '/admin/settings'
     | '/admin/subscriptions'
     | '/admin/users'
+    | '/flipbook/$slug'
     | '/listen/$slug'
     | '/read/$slug'
     | '/signup/account'
@@ -717,6 +750,7 @@ export interface FileRouteTypes {
     | '/sign-in'
     | '/sign-up'
     | '/signup'
+    | '/_site/downloads'
     | '/_site/history'
     | '/_site/my-library'
     | '/_site/my-list'
@@ -738,11 +772,13 @@ export interface FileRouteTypes {
     | '/admin/genres'
     | '/admin/homepage'
     | '/admin/legal'
+    | '/admin/media'
     | '/admin/notifications'
     | '/admin/payments'
     | '/admin/settings'
     | '/admin/subscriptions'
     | '/admin/users'
+    | '/flipbook/$slug'
     | '/listen/$slug'
     | '/read/$slug'
     | '/signup/account'
@@ -783,6 +819,7 @@ export interface RootRouteChildren {
   SignInRoute: typeof SignInRoute
   SignUpRoute: typeof SignUpRoute
   SignupRoute: typeof SignupRouteWithChildren
+  FlipbookSlugRoute: typeof FlipbookSlugRoute
   ListenSlugRoute: typeof ListenSlugRoute
   ReadSlugRoute: typeof ReadSlugRoute
   WatchSlugRoute: typeof WatchSlugRoute
@@ -844,6 +881,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof SiteIndexRouteImport
+      parentRoute: typeof SiteRoute
+    }
+    '/_site/downloads': {
+      id: '/_site/downloads'
+      path: '/downloads'
+      fullPath: '/downloads'
+      preLoaderRoute: typeof SiteDownloadsRouteImport
       parentRoute: typeof SiteRoute
     }
     '/_site/history': {
@@ -1000,6 +1044,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminLegalRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/media': {
+      id: '/admin/media'
+      path: '/media'
+      fullPath: '/admin/media'
+      preLoaderRoute: typeof AdminMediaRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/notifications': {
       id: '/admin/notifications'
       path: '/notifications'
@@ -1034,6 +1085,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/users'
       preLoaderRoute: typeof AdminUsersRouteImport
       parentRoute: typeof AdminRoute
+    }
+    '/flipbook/$slug': {
+      id: '/flipbook/$slug'
+      path: '/flipbook/$slug'
+      fullPath: '/flipbook/$slug'
+      preLoaderRoute: typeof FlipbookSlugRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/listen/$slug': {
       id: '/listen/$slug'
@@ -1235,6 +1293,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface SiteRouteChildren {
+  SiteDownloadsRoute: typeof SiteDownloadsRoute
   SiteHistoryRoute: typeof SiteHistoryRoute
   SiteMyLibraryRoute: typeof SiteMyLibraryRoute
   SiteMyListRoute: typeof SiteMyListRoute
@@ -1261,6 +1320,7 @@ interface SiteRouteChildren {
 }
 
 const SiteRouteChildren: SiteRouteChildren = {
+  SiteDownloadsRoute: SiteDownloadsRoute,
   SiteHistoryRoute: SiteHistoryRoute,
   SiteMyLibraryRoute: SiteMyLibraryRoute,
   SiteMyListRoute: SiteMyListRoute,
@@ -1296,6 +1356,7 @@ interface AdminRouteChildren {
   AdminGenresRoute: typeof AdminGenresRoute
   AdminHomepageRoute: typeof AdminHomepageRoute
   AdminLegalRoute: typeof AdminLegalRoute
+  AdminMediaRoute: typeof AdminMediaRoute
   AdminNotificationsRoute: typeof AdminNotificationsRoute
   AdminPaymentsRoute: typeof AdminPaymentsRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
@@ -1324,6 +1385,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminGenresRoute: AdminGenresRoute,
   AdminHomepageRoute: AdminHomepageRoute,
   AdminLegalRoute: AdminLegalRoute,
+  AdminMediaRoute: AdminMediaRoute,
   AdminNotificationsRoute: AdminNotificationsRoute,
   AdminPaymentsRoute: AdminPaymentsRoute,
   AdminSettingsRoute: AdminSettingsRoute,
@@ -1373,6 +1435,7 @@ const rootRouteChildren: RootRouteChildren = {
   SignInRoute: SignInRoute,
   SignUpRoute: SignUpRoute,
   SignupRoute: SignupRouteWithChildren,
+  FlipbookSlugRoute: FlipbookSlugRoute,
   ListenSlugRoute: ListenSlugRoute,
   ReadSlugRoute: ReadSlugRoute,
   WatchSlugRoute: WatchSlugRoute,

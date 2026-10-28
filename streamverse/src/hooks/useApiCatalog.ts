@@ -93,11 +93,32 @@ export function useApiHomepageQuery() {
   });
 }
 
-export function useApiBannersQuery() {
+/**
+ * The homepage in two requests: the first two sections right away (high priority), the rest once the browser is idle or the
+ * reader scrolls near them. Each request resolves only its own slice on the server, so nothing is fetched twice.
+ */
+export function useApiHomepagePages(enableRest: boolean) {
+  const first = useQuery({
+    queryKey: [...HOMEPAGE_QUERY_KEY, "first"],
+    queryFn: () => catalogApi.getHomepage({ offset: 0, limit: 2 }),
+    enabled: !DEMO_MODE,
+    staleTime: 15_000,
+  });
+  const total = first.data?.meta?.total ?? 0;
+  const rest = useQuery({
+    queryKey: [...HOMEPAGE_QUERY_KEY, "rest"],
+    queryFn: () => catalogApi.getHomepage({ offset: 2, limit: 100 }),
+    enabled: !DEMO_MODE && enableRest && first.isSuccess && total > 2,
+    staleTime: 15_000,
+  });
+  return { first, rest, total };
+}
+
+export function useApiBannersQuery(placement?: "MOVIES" | "EBOOKS" | "AUDIOBOOKS") {
   return useQuery({
-    queryKey: BANNERS_QUERY_KEY,
+    queryKey: placement ? [...BANNERS_QUERY_KEY, placement] : BANNERS_QUERY_KEY,
     queryFn: async () => {
-      const res = await catalogApi.getBanners();
+      const res = await catalogApi.getBanners(placement);
       return res.data;
     },
     enabled: !DEMO_MODE,

@@ -163,11 +163,15 @@ describe("per-title statistics", () => {
 });
 
 describe("settings", () => {
-  it("every setting either works or says it needs the backend", async () => {
+  it("every setting is a real switch that changes when clicked", async () => {
     renderAt("/admin/settings");
     await screen.findByRole("heading", { name: "Settings" });
-    expect(screen.getAllByText("Backend integration required").length).toBeGreaterThan(0);
-    expect(screen.getByRole("switch", { name: "Maintenance mode" })).toBeTruthy();
+    const switches = screen.getAllByRole("switch");
+    expect(switches.length).toBeGreaterThanOrEqual(8);
+    const first = switches[0]!;
+    const before = first.getAttribute("aria-checked");
+    fireEvent.click(first);
+    await waitFor(() => expect(first.getAttribute("aria-checked")).not.toBe(before));
   });
 
   it("a failed save shows a visible error", async () => {

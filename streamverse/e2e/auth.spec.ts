@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 test.describe("Auth — Login", () => {
   test("loads login page", async ({ page }) => {
     await page.goto("/sign-in");
-    await expect(page.getByRole("heading", { name: /sign in/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /welcome back/i })).toBeVisible();
   });
 
   test("shows validation for empty fields", async ({ page }) => {
@@ -20,7 +20,7 @@ test.describe("Auth — Login", () => {
   test("shows error for wrong password (demo mode)", async ({ page }) => {
     await page.goto("/sign-in");
     await page.getByLabel(/email/i).fill("test@example.com");
-    await page.getByLabel(/password/i).fill("wrongpassword");
+    await page.getByRole("textbox", { name: /password/i }).fill("wrongpassword");
     await page.getByRole("button", { name: /sign in/i }).click();
     // In demo mode, accepts any credentials or shows specific demo behavior
     // Just verify no crash

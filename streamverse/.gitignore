@@ -30,3 +30,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# live-mode e2e output
+playwright-report-live
+test-results-live
+
+# test output
+test-results
+playwright-report

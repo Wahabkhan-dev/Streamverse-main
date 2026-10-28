@@ -26,15 +26,19 @@ export async function handleStripeWebhook(req: Request, res: Response): Promise<
     return;
   }
 
-  // Section 21/63/104: a Stripe retry of an event already PROCESSED/IGNORED is acknowledged without
-  // re-dispatching its business side effect a second time. A retry of one that previously FAILED (or is
-  // still PENDING from a crashed earlier attempt) is allowed to try again.
-  const existing = await stripeEventRepository.findByStripeEventId(event.id);
-  if (existing && existing.status !== "FAILED") {
+  // Section 21/63/104: a retry of an event already PROCESSED/IGNORED is acknowledged without re-dispatching
+  // its side effect. FAILED events, and PENDING ones left by a crashed attempt (stale lease), are re-claimed
+  // atomically so concurrent deliveries can't both process the same event.
+  const claim = await stripeEventRepository.claim(event.id, event.type);
+  if (claim === "done") {
     res.status(200).json({ success: true, message: "Already processed" });
     return;
   }
-  if (!existing) await stripeEventRepository.create({ stripeEventId: event.id, type: event.type, status: "PENDING" });
+  if (claim === "busy") {
+    // Another delivery is processing it right now; a non-2xx makes Stripe retry later (and recover if it crashes).
+    res.status(409).json({ success: false, message: "Event is being processed" });
+    return;
+  }
 
   try {
     const result = await dispatch(event);

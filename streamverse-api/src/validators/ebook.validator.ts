@@ -26,6 +26,8 @@ export const ebookMetadataSchema = z.object({
   spineAssetId: z.string().min(1).optional(),
   fullWrapAssetId: z.string().min(1).optional(),
   thumbnailAssetId: z.string().min(1).optional(),
+  /** Offer a page-turn (flipbook) version of the book, built from its PDF. */
+  flipbookEnabled: z.boolean().optional(),
 });
 
 export const createEbookSchema = contentBaseSchema.extend({

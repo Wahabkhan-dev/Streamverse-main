@@ -10,7 +10,12 @@ import { chaptersOf } from "@/lib/book-content";
 import { useAudiobooks, useEbooks, useMovies } from "@/lib/store";
 import { SelectBox } from "./admin";
 import { CHART_COLORS, Chart } from "./charts";
-import { Btn, EmptyState, PageHeader, Panel, PanelHeader, StatusBadge } from "./ui";
+import { Btn, EmptyState, PageHeader, Panel, PanelHeader, Skel, StatusBadge } from "./ui";
+import { useQuery } from "@tanstack/react-query";
+import { adminAnalyticsApi } from "@/api/admin.api";
+import { useAdminAudiobooksQuery, useAdminEbooksQuery, useAdminMoviesQuery } from "@/hooks/useAdminApi";
+import { uiStatus } from "@/lib/api-mappers";
+import { DEMO_MODE } from "@/lib/config";
 
 type Kind = "Movie" | "eBook" | "Audiobook";
 const base = { Movie: "movies", eBook: "ebooks", Audiobook: "audiobooks" } as const;
@@ -50,8 +55,109 @@ function Bars({ title, sub, data }: { title: string; sub: string; data: Share[] 
   );
 }
 
-/** Audience statistics for one title: how many people, how far they get, where they are, and what they use. */
+/** Audience statistics for one title. Live mode shows the server's real numbers; demo mode shows the sample charts. */
 export function TitleStats({ type, slug }: { type: Kind; slug: string }) {
+  return DEMO_MODE ? <DemoTitleStats type={type} slug={slug} /> : <LiveTitleStats type={type} slug={slug} />;
+}
+
+const rangeQuery = (range: RangeId): Record<string, string> => {
+  if (range !== "12m") return { range };
+  const day = (d: Date) => d.toISOString().slice(0, 10);
+  return { from: day(new Date(Date.now() - 364 * 86_400_000)), to: day(new Date()) };
+};
+
+function LiveTitleStats({ type, slug }: { type: Kind; slug: string }) {
+  const [range, setRange] = useState<RangeId>("30d");
+  const movies = useAdminMoviesQuery(undefined, { enabled: type === "Movie" });
+  const ebooks = useAdminEbooksQuery(undefined, { enabled: type === "eBook" });
+  const audiobooks = useAdminAudiobooksQuery(undefined, { enabled: type === "Audiobook" });
+  const listQ = type === "Movie" ? movies : type === "eBook" ? ebooks : audiobooks;
+  const row = (listQ.data?.data as { id: string; slug: string; title: string; status?: string }[] | undefined)?.find((r) => r.slug === slug);
+  const statsQ = useQuery({
+    queryKey: ["admin", "title-stats", row?.id, range],
+    enabled: !!row,
+    queryFn: async () => (await adminAnalyticsApi.titleStats(row!.id, rangeQuery(range))).data,
+  });
+  const label = verb[type];
+  const back = (
+    <Link to={`/admin/${base[type]}` as "/admin/movies"} className="mb-3 inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground">
+      <ArrowLeft className="size-3.5" /> Back to {type === "Movie" ? "Movies" : type === "eBook" ? "eBooks" : "Audiobooks"}
+    </Link>
+  );
+  if (listQ.isLoading) return <>{back}<Skel className="h-40 w-full" /></>;
+  if (!row) {
+    return (
+      <>
+        {back}
+        <EmptyState icon={BarChart3} title={listQ.isError ? "Could not load this title" : `${type} not found`} sub={listQ.isError ? "The server did not answer. Try again." : "It may have been deleted."} />
+      </>
+    );
+  }
+  const Icon = type === "Movie" ? Film : type === "eBook" ? BookOpen : Headphones;
+  const s = statsQ.data;
+  const rangeLabel = RANGES.find((r) => r.id === range)!.label;
+  const kpis: [React.ElementType, string, string, string?][] = s
+    ? [
+        [Icon, `Total ${label.toLowerCase()}`, compact(s.starts), rangeLabel],
+        [Users, "Unique audience", compact(s.uniqueUsers)],
+        [BarChart3, "Completion rate", `${Math.round(s.completionRate * 100)}%`, `${s.completions.toLocaleString()} reached the end`],
+        [ListPlus, "My List adds", compact(s.myListAdds), "All time"],
+        ...(s.averageProgress !== undefined ? [[BookOpen, "Average progress", `${Math.round(s.averageProgress)}%`, "Of the book read"] as [React.ElementType, string, string, string]] : []),
+      ]
+    : [];
+  return (
+    <>
+      {back}
+      <PageHeader
+        eyebrow={`StreamVerse / ${type} stats`}
+        title={row.title}
+        sub={`Audience statistics for this ${type === "Movie" ? "movie" : type === "eBook" ? "eBook" : "audiobook"}.`}
+        actions={
+          <>
+            <StatusBadge status={uiStatus(row.status)} />
+            <Link to={`/${base[type]}/$slug` as "/movies/$slug"} params={{ slug }} className="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-surface-2 px-4 text-sm font-semibold hover:bg-surface-3 [&_svg]:size-4">
+              <Eye /> Preview
+            </Link>
+            <Link to={`/admin/${base[type]}/$slug/edit` as "/admin/movies/$slug/edit"} params={{ slug }} className="inline-flex h-10 items-center gap-2 rounded-md border border-border bg-surface-2 px-4 text-sm font-semibold hover:bg-surface-3 [&_svg]:size-4">
+              <Pencil /> Edit
+            </Link>
+          </>
+        }
+      />
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div className="w-48">
+          <SelectBox value={rangeLabel} onChange={(v) => setRange(RANGES.find((r) => r.label === v)!.id)} options={RANGES.map((r) => r.label)} aria-label="Date range" />
+        </div>
+        <Btn
+          disabled={!s}
+          onClick={() => {
+            const ok = downloadCsv(`${slug}-stats.csv`, [["Measure", rangeLabel], ...kpis.map(([, k, v]) => [k, v])]);
+            if (ok) toast.success("Statistics exported");
+            else toast.error("Your browser blocked the download.");
+          }}
+        >
+          <Download /> Export CSV
+        </Btn>
+      </div>
+      {statsQ.isError ? (
+        <EmptyState icon={BarChart3} title="Statistics could not be loaded" sub={statsQ.error instanceof Error ? statsQ.error.message : "Try again."} action={<Btn onClick={() => void statsQ.refetch()}>Try again</Btn>} />
+      ) : !s ? (
+        <Skel className="h-28 w-full" />
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-5" data-testid="title-stats">
+            {kpis.map(([I, k, v, note]) => (
+              <Kpi key={k} icon={I} label={k} value={v} {...(note ? { note } : {})} />
+            ))}
+          </div>
+          <p className="mt-6 text-[11px] text-muted-foreground">Real numbers, counted from the progress viewers saved in this period.</p>
+        </>
+      )}
+    </>
+  );
+}
+
+function DemoTitleStats({ type, slug }: { type: Kind; slug: string }) {
   const movies = useMovies();
   const ebooks = useEbooks();
   const audiobooks = useAudiobooks();

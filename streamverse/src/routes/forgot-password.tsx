@@ -47,7 +47,7 @@ function ForgotPasswordPage() {
   return (
     <div className="grid min-h-dvh grid-rows-[auto_1fr_auto] bg-background">
       <header className="border-b border-border bg-ink px-6 py-4">
-        <Link to="/"><Logo /></Link>
+        <Logo />
       </header>
 
       <main className="flex items-center justify-center px-4 py-12">

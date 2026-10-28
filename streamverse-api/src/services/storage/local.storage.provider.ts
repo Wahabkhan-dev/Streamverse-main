@@ -1,5 +1,6 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { env } from "../../config/env";
 import type { HeadResult, MultipartPart, PresignedUpload, StorageProvider } from "./storage.provider";
@@ -36,6 +37,21 @@ export function createLocalStorageProvider(): StorageProvider {
   const multipartState = new Map<string, { parts: Map<number, Buffer> }>();
 
   return {
+    async listObjects(prefix, limit, continuationToken) {
+      const all: Array<{ key: string; sizeBytes: number }> = [];
+      const walk = async (dir: string) => {
+        for (const entry of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
+          const full = path.join(dir, entry.name);
+          if (entry.isDirectory()) await walk(full);
+          else all.push({ key: path.relative(root, full).split(path.sep).join("/"), sizeBytes: (await stat(full)).size });
+        }
+      };
+      await walk(root);
+      const sorted = all.filter((o) => o.key.startsWith(prefix) && (!continuationToken || o.key > continuationToken)).sort((a, b) => (a.key < b.key ? -1 : 1));
+      const page = sorted.slice(0, limit);
+      return { objects: page, nextToken: sorted.length > limit ? page[page.length - 1]!.key : undefined };
+    },
+
     async createUploadUrl(key, contentType, ttlSeconds): Promise<PresignedUpload> {
       const expiresAt = Date.now() + ttlSeconds * 1000;
       const payload = `PUT:${key}:${expiresAt}`;
@@ -83,6 +99,11 @@ export function createLocalStorageProvider(): StorageProvider {
       return buf.subarray(start, end + 1);
     },
 
+    async getObjectStream(key) {
+      const file = safePath(key);
+      return { stream: createReadStream(file), sizeBytes: (await stat(file)).size };
+    },
+
     async putObject(key, body) {
       await mkdir(path.dirname(safePath(key)), { recursive: true });
       await writeFile(safePath(key), body);
@@ -114,6 +135,11 @@ export function createLocalStorageProvider(): StorageProvider {
       await writeFile(safePath(key), Buffer.concat(buffers));
       multipartState.delete(providerUploadId);
       return {};
+    },
+
+    async listMultipartParts(_key, providerUploadId) {
+      const state = multipartState.get(providerUploadId);
+      return state ? [...state.parts.keys()].sort((a, b) => a - b).map((partNumber) => ({ partNumber, etag: `local-${partNumber}` })) : [];
     },
 
     async abortMultipartUpload(_key, providerUploadId) {

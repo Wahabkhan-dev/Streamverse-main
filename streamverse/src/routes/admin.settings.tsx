@@ -7,7 +7,8 @@ import { Btn, PageHeader, Panel, PanelHeader, SelectInput, Skel, Toggle } from "
 import { LANGUAGES } from "@/components/sv/wizard/kit";
 import { update, useSettings, type Settings } from "@/lib/store";
 import { DEMO_MODE } from "@/lib/config";
-import { useAdminSettingsQuery, useAdminSettingsMutation } from "@/hooks/useAdminApi";
+import { useSaveSettings, useServerSettings } from "@/lib/server-settings";
+import { isApiError } from "@/api/client";
 
 export const Route = createFileRoute("/admin/settings")({ component: SettingsPage });
 
@@ -23,7 +24,7 @@ interface Row {
 }
 const rows: Row[] = [
   { group: "Platform", key: "maintenance", label: "Maintenance mode", copy: "Temporarily show an offline message to customers.", effect: "Customers see a “We'll be right back” page." },
-  { group: "Platform", key: "registration", label: "Allow new registrations", copy: "New customers can create a USER account.", effect: "", backend: true },
+  { group: "Platform", key: "registration", label: "Allow new registrations", copy: "New customers can create a USER account.", effect: "When off, new sign-ups are refused with a clear message." },
   { group: "Catalog", key: "autoPublish", label: "Auto-publish content", copy: "New titles open the Publish step with “Publish now” already selected.", effect: "When off, nothing is selected, so nothing goes live until you choose Publish now or Schedule." },
   { group: "Safety", key: "ageGate", label: "Age restriction gate", copy: "Ask customers to confirm their age before opening restricted titles.", effect: "Controls the age-confirmation screen on restricted titles." },
   { group: "Playback defaults", key: "autoplayNext", label: "Autoplay next", copy: "Offer the next title when a movie ends.", effect: "Applies unless a customer turns it off in Profile." },
@@ -35,26 +36,41 @@ const groups = ["Platform", "Catalog", "Safety", "Playback defaults", "Notificat
 
 function SettingsPage() {
   const demoSettings = useSettings();
-  const apiQuery = useAdminSettingsQuery();
-  const apiMutation = useAdminSettingsMutation();
-  const isLoading = !DEMO_MODE && apiQuery.isLoading;
-  const isError = !DEMO_MODE && apiQuery.isError;
+  const server = useServerSettings();
+  const save = useSaveSettings();
+  const isLoading = !DEMO_MODE && server.isLoading;
+  const isError = !DEMO_MODE && server.isError;
 
-  const s: Settings = DEMO_MODE ? demoSettings : (apiQuery.data?.data ?? demoSettings);
+  const s: Settings = DEMO_MODE ? demoSettings : (server.data ?? demoSettings);
 
-  const set = (patch: Partial<Settings>) => {
+  /** Saves for real (server, MySQL) and only then confirms; a failed save says so and the switch goes back. */
+  const set = async (patch: Partial<Settings>, okMessage: string) => {
     if (DEMO_MODE) {
       update((st) => ({ settings: { ...st.settings, ...patch } }));
-    } else {
-      apiMutation.mutate(patch);
+      toast.success(okMessage);
+      return;
+    }
+    try {
+      await save(patch);
+      toast.success(okMessage);
+    } catch (e) {
+      toast.error(isApiError(e) ? e.message : "The setting could not be saved. Please try again.");
     }
   };
 
   if (isLoading) return <div className="space-y-3 p-6"><Skel className="h-8 w-64" /><Skel className="h-48 w-full" /><Skel className="h-48 w-full" /></div>;
-  if (isError) return <div className="p-8 text-center text-sm text-muted-foreground">Failed to load settings.</div>;
+  if (isError)
+    return (
+      <div className="mx-auto max-w-md p-8 text-center text-sm text-muted-foreground" role="alert">
+        <p>The settings could not be loaded.</p>
+        <Btn className="mt-3" onClick={() => void server.refetch()}>
+          Try again
+        </Btn>
+      </div>
+    );
   return (
     <>
-      <PageHeader title="Settings" sub="The switches that keep StreamVerse running the way you intend. Changes save instantly in this browser." />
+      <PageHeader title="Settings" sub={DEMO_MODE ? "The switches that keep StreamVerse running the way you intend. Changes save instantly in this browser." : "The switches that keep StreamVerse running the way you intend. Every change is saved to the server and stays after a refresh or restart."} />
       <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
         <div className="space-y-6">
           {groups.map((g) => (
@@ -67,18 +83,16 @@ function SettingsPage() {
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
                         {r.label}
-                        {r.backend && <BackendBadge />}
+                        {DEMO_MODE && r.backend && <BackendBadge />}
                       </div>
                       <div className="text-xs text-muted-foreground">{r.copy}</div>
-                      {!r.backend && <div className="mt-0.5 text-[11px] text-soft">{r.effect}</div>}
+                      {r.effect && <div className="mt-0.5 text-[11px] text-soft">{r.effect}</div>}
                     </div>
                     <Toggle
                       checked={s[r.key]}
                       label={r.label}
                       onChange={(v) => {
-                        set({ [r.key]: v } as Partial<Settings>);
-                        if (r.backend) showBackendNotice(r.label, "The switch is remembered here, but it only takes effect once sign-up exists on the server.");
-                        else toast.success(`${r.label} ${v ? "on" : "off"}`);
+                        void set({ [r.key]: v } as Partial<Settings>, `${r.label} ${v ? "on" : "off"}`);
                       }}
                     />
                   </div>
@@ -95,8 +109,7 @@ function SettingsPage() {
                       options={LANGUAGES}
                       value={s.defaultLanguage}
                       onChange={(e) => {
-                        set({ defaultLanguage: e.target.value });
-                        toast.success(`Default language: ${e.target.value}`);
+                        void set({ defaultLanguage: e.target.value }, `Default language: ${e.target.value}`);
                       }}
                     />
                   </div>
@@ -110,7 +123,7 @@ function SettingsPage() {
             <ShieldCheck className="size-5" />
           </span>
           <h2 className="mt-3 font-bold">Administrator account</h2>
-          <p className="mt-1 text-sm text-muted-foreground">You're signed in as the StreamVerse administrator (demo).</p>
+          <p className="mt-1 text-sm text-muted-foreground">You're signed in as the StreamVerse administrator{DEMO_MODE ? " (demo)" : ""}.</p>
           {[
             ["Name", adminUser.name],
             ["Account type", adminUser.role],

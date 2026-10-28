@@ -4,6 +4,8 @@
  * dev adapter (Section 84/85) — nothing outside `services/storage/` ever imports an SDK directly or
  * knows which provider is configured.
  */
+import type { Readable } from "node:stream";
+
 export interface PresignedUpload {
   url: string;
   method: "PUT";
@@ -23,7 +25,15 @@ export interface MultipartPart {
   etag: string;
 }
 
+export interface ListedObject {
+  key: string;
+  sizeBytes: number;
+  lastModified?: Date;
+}
+
 export interface StorageProvider {
+  /** One bounded page of keys under a prefix (reconciliation only - never called per page request). */
+  listObjects(prefix: string, limit: number, continuationToken?: string): Promise<{ objects: ListedObject[]; nextToken?: string }>;
   /** Section 8/80: a short-lived, single-object, single-method presigned PUT — never broad bucket access. */
   createUploadUrl(key: string, contentType: string, ttlSeconds: number): Promise<PresignedUpload>;
   /** Section 51/54/81: a short-lived signed GET for private media. */
@@ -36,6 +46,8 @@ export interface StorageProvider {
   copyObject?(sourceKey: string, destKey: string): Promise<void>;
   /** Reads a byte range — used for magic-byte sniffing (Section 16) without downloading a whole file. */
   getObjectRange(key: string, start: number, end: number): Promise<Buffer>;
+  /** The whole object as a stream: offline downloads are proxied through the API, so the browser needs no bucket CORS. */
+  getObjectStream(key: string): Promise<{ stream: Readable; sizeBytes?: number }>;
   /** Server-side upload (e.g. a processed rendition) — not a presigned client flow. */
   putObject(key: string, body: Buffer, contentType: string): Promise<void>;
   /** A durable URL for a PUBLIC object (Section 52) — never used for private media. */
@@ -46,4 +58,6 @@ export interface StorageProvider {
   signMultipartPart(key: string, providerUploadId: string, partNumber: number, ttlSeconds: number): Promise<string>;
   completeMultipartUpload(key: string, providerUploadId: string, parts: MultipartPart[]): Promise<{ etag?: string }>;
   abortMultipartUpload(key: string, providerUploadId: string): Promise<void>;
+  /** The parts the storage actually received (number + ETag): lets the server finish an upload even when the browser could not read the ETags. */
+  listMultipartParts(key: string, providerUploadId: string): Promise<MultipartPart[]>;
 }

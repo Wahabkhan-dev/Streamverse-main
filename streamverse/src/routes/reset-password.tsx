@@ -28,7 +28,7 @@ function ResetPasswordPage() {
     return (
       <div className="grid min-h-dvh grid-rows-[auto_1fr] bg-background">
         <header className="border-b border-border bg-ink px-6 py-4">
-          <Link to="/"><Logo /></Link>
+          <Logo />
         </header>
         <main className="flex items-center justify-center px-4 py-12">
           <div className="w-full max-w-[420px] rounded-2xl border border-border bg-surface-2 p-8 text-center shadow-xl">
@@ -52,7 +52,7 @@ function ResetPasswordPage() {
     return (
       <div className="grid min-h-dvh grid-rows-[auto_1fr] bg-background">
         <header className="border-b border-border bg-ink px-6 py-4">
-          <Link to="/"><Logo /></Link>
+          <Logo />
         </header>
         <main className="flex items-center justify-center px-4 py-12">
           <div className="w-full max-w-[420px] rounded-2xl border border-border bg-surface-2 p-8 text-center shadow-xl">
@@ -108,7 +108,7 @@ function ResetPasswordPage() {
   return (
     <div className="grid min-h-dvh grid-rows-[auto_1fr_auto] bg-background">
       <header className="border-b border-border bg-ink px-6 py-4">
-        <Link to="/"><Logo /></Link>
+        <Logo />
       </header>
 
       <main className="flex items-center justify-center px-4 py-12">
@@ -160,7 +160,7 @@ function ResetPasswordPage() {
 
               <button
                 type="submit"
-                disabled={loading || !password || !confirm}
+                disabled={loading}
                 className="mt-2 w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary/90 disabled:opacity-60"
               >
                 {loading ? "Resetting…" : "Reset password"}

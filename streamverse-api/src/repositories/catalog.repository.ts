@@ -45,7 +45,7 @@ export function withCustomerFilters(base: Prisma.ContentWhereInput, filters: Cus
 export async function listMovies(contentWhere: Prisma.ContentWhereInput, skip: number, take: number, orderBy: Prisma.ContentOrderByWithRelationInput) {
   const where: Prisma.MovieWhereInput = { content: contentWhere };
   const [rows, total] = await Promise.all([
-    prisma.movie.findMany({ where, skip, take, orderBy: { content: orderBy }, include: { content: { include: WITH_CONTENT_RELATIONS } } }),
+    prisma.movie.findMany({ where, skip, take, orderBy: { content: orderBy }, include: { content: { include: WITH_CONTENT_RELATIONS }, posterAsset: { select: { storageKey: true } } } }),
     prisma.movie.count({ where }),
   ]);
   return { rows, total };
@@ -54,7 +54,7 @@ export async function listMovies(contentWhere: Prisma.ContentWhereInput, skip: n
 export async function listEbooks(contentWhere: Prisma.ContentWhereInput, skip: number, take: number, orderBy: Prisma.ContentOrderByWithRelationInput) {
   const where: Prisma.EbookWhereInput = { content: contentWhere };
   const [rows, total] = await Promise.all([
-    prisma.ebook.findMany({ where, skip, take, orderBy: { content: orderBy }, include: { content: { include: WITH_CONTENT_RELATIONS } } }),
+    prisma.ebook.findMany({ where, skip, take, orderBy: { content: orderBy }, include: { content: { include: WITH_CONTENT_RELATIONS }, frontCoverAsset: { select: { storageKey: true } } } }),
     prisma.ebook.count({ where }),
   ]);
   return { rows, total };
@@ -63,7 +63,7 @@ export async function listEbooks(contentWhere: Prisma.ContentWhereInput, skip: n
 export async function listAudiobooks(contentWhere: Prisma.ContentWhereInput, skip: number, take: number, orderBy: Prisma.ContentOrderByWithRelationInput) {
   const where: Prisma.AudiobookWhereInput = { content: contentWhere };
   const [rows, total] = await Promise.all([
-    prisma.audiobook.findMany({ where, skip, take, orderBy: { content: orderBy }, include: { content: { include: WITH_CONTENT_RELATIONS } } }),
+    prisma.audiobook.findMany({ where, skip, take, orderBy: { content: orderBy }, include: { content: { include: WITH_CONTENT_RELATIONS }, coverAsset: { select: { storageKey: true } } } }),
     prisma.audiobook.count({ where }),
   ]);
   return { rows, total };
@@ -72,7 +72,7 @@ export async function listAudiobooks(contentWhere: Prisma.ContentWhereInput, ski
 export const findMovieBySlug = (slug: string) =>
   prisma.movie.findFirst({
     where: { content: { slug } },
-    include: { content: { include: WITH_CONTENT_RELATIONS_AND_TERRITORY }, cast: { orderBy: { displayOrder: "asc" } }, crew: { orderBy: { displayOrder: "asc" } }, captions: { include: { language: true } }, audioTracks: { include: { language: true } } },
+    include: { content: { include: WITH_CONTENT_RELATIONS_AND_TERRITORY }, cast: { orderBy: { displayOrder: "asc" } }, crew: { orderBy: { displayOrder: "asc" } }, captions: { include: { language: true } }, audioTracks: { include: { language: true } }, trailerAsset: { select: { status: true } }, teaserAsset: { select: { status: true } } },
   });
 
 export const findEbookBySlug = (slug: string) => prisma.ebook.findFirst({ where: { content: { slug } }, include: { content: { include: WITH_CONTENT_RELATIONS_AND_TERRITORY }, editions: { include: { language: true } } } });
@@ -89,11 +89,28 @@ export const listAllVisible = (type: "MOVIE" | "EBOOK" | "AUDIOBOOK", now = new 
  * array kept in sync by hand. `flag` is one of the boolean promotion flags, or "LATEST" to sort by
  * release/publish date instead of filtering by a flag at all.
  */
-export function listDynamic(flag: "FEATURED" | "TRENDING" | "POPULAR" | "NEW_RELEASE" | "LATEST", limit: number, now = new Date()) {
-  const where = customerVisibleWhere(now);
+/**
+ * `contentType` scopes the query to one catalog (e.g. a "Featured eBooks" section must only ever resolve
+ * EBOOK rows) — omitted only for a section meant to mix types, which no current homepage section does.
+ */
+/**
+ * Titles for a dynamic homepage section. Titles the admin flagged (featured / trending / popular / new release) come FIRST; if
+ * there are fewer than the section's limit, the row is filled with the newest other titles of the same catalog, so a section
+ * the admin turned on is never an empty row just because nothing has been flagged yet. LATEST is simply newest first.
+ */
+export async function listDynamic(flag: "FEATURED" | "TRENDING" | "POPULAR" | "NEW_RELEASE" | "LATEST", limit: number, contentType?: Prisma.ContentWhereInput["type"], now = new Date()) {
+  const where: Prisma.ContentWhereInput = { ...customerVisibleWhere(now), ...(contentType ? { type: contentType } : {}) };
   if (flag === "LATEST") return prisma.content.findMany({ where, take: limit, orderBy: [{ releaseDate: "desc" }, { publishedAt: "desc" }], include: WITH_CONTENT_RELATIONS });
   const flagField = { FEATURED: "featured", TRENDING: "trending", POPULAR: "popular", NEW_RELEASE: "newRelease" }[flag];
-  return prisma.content.findMany({ where: { ...where, [flagField]: true }, take: limit, orderBy: { publishedAt: "desc" }, include: WITH_CONTENT_RELATIONS });
+  const flagged = await prisma.content.findMany({ where: { ...where, [flagField]: true }, take: limit, orderBy: { publishedAt: "desc" }, include: WITH_CONTENT_RELATIONS });
+  if (flagged.length >= limit) return flagged;
+  const fill = await prisma.content.findMany({
+    where: { ...where, id: { notIn: flagged.map((c) => c.id) } },
+    take: limit - flagged.length,
+    orderBy: [{ releaseDate: "desc" }, { publishedAt: "desc" }],
+    include: WITH_CONTENT_RELATIONS,
+  });
+  return [...flagged, ...fill];
 }
 
 /** The cover-ish asset + one headline field for a batch of ids, one query per type (never one per id). */

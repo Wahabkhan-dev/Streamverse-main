@@ -8,6 +8,10 @@ import { StateScreen } from "@/components/sv/states";
 import { Btn } from "@/components/sv/ui";
 import { DEMO_MODE } from "@/lib/demo";
 import { setRole, useRole, useUserHydrated } from "@/lib/user";
+import { AuthGate } from "@/components/sv/AuthGate";
+import { PageLoading } from "@/components/sv/PageLoading";
+import { useAuthState } from "@/lib/authState";
+import { useServerSettings } from "@/lib/server-settings";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -55,11 +59,24 @@ function AdminDenied() {
 }
 
 function AdminLayout() {
+  return (
+    <AuthGate fullScreen>
+      <AdminShell />
+    </AuthGate>
+  );
+}
+
+function AdminShell() {
   const [open, setOpen] = useState(false);
-  const role = useRole();
+  const storeRole = useRole();
+  const auth = useAuthState();
+  // live mode: the role is the server's answer for THIS session, never a value left in the browser store
+  const role = DEMO_MODE ? storeRole : (auth.user?.role ?? "user");
   const hydrated = useUserHydrated();
+  // live mode: the server's settings are the truth; mirror them for the screens that read them (wizard defaults, maintenance...)
+  useServerSettings();
   // wait for the saved role so an admin never sees a flash of "access required"
-  if (!hydrated) return <div className="min-h-screen bg-background" aria-busy="true" />;
+  if (!hydrated) return <PageLoading label="Loading the admin console…" fullScreen />;
   if (role !== "admin") return <AdminDenied />;
   return (
     <div className="flex min-h-screen bg-background">

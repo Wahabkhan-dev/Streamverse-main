@@ -1,10 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useGenreNames } from "@/hooks/useGenreNames";
 import { useMemo, useState } from "react";
 import { AudiobookCard, useFakeLoad } from "@/components/sv/media";
 import { FilterPills, EmptyState, Skel } from "@/components/sv/ui";
 import { useCatalog } from "@/lib/items";
-import { useGenreNames } from "@/lib/store";
+
 import { DEMO_MODE } from "@/lib/config";
+import { SubpageHero } from "@/components/sv/SubpageHero";
 import { useApiAudiobooksQuery } from "@/hooks/useApiCatalog";
 import { apiBookToLocal } from "@/lib/api-mappers";
 
@@ -12,14 +14,16 @@ export const Route = createFileRoute("/_site/audiobooks/")({
   head: () => ({
     meta: [
       { title: "Audiobooks — StreamVerse" },
-      { name: "description", content: "Listen to bestselling audiobooks narrated by top voices on StreamVerse." },
+      {
+        name: "description",
+        content: "Listen to bestselling audiobooks narrated by top voices on StreamVerse.",
+      },
       { property: "og:title", content: "Audiobooks — StreamVerse" },
       { property: "og:description", content: "Bestselling audiobooks, ready to listen anywhere." },
     ],
   }),
   component: Page,
 });
-
 
 function Page() {
   const [g, setG] = useState("All");
@@ -53,7 +57,9 @@ function Page() {
       <div className="mx-auto max-w-[1600px] px-4 pt-8 md:px-8">
         <Skel className="h-8 w-40" />
         <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 2xl:grid-cols-7">
-          {Array.from({ length: 12 }, (_, i) => <Skel key={i} className="aspect-square" />)}
+          {Array.from({ length: 12 }, (_, i) => (
+            <Skel key={i} className="aspect-square" />
+          ))}
         </div>
       </div>
     );
@@ -62,7 +68,9 @@ function Page() {
     return (
       <div className="mx-auto max-w-[1600px] px-4 pt-8 md:px-8">
         <h1 className="text-3xl font-bold tracking-tight">Audiobooks</h1>
-        <p className="mt-6 text-sm text-muted-foreground">Failed to load audiobooks. Please refresh and try again.</p>
+        <p className="mt-6 text-sm text-muted-foreground">
+          Failed to load audiobooks. Please refresh and try again.
+        </p>
       </div>
     );
   }
@@ -70,17 +78,22 @@ function Page() {
   const list = list_.filter((b) => g === "All" || b.genre === g);
 
   return (
-    <div className="mx-auto max-w-[1600px] px-4 pt-8 md:px-8">
-      <h1 className="text-3xl font-bold tracking-tight">Audiobooks</h1>
-      <div className="mt-5">
-        <FilterPills items={genreOptions} value={g} onChange={setG} />
+    <>
+      <SubpageHero placement="AUDIOBOOKS" />
+      <div className="mx-auto max-w-[1600px] px-4 pt-8 md:px-8">
+        <h1 className="text-3xl font-bold tracking-tight">Audiobooks</h1>
+        <div className="mt-5">
+          <FilterPills items={genreOptions} value={g} onChange={setG} />
+        </div>
+        <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 2xl:grid-cols-7">
+          {DEMO_MODE && loading
+            ? Array.from({ length: 12 }, (_, i) => <Skel key={i} className="aspect-square" />)
+            : list.map((b) => <AudiobookCard key={b.slug} b={b} fixed={false} />)}
+        </div>
+        {!(DEMO_MODE && loading) && list.length === 0 && (
+          <EmptyState title={`No ${g} audiobooks yet`} sub="New titles are added every week." />
+        )}
       </div>
-      <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 2xl:grid-cols-7">
-        {DEMO_MODE && loading
-          ? Array.from({ length: 12 }, (_, i) => <Skel key={i} className="aspect-square" />)
-          : list.map((b) => <AudiobookCard key={b.slug} b={b} fixed={false} />)}
-      </div>
-      {!(DEMO_MODE && loading) && list.length === 0 && <EmptyState title={`No ${g} audiobooks yet`} sub="New titles are added every week." />}
-    </div>
+    </>
   );
 }

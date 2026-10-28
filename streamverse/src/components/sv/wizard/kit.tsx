@@ -1,22 +1,110 @@
-import { AlertCircle, Check, Crop, Crosshair, FileAudio, FileText, FileVideo, GripVertical, ImagePlus, Pause, Play, RotateCcw, Trash2, Upload, X } from "lucide-react";
-import { createContext, useContext, useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
+import {
+  AlertCircle,
+  Check,
+  Crop,
+  Crosshair,
+  FileAudio,
+  FileText,
+  FileVideo,
+  GripVertical,
+  ImagePlus,
+  Pause,
+  Play,
+  RotateCcw,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type DragEvent,
+  type ReactNode,
+} from "react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { Btn, inputCls } from "../ui";
+import { DEMO_MODE } from "@/lib/config";
+import { Library } from "lucide-react";
+import { purposeForSlot } from "./live";
+import { ARTWORK_SLOTS, MediaPicker, type PickerSlot } from "../media/MediaPicker";
+import { processingLine } from "../media/ProcessingBar";
+import type { MediaListItem } from "@/api/mediaLibrary.api";
 
 /* ------------------------------------------------------------------ data */
 
 export const uid = () => Math.random().toString(36).slice(2, 9);
 
 export const LANGUAGES = [
-  "English", "Spanish", "French", "German", "Italian", "Portuguese", "Arabic", "Urdu", "Hindi", "Chinese", "Japanese", "Korean", "Turkish",
-  "Bengali", "Dutch", "Greek", "Hebrew", "Indonesian", "Persian", "Polish", "Russian", "Swedish", "Tamil", "Thai", "Ukrainian", "Vietnamese",
+  "English",
+  "Spanish",
+  "French",
+  "German",
+  "Italian",
+  "Portuguese",
+  "Arabic",
+  "Urdu",
+  "Hindi",
+  "Chinese",
+  "Japanese",
+  "Korean",
+  "Turkish",
+  "Bengali",
+  "Dutch",
+  "Greek",
+  "Hebrew",
+  "Indonesian",
+  "Persian",
+  "Polish",
+  "Russian",
+  "Swedish",
+  "Tamil",
+  "Thai",
+  "Ukrainian",
+  "Vietnamese",
 ];
 export const COUNTRIES = [
-  "United States", "United Kingdom", "Canada", "Australia", "Ireland", "France", "Germany", "Italy", "Spain", "Portugal", "Netherlands", "Sweden",
-  "Norway", "Denmark", "Poland", "Turkey", "Pakistan", "India", "Bangladesh", "China", "Japan", "South Korea", "Indonesia", "Thailand", "Vietnam",
-  "United Arab Emirates", "Saudi Arabia", "Egypt", "Nigeria", "South Africa", "Kenya", "Brazil", "Mexico", "Argentina", "Chile", "Colombia", "New Zealand",
+  "United States",
+  "United Kingdom",
+  "Canada",
+  "Australia",
+  "Ireland",
+  "France",
+  "Germany",
+  "Italy",
+  "Spain",
+  "Portugal",
+  "Netherlands",
+  "Sweden",
+  "Norway",
+  "Denmark",
+  "Poland",
+  "Turkey",
+  "Pakistan",
+  "India",
+  "Bangladesh",
+  "China",
+  "Japan",
+  "South Korea",
+  "Indonesia",
+  "Thailand",
+  "Vietnam",
+  "United Arab Emirates",
+  "Saudi Arabia",
+  "Egypt",
+  "Nigeria",
+  "South Africa",
+  "Kenya",
+  "Brazil",
+  "Mexico",
+  "Argentina",
+  "Chile",
+  "Colombia",
+  "New Zealand",
 ];
 export type MediaStatus = "uploading" | "paused" | "processing" | "ready" | "error";
 export interface Media {
@@ -27,9 +115,14 @@ export interface Media {
   speed: number;
   eta: number;
   proc: number;
+  /** live mode: what the server is doing now and the time it expects to need, shown under the processing bar */
+  procStep?: string;
+  procEta?: number | null;
   duration?: number;
   error?: string;
   transcode?: boolean;
+  /** live mode: the stored file this slot points at once the server has verified it */
+  assetId?: string;
 }
 export interface Img {
   name: string;
@@ -43,9 +136,17 @@ export interface Img {
   lost?: boolean;
   /** stands in for artwork the title already has (older titles) */
   placeholder?: boolean;
+  /** live mode: the stored file, and where its upload stands */
+  assetId?: string;
+  up?: "uploading" | "ready" | "error";
+  upError?: string;
 }
 /** True when the image is really there: uploaded and still holding its pixels. */
-export const imgOk = (img: Img | undefined): boolean => !!img && !img.lost && (!!img.url || !!img.placeholder);
+export const imgOk = (img: Img | undefined): boolean =>
+  !!img &&
+  !img.lost &&
+  (!!img.url || !!img.placeholder) &&
+  (DEMO_MODE || (img.up !== "error" && (!!img.assetId || img.up === "uploading")));
 export interface Snapshot<D> {
   d: D;
   media: Record<string, Media>;
@@ -63,7 +164,12 @@ export interface Rules {
 
 export const MB = 1024 * 1024;
 export const GB = 1024 * MB;
-export const fmtBytes = (n: number) => (n >= GB ? `${(n / GB).toFixed(2)} GB` : n >= MB ? `${(n / MB).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+export const fmtBytes = (n: number) =>
+  n >= GB
+    ? `${(n / GB).toFixed(2)} GB`
+    : n >= MB
+      ? `${(n / MB).toFixed(1)} MB`
+      : `${Math.max(1, Math.round(n / 1024))} KB`;
 export const fmtDur = (s?: number) => {
   if (s === undefined || !isFinite(s)) return "";
   const h = Math.floor(s / 3600);
@@ -84,7 +190,11 @@ export const RENDITIONS = [
   { name: "1080p", at: 75 },
   { name: "4K", at: 100 },
 ] as const;
-export function renditionState(m: Media, at: number, firstPending: boolean): "Waiting" | "Queued" | "Processing" | "Ready" {
+export function renditionState(
+  m: Media,
+  at: number,
+  firstPending: boolean,
+): "Waiting" | "Queued" | "Processing" | "Ready" {
   if (m.status === "uploading" || m.status === "paused") return "Waiting";
   if (m.proc >= at) return "Ready";
   return firstPending ? "Processing" : "Queued";
@@ -146,7 +256,8 @@ const loadImg = (url: string) =>
 
 function probeDuration(file: File, kind: "video" | "audio"): Promise<number | undefined> {
   return new Promise((res) => {
-    if (typeof document === "undefined" || typeof URL.createObjectURL !== "function") return res(undefined);
+    if (typeof document === "undefined" || typeof URL.createObjectURL !== "function")
+      return res(undefined);
     const el = document.createElement(kind);
     const url = URL.createObjectURL(file);
     let done = false;
@@ -167,27 +278,50 @@ function probeDuration(file: File, kind: "video" | "audio"): Promise<number | un
 /** Validates a media file and registers it as an upload. Resolves with the Media that was stored. */
 export async function ingestMedia(file: File, rules: Rules, put: (m: Media) => void) {
   const ext = extOf(file.name);
-  const base = { name: file.name, size: file.size, progress: 0, speed: 0, eta: 0, proc: 0, ...(rules.transcode ? { transcode: true } : {}) };
+  const base = {
+    name: file.name,
+    size: file.size,
+    progress: 0,
+    speed: 0,
+    eta: 0,
+    proc: 0,
+    ...(rules.transcode ? { transcode: true } : {}),
+  };
   const fail = (error: string) => put({ ...base, status: "error", error });
-  if (!rules.exts.includes(ext)) return fail(`.${ext || "?"} isn't supported. Accepted: ${rules.exts.map((e) => e.toUpperCase()).join(", ")}.`);
+  if (!rules.exts.includes(ext))
+    return fail(
+      `.${ext || "?"} isn't supported. Accepted: ${rules.exts.map((e) => e.toUpperCase()).join(", ")}.`,
+    );
   if (file.size === 0) return fail("The file is empty.");
-  if (file.size > rules.maxBytes) return fail(`The file is larger than the ${fmtBytes(rules.maxBytes)} limit.`);
+  if (file.size > rules.maxBytes)
+    return fail(`The file is larger than the ${fmtBytes(rules.maxBytes)} limit.`);
   if (rules.magic) {
     const head = await readHead(file, 4);
-    const ok = rules.magic === "epub" ? head[0] === 0x50 && head[1] === 0x4b : head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46;
+    const ok =
+      rules.magic === "epub"
+        ? head[0] === 0x50 && head[1] === 0x4b
+        : head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46;
     if (!ok) return fail(`This doesn't look like a valid ${rules.magic.toUpperCase()} file.`);
   }
   if (rules.kind === "caption") {
     const text = (await readText(file, 200_000)).replace(/^﻿/, "");
-    if (ext === "vtt" && !text.trimStart().startsWith("WEBVTT")) return fail('Invalid VTT: the file must start with "WEBVTT".');
-    if (ext === "srt" && !text.includes("-->")) return fail("Invalid SRT: no timecodes were found.");
+    if (ext === "vtt" && !text.trimStart().startsWith("WEBVTT"))
+      return fail('Invalid VTT: the file must start with "WEBVTT".');
+    if (ext === "srt" && !text.includes("-->"))
+      return fail("Invalid SRT: no timecodes were found.");
   }
   let duration: number | undefined;
   if (rules.kind === "video" || rules.kind === "audio") {
     duration = await probeDuration(file, rules.kind);
-    if (duration !== undefined && duration < 1) return fail("The media is shorter than one second, so it can't be used.");
-    if (duration !== undefined && ((rules.minDur && duration < rules.minDur) || (rules.maxDur && duration > rules.maxDur))) {
-      toast.warning(`${file.name} is ${fmtDur(duration)}. Recommended length is ${fmtDur(rules.minDur ?? 0)} to ${fmtDur(rules.maxDur ?? 0)}.`);
+    if (duration !== undefined && duration < 1)
+      return fail("The media is shorter than one second, so it can't be used.");
+    if (
+      duration !== undefined &&
+      ((rules.minDur && duration < rules.minDur) || (rules.maxDur && duration > rules.maxDur))
+    ) {
+      toast.warning(
+        `${file.name} is ${fmtDur(duration)}. Recommended length is ${fmtDur(rules.minDur ?? 0)} to ${fmtDur(rules.maxDur ?? 0)}.`,
+      );
     }
   }
   put({ ...base, status: "uploading", ...(duration !== undefined ? { duration } : {}) });
@@ -207,7 +341,10 @@ export function advanceMedia(media: Record<string, Media>): Record<string, Media
       const progress = Math.min(100, m.progress + step);
       const speed = 7 + Math.random() * 7;
       const eta = Math.max(1, Math.round(((100 - progress) / (step / 0.3)) * 1));
-      next[k] = progress >= 100 ? { ...m, progress: 100, speed: 0, eta: 0, status: "processing", proc: 0 } : { ...m, progress, speed, eta };
+      next[k] =
+        progress >= 100
+          ? { ...m, progress: 100, speed: 0, eta: 0, status: "processing", proc: 0 }
+          : { ...m, progress, speed, eta };
     } else if (m.status === "processing") {
       changed = true;
       const proc = Math.min(100, m.proc + (m.transcode ? 5 : 40) * sim.factor);
@@ -217,9 +354,14 @@ export function advanceMedia(media: Record<string, Media>): Record<string, Media
   return changed ? next : null;
 }
 
-export async function ingestImage(file: File, rec: { w: number; h: number }, ratio: number | undefined): Promise<Img> {
+export async function ingestImage(
+  file: File,
+  rec: { w: number; h: number },
+  ratio: number | undefined,
+): Promise<Img> {
   const ext = extOf(file.name);
-  if (!["jpg", "jpeg", "png", "webp"].includes(ext)) throw new Error(`.${ext || "?"} isn't supported. Use JPG, PNG or WebP.`);
+  if (!["jpg", "jpeg", "png", "webp"].includes(ext))
+    throw new Error(`.${ext || "?"} isn't supported. Use JPG, PNG or WebP.`);
   if (file.size > 10 * MB) throw new Error("The image is larger than 10 MB.");
   const url0 = await readUrl(file);
   let el: HTMLImageElement;
@@ -230,8 +372,14 @@ export async function ingestImage(file: File, rec: { w: number; h: number }, rat
   }
   const w = el.naturalWidth || rec.w;
   const h = el.naturalHeight || rec.h;
-  if (el.naturalWidth && (w < rec.w * 0.5 || h < rec.h * 0.5)) throw new Error(`The image is too small (${w} × ${h}). Minimum is ${Math.round(rec.w * 0.5)} × ${Math.round(rec.h * 0.5)}.`);
-  if (ratio && el.naturalWidth && Math.abs(w / h - ratio) / ratio > 0.12) toast.warning("The aspect ratio differs from the recommendation. Use Crop or the focal point so nothing is stretched.");
+  if (el.naturalWidth && (w < rec.w * 0.5 || h < rec.h * 0.5))
+    throw new Error(
+      `The image is too small (${w} × ${h}). Minimum is ${Math.round(rec.w * 0.5)} × ${Math.round(rec.h * 0.5)}.`,
+    );
+  if (ratio && el.naturalWidth && Math.abs(w / h - ratio) / ratio > 0.12)
+    toast.warning(
+      "The aspect ratio differs from the recommendation. Use Crop or the focal point so nothing is stretched.",
+    );
   let url = url0;
   try {
     const max = 1600;
@@ -275,7 +423,19 @@ async function cropImage(img: Img, ratio: number): Promise<Img> {
 
 /* ------------------------------------------------------------------ layout bits */
 
-export function Section({ title, desc, action, children, className }: { title: string; desc?: string | undefined; action?: ReactNode; children: ReactNode; className?: string | undefined }) {
+export function Section({
+  title,
+  desc,
+  action,
+  children,
+  className,
+}: {
+  title: string;
+  desc?: string | undefined;
+  action?: ReactNode;
+  children: ReactNode;
+  className?: string | undefined;
+}) {
   return (
     <section className={cn("rounded-xl border border-border bg-surface", className)}>
       <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
@@ -290,23 +450,47 @@ export function Section({ title, desc, action, children, className }: { title: s
   );
 }
 
-export const OptionalTag = () => <span className="ml-1.5 align-middle text-[9px] font-bold tracking-wider text-muted-foreground uppercase">Optional</span>;
+export const OptionalTag = () => (
+  <span className="ml-1.5 align-middle text-[9px] font-bold tracking-wider text-muted-foreground uppercase">
+    Optional
+  </span>
+);
 
 /** A value the system fills in. Looks different from an input on purpose, so nobody tries to "fill it in". */
-export function SystemField({ label, value, note }: { label: string; value: ReactNode; note?: string }) {
+export function SystemField({
+  label,
+  value,
+  note,
+}: {
+  label: string;
+  value: ReactNode;
+  note?: string;
+}) {
   return (
     <div>
       <div className="mb-1.5 text-xs font-semibold text-soft">{label}</div>
       <div className="flex h-10 items-center justify-between gap-2 rounded-md border border-dashed border-border bg-surface-2/60 px-3 text-sm text-muted-foreground">
         <span className="truncate font-mono text-xs text-foreground/80">{value}</span>
-        <span className="shrink-0 text-[9px] font-bold tracking-wider uppercase">{note ?? "Auto-generated"}</span>
+        <span className="shrink-0 text-[9px] font-bold tracking-wider uppercase">
+          {note ?? "Auto-generated"}
+        </span>
       </div>
     </div>
   );
 }
 
 /** Collapsible group for details that are not needed to publish. */
-export function Advanced({ title = "Advanced details", desc = "Optional", defaultOpen, children }: { title?: string; desc?: string; defaultOpen?: boolean; children: ReactNode }) {
+export function Advanced({
+  title = "Advanced details",
+  desc = "Optional",
+  defaultOpen,
+  children,
+}: {
+  title?: string;
+  desc?: string;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
   return (
     <details open={defaultOpen} className="group rounded-xl border border-border bg-surface">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 [&::-webkit-details-marker]:hidden">
@@ -315,14 +499,34 @@ export function Advanced({ title = "Advanced details", desc = "Optional", defaul
           <span className="mt-0.5 block text-xs text-muted-foreground">{desc}</span>
         </span>
         <span className="text-xs font-semibold text-primary-text group-open:hidden">Show</span>
-        <span className="hidden text-xs font-semibold text-primary-text group-open:inline">Hide</span>
+        <span className="hidden text-xs font-semibold text-primary-text group-open:inline">
+          Hide
+        </span>
       </summary>
       <div className="space-y-4 border-t border-border p-5">{children}</div>
     </details>
   );
 }
 
-export function FieldBox({ id, label, required, optional, hint, count, children, className }: { id: string; label: string; required?: boolean | undefined; optional?: boolean | undefined; hint?: string | undefined; count?: ReactNode; children: ReactNode; className?: string | undefined }) {
+export function FieldBox({
+  id,
+  label,
+  required,
+  optional,
+  hint,
+  count,
+  children,
+  className,
+}: {
+  id: string;
+  label: string;
+  required?: boolean | undefined;
+  optional?: boolean | undefined;
+  hint?: string | undefined;
+  count?: ReactNode;
+  children: ReactNode;
+  className?: string | undefined;
+}) {
   const { errors } = useWiz();
   const err = errors[id];
   return (
@@ -334,9 +538,19 @@ export function FieldBox({ id, label, required, optional, hint, count, children,
         </label>
         {count && <span className="text-[11px] text-muted-foreground">{count}</span>}
       </div>
-      <div className={cn(err && "rounded-md ring-1 ring-primary [&_input]:border-primary [&_select]:border-primary [&_textarea]:border-primary")}>{children}</div>
+      <div
+        className={cn(
+          err &&
+            "rounded-md ring-1 ring-primary [&_input]:border-primary [&_select]:border-primary [&_textarea]:border-primary",
+        )}
+      >
+        {children}
+      </div>
       {err ? (
-        <p role="alert" className="mt-1 flex items-center gap-1 text-[11px] font-medium text-primary-text">
+        <p
+          role="alert"
+          className="mt-1 flex items-center gap-1 text-[11px] font-medium text-primary-text"
+        >
           <AlertCircle className="size-3" /> {err}
         </p>
       ) : (
@@ -346,18 +560,96 @@ export function FieldBox({ id, label, required, optional, hint, count, children,
   );
 }
 
-export function TextBox({ id, label, value, onChange, required, optional, hint, placeholder, type = "text", maxLength, className, count }: { id: string; label: string; value: string; onChange: (v: string) => void; required?: boolean | undefined; optional?: boolean | undefined; hint?: string | undefined; placeholder?: string | undefined; type?: string; maxLength?: number | undefined; className?: string | undefined; count?: ReactNode }) {
+export function TextBox({
+  id,
+  label,
+  value,
+  onChange,
+  required,
+  optional,
+  hint,
+  placeholder,
+  type = "text",
+  maxLength,
+  className,
+  count,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  required?: boolean | undefined;
+  optional?: boolean | undefined;
+  hint?: string | undefined;
+  placeholder?: string | undefined;
+  type?: string;
+  maxLength?: number | undefined;
+  className?: string | undefined;
+  count?: ReactNode;
+}) {
   return (
-    <FieldBox id={id} label={label} required={required} optional={optional} hint={hint} className={className} count={count}>
-      <input id={id} aria-label={label} type={type} value={value} maxLength={maxLength} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} className={inputCls} />
+    <FieldBox
+      id={id}
+      label={label}
+      required={required}
+      optional={optional}
+      hint={hint}
+      className={className}
+      count={count}
+    >
+      <input
+        id={id}
+        aria-label={label}
+        type={type}
+        value={value}
+        maxLength={maxLength}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        className={inputCls}
+      />
     </FieldBox>
   );
 }
 
-export function SelectBox2({ id, label, value, onChange, options, required, optional, hint, className, placeholder = "Select…" }: { id: string; label: string; value: string; onChange: (v: string) => void; options: string[]; required?: boolean | undefined; optional?: boolean | undefined; placeholder?: string; hint?: string | undefined; className?: string | undefined }) {
+export function SelectBox2({
+  id,
+  label,
+  value,
+  onChange,
+  options,
+  required,
+  optional,
+  hint,
+  className,
+  placeholder = "Select…",
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+  required?: boolean | undefined;
+  optional?: boolean | undefined;
+  placeholder?: string;
+  hint?: string | undefined;
+  className?: string | undefined;
+}) {
   return (
-    <FieldBox id={id} label={label} required={required} optional={optional} hint={hint} className={className}>
-      <select id={id} aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} className={cn(inputCls, "appearance-none")}>
+    <FieldBox
+      id={id}
+      label={label}
+      required={required}
+      optional={optional}
+      hint={hint}
+      className={className}
+    >
+      <select
+        id={id}
+        aria-label={label}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={cn(inputCls, "appearance-none")}
+      >
         <option value="">{placeholder}</option>
         {options.map((o) => (
           <option key={o}>{o}</option>
@@ -368,25 +660,77 @@ export function SelectBox2({ id, label, value, onChange, options, required, opti
 }
 
 /** Textarea with a tiny formatting toolbar (markdown-style bold / italic / list). */
-export function RichText({ id, label, value, onChange, required, optional, hint, rows = 6 }: { id: string; label: string; value: string; onChange: (v: string) => void; required?: boolean | undefined; optional?: boolean | undefined; hint?: string | undefined; rows?: number }) {
+export function RichText({
+  id,
+  label,
+  value,
+  onChange,
+  required,
+  optional,
+  hint,
+  rows = 6,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  required?: boolean | undefined;
+  optional?: boolean | undefined;
+  hint?: string | undefined;
+  rows?: number;
+}) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const wrap = (before: string, after = before) => {
     const el = ref.current;
     if (!el) return;
     const { selectionStart: a, selectionEnd: b } = el;
-    onChange(`${value.slice(0, a)}${before}${value.slice(a, b) || "text"}${after}${value.slice(b)}`);
+    onChange(
+      `${value.slice(0, a)}${before}${value.slice(a, b) || "text"}${after}${value.slice(b)}`,
+    );
     el.focus();
   };
-  const tool = "grid size-7 place-items-center rounded text-xs font-bold text-soft hover:bg-surface-3";
+  const tool =
+    "grid size-7 place-items-center rounded text-xs font-bold text-soft hover:bg-surface-3";
   return (
-    <FieldBox id={id} label={label} required={required} optional={optional} hint={hint} count={`${value.length} characters`}>
+    <FieldBox
+      id={id}
+      label={label}
+      required={required}
+      optional={optional}
+      hint={hint}
+      count={`${value.length} characters`}
+    >
       <div className="overflow-hidden rounded-md border border-input bg-surface-2">
         <div className="flex gap-0.5 border-b border-border bg-surface px-1.5 py-1">
-          <button type="button" className={tool} aria-label="Bold" onClick={() => wrap("**")}>B</button>
-          <button type="button" className={cn(tool, "italic")} aria-label="Italic" onClick={() => wrap("_")}>I</button>
-          <button type="button" className={tool} aria-label="Bulleted list" onClick={() => wrap("\n- ", "")}>•</button>
+          <button type="button" className={tool} aria-label="Bold" onClick={() => wrap("**")}>
+            B
+          </button>
+          <button
+            type="button"
+            className={cn(tool, "italic")}
+            aria-label="Italic"
+            onClick={() => wrap("_")}
+          >
+            I
+          </button>
+          <button
+            type="button"
+            className={tool}
+            aria-label="Bulleted list"
+            onClick={() => wrap("\n- ", "")}
+          >
+            •
+          </button>
         </div>
-        <textarea id={id} aria-label={label} ref={ref} rows={rows} value={value} onChange={(e) => onChange(e.target.value)} className="w-full resize-y bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground" />
+        <textarea
+          id={id}
+          aria-label={label}
+          ref={ref}
+          rows={rows}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full resize-y bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground"
+        />
       </div>
     </FieldBox>
   );
@@ -394,7 +738,29 @@ export function RichText({ id, label, value, onChange, required, optional, hint,
 
 /* ------------------------------------------------------------------ selects & tags */
 
-export function SearchSelect({ id, label, value, onChange, options, required, optional, hint, placeholder = "Search…", className }: { id: string; label?: string; value: string; onChange: (v: string) => void; options: string[]; required?: boolean | undefined; optional?: boolean | undefined; hint?: string | undefined; placeholder?: string; className?: string | undefined }) {
+export function SearchSelect({
+  id,
+  label,
+  value,
+  onChange,
+  options,
+  required,
+  optional,
+  hint,
+  placeholder = "Search…",
+  className,
+}: {
+  id: string;
+  label?: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+  required?: boolean | undefined;
+  optional?: boolean | undefined;
+  hint?: string | undefined;
+  placeholder?: string;
+  className?: string | undefined;
+}) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const ref = useRef<HTMLInputElement>(null);
@@ -425,8 +791,13 @@ export function SearchSelect({ id, label, value, onChange, options, required, op
         className={inputCls}
       />
       {open && (
-        <ul role="listbox" className="absolute z-40 mt-1 max-h-56 w-full overflow-auto rounded-md border border-border bg-surface-2 py-1 shadow-card">
-          {list.length === 0 && <li className="px-3 py-2 text-xs text-muted-foreground">No matches</li>}
+        <ul
+          role="listbox"
+          className="absolute z-40 mt-1 max-h-56 w-full overflow-auto rounded-md border border-border bg-surface-2 py-1 shadow-card"
+        >
+          {list.length === 0 && (
+            <li className="px-3 py-2 text-xs text-muted-foreground">No matches</li>
+          )}
           {list.map((o) => (
             <li
               key={o}
@@ -438,7 +809,10 @@ export function SearchSelect({ id, label, value, onChange, options, required, op
                 setOpen(false);
                 ref.current?.blur();
               }}
-              className={cn("flex cursor-pointer items-center justify-between px-3 py-1.5 text-sm hover:bg-surface-3", o === value && "text-primary-text")}
+              className={cn(
+                "flex cursor-pointer items-center justify-between px-3 py-1.5 text-sm hover:bg-surface-3",
+                o === value && "text-primary-text",
+              )}
             >
               {o}
               {o === value && <Check className="size-3.5" />}
@@ -449,7 +823,14 @@ export function SearchSelect({ id, label, value, onChange, options, required, op
     </div>
   );
   return label ? (
-    <FieldBox id={id} label={label} required={required} optional={optional} hint={hint} className={className}>
+    <FieldBox
+      id={id}
+      label={label}
+      required={required}
+      optional={optional}
+      hint={hint}
+      className={className}
+    >
       {input}
     </FieldBox>
   ) : (
@@ -457,10 +838,32 @@ export function SearchSelect({ id, label, value, onChange, options, required, op
   );
 }
 
-export function MultiSelect({ id, label, values, onChange, options, hint, placeholder = "Search to add…", required, optional }: { id: string; label: string; values: string[]; onChange: (v: string[]) => void; options: string[]; hint?: string | undefined; placeholder?: string; required?: boolean | undefined; optional?: boolean | undefined }) {
+export function MultiSelect({
+  id,
+  label,
+  values,
+  onChange,
+  options,
+  hint,
+  placeholder = "Search to add…",
+  required,
+  optional,
+}: {
+  id: string;
+  label: string;
+  values: string[];
+  onChange: (v: string[]) => void;
+  options: string[];
+  hint?: string | undefined;
+  placeholder?: string;
+  required?: boolean | undefined;
+  optional?: boolean | undefined;
+}) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
-  const list = options.filter((o) => !values.includes(o) && o.toLowerCase().includes(q.toLowerCase()));
+  const list = options.filter(
+    (o) => !values.includes(o) && o.toLowerCase().includes(q.toLowerCase()),
+  );
   const add = (o: string) => {
     onChange([...values, o]);
     setQ("");
@@ -470,9 +873,17 @@ export function MultiSelect({ id, label, values, onChange, options, hint, placeh
       <div className="relative">
         <div className="flex min-h-10 flex-wrap items-center gap-1.5 rounded-md border border-input bg-surface-2 px-2 py-1.5">
           {values.map((v) => (
-            <span key={v} className="inline-flex items-center gap-1 rounded bg-surface-3 px-2 py-0.5 text-xs font-medium">
+            <span
+              key={v}
+              className="inline-flex items-center gap-1 rounded bg-surface-3 px-2 py-0.5 text-xs font-medium"
+            >
               {v}
-              <button type="button" aria-label={`Remove ${v}`} onClick={() => onChange(values.filter((x) => x !== v))} className="text-muted-foreground hover:text-foreground">
+              <button
+                type="button"
+                aria-label={`Remove ${v}`}
+                onClick={() => onChange(values.filter((x) => x !== v))}
+                className="text-muted-foreground hover:text-foreground"
+              >
                 <X className="size-3" />
               </button>
             </span>
@@ -496,7 +907,10 @@ export function MultiSelect({ id, label, values, onChange, options, hint, placeh
           />
         </div>
         {open && list.length > 0 && (
-          <ul role="listbox" className="absolute z-40 mt-1 max-h-56 w-full overflow-auto rounded-md border border-border bg-surface-2 py-1 shadow-card">
+          <ul
+            role="listbox"
+            className="absolute z-40 mt-1 max-h-56 w-full overflow-auto rounded-md border border-border bg-surface-2 py-1 shadow-card"
+          >
             {list.map((o) => (
               <li
                 key={o}
@@ -518,7 +932,25 @@ export function MultiSelect({ id, label, values, onChange, options, hint, placeh
   );
 }
 
-export function TagInput({ id, label, values, onChange, max = 20, noun, placeholder, optional }: { id: string; label: string; optional?: boolean; values: string[]; onChange: (v: string[]) => void; max?: number; noun: string; placeholder?: string | undefined }) {
+export function TagInput({
+  id,
+  label,
+  values,
+  onChange,
+  max = 20,
+  noun,
+  placeholder,
+  optional,
+}: {
+  id: string;
+  label: string;
+  optional?: boolean;
+  values: string[];
+  onChange: (v: string[]) => void;
+  max?: number;
+  noun: string;
+  placeholder?: string | undefined;
+}) {
   const [text, setText] = useState("");
   const commit = (raw: string) => {
     const parts = raw
@@ -566,9 +998,17 @@ export function TagInput({ id, label, values, onChange, max = 20, noun, placehol
       {values.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {values.map((t) => (
-            <span key={t} className="inline-flex items-center gap-1 rounded-full border border-border bg-surface-3 py-0.5 pr-1.5 pl-3 text-xs font-medium">
+            <span
+              key={t}
+              className="inline-flex items-center gap-1 rounded-full border border-border bg-surface-3 py-0.5 pr-1.5 pl-3 text-xs font-medium"
+            >
               {t}
-              <button type="button" aria-label={`Remove ${t}`} onClick={() => onChange(values.filter((x) => x !== t))} className="grid size-4 place-items-center rounded-full text-muted-foreground hover:bg-surface-2 hover:text-foreground">
+              <button
+                type="button"
+                aria-label={`Remove ${t}`}
+                onClick={() => onChange(values.filter((x) => x !== t))}
+                className="grid size-4 place-items-center rounded-full text-muted-foreground hover:bg-surface-2 hover:text-foreground"
+              >
                 <X className="size-3" />
               </button>
             </span>
@@ -579,23 +1019,73 @@ export function TagInput({ id, label, values, onChange, max = 20, noun, placehol
   );
 }
 
-export function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label?: string }) {
+export function Switch({
+  checked,
+  onChange,
+  label,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label?: string;
+  disabled?: boolean;
+}) {
   return (
-    <button type="button" role="switch" aria-checked={checked} aria-label={label} onClick={() => onChange(!checked)} className="inline-flex items-center gap-2 text-xs text-soft">
-      <span className={cn("relative h-5 w-9 shrink-0 rounded-full border border-border transition-colors", checked ? "border-primary bg-primary" : "bg-surface-3")}>
-        <span className={cn("absolute top-0.5 size-3.5 rounded-full bg-foreground transition-all", checked ? "left-[18px]" : "left-0.5")} />
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={cn("inline-flex items-center gap-2 text-xs text-soft", disabled && "cursor-not-allowed opacity-50")}
+    >
+      <span
+        className={cn(
+          "relative h-5 w-9 shrink-0 rounded-full border border-border transition-colors",
+          checked ? "border-primary bg-primary" : "bg-surface-3",
+        )}
+      >
+        <span
+          className={cn(
+            "absolute top-0.5 size-3.5 rounded-full bg-foreground transition-all",
+            checked ? "left-[18px]" : "left-0.5",
+          )}
+        />
       </span>
       {label}
     </button>
   );
 }
 
-export function RadioCards<T extends string>({ value, onChange, options, name }: { value: T; onChange: (v: T) => void; options: { value: T; title: string; desc?: string }[]; name: string }) {
+export function RadioCards<T extends string>({
+  value,
+  onChange,
+  options,
+  name,
+}: {
+  value: T;
+  onChange: (v: T) => void;
+  options: { value: T; title: string; desc?: string }[];
+  name: string;
+}) {
   return (
     <div className="grid gap-2 sm:grid-cols-3">
       {options.map((o) => (
-        <label key={o.value} className={cn("flex cursor-pointer items-start gap-3 rounded-md border bg-surface-2 p-3", value === o.value ? "border-primary" : "border-border hover:border-foreground/25")}>
-          <input type="radio" name={name} className="mt-1 accent-[var(--primary)]" checked={value === o.value} onChange={() => onChange(o.value)} />
+        <label
+          key={o.value}
+          className={cn(
+            "flex cursor-pointer items-start gap-3 rounded-md border bg-surface-2 p-3",
+            value === o.value ? "border-primary" : "border-border hover:border-foreground/25",
+          )}
+        >
+          <input
+            type="radio"
+            name={name}
+            className="mt-1 accent-[var(--primary)]"
+            checked={value === o.value}
+            onChange={() => onChange(o.value)}
+          />
           <span>
             <span className="block text-sm font-semibold">{o.title}</span>
             {o.desc && <span className="block text-xs text-muted-foreground">{o.desc}</span>}
@@ -642,7 +1132,12 @@ export function useReorder<T>(items: T[], onChange: (items: T[]) => void) {
   });
 }
 export const DragHandle = (props: React.HTMLAttributes<HTMLSpanElement>) => (
-  <span {...props} title="Drag to reorder" aria-hidden="true" className="cursor-grab text-muted-foreground active:cursor-grabbing">
+  <span
+    {...props}
+    title="Drag to reorder"
+    aria-hidden="true"
+    className="cursor-grab text-muted-foreground active:cursor-grabbing"
+  >
     <GripVertical className="size-4" />
   </span>
 );
@@ -657,13 +1152,100 @@ const statusChip: Record<string, string> = {
   ready: "border-success/30 bg-success/10 text-success",
   error: "border-primary/40 bg-primary/10 text-primary-text",
 };
-const statusText: Record<string, string> = { uploading: "Uploading", paused: "Paused", processing: "Processing", ready: "Ready", error: "Failed" };
+const statusText: Record<string, string> = {
+  uploading: "Uploading",
+  paused: "Paused",
+  processing: "Processing",
+  ready: "Ready",
+  error: "Failed",
+};
 
-export function MediaUploader({ slot, label, required, optional, rules, hint, big, validNote }: { slot: string; label: string; required?: boolean | undefined; optional?: boolean | undefined; rules: Rules; hint?: string | undefined; big?: boolean | undefined; validNote?: string | undefined }) {
+/** Which files in the Media Library could fill a file slot. Any file of the right kind can be chosen, even one another title already uses: it is linked, never copied. */
+/** `label` is the uploader's own name ("Official Trailer", "Teaser Trailer"...), so the picker says exactly what it is choosing. */
+function uploaderPicker(slot: string, rules: Rules, label: string): PickerSlot {
+  const purpose = purposeForSlot(slot);
+  if (rules.kind === "video")
+    return {
+      id: slot,
+      label: `Choose the ${label.toLowerCase()} video`,
+      category: "videos",
+      types: [purpose ?? "MOVIE_MASTER"],
+    };
+  if (rules.kind === "audio")
+    return {
+      id: slot,
+      label: `Choose the ${label.toLowerCase()} audio file`,
+      category: "audio",
+      types: [purpose ?? "AUDIOBOOK_FILE"],
+    };
+  if (rules.kind === "caption")
+    return { id: slot, label: `Choose the ${label.toLowerCase()} caption file`, category: "documents", types: ["CAPTION"] };
+  return {
+    id: slot,
+    label: `Choose the ${label.toLowerCase()} file`,
+    category: "documents",
+    types: [purpose ?? "EBOOK_EPUB"],
+  };
+}
+
+/** Smallest picture the server accepts for each slot (the wizard's own check is looser, so a too-small image fails early here). */
+const SERVER_MIN: Record<string, [number, number]> = {
+  poster: [500, 750],
+  backdrop: [1280, 720],
+  thumbnail: [320, 180],
+  front: [400, 600],
+  back: [400, 600],
+  spine: [60, 600],
+  wrap: [1200, 800],
+  thumb: [320, 180],
+  cover: [500, 500],
+};
+/** Which Media Library pictures can fill an image slot. */
+function imagePicker(slot: string, label: string, rec: { w: number; h: number }): PickerSlot {
+  const types: Record<string, PickerSlot> = {
+    poster: ARTWORK_SLOTS.moviePoster,
+    backdrop: ARTWORK_SLOTS.movieBackdrop,
+    thumbnail: ARTWORK_SLOTS.movieThumbnail,
+    front: ARTWORK_SLOTS.ebookCover,
+    thumb: ARTWORK_SLOTS.movieThumbnail,
+    cover: ARTWORK_SLOTS.audiobookCover,
+  };
+  const known = types[slot];
+  if (known) return { ...known, id: slot, label };
+  const min = SERVER_MIN[slot];
+  return {
+    id: slot,
+    label,
+    types: [],
+    minWidth: min?.[0] ?? Math.round(rec.w * 0.5),
+    minHeight: min?.[1] ?? Math.round(rec.h * 0.5),
+  };
+}
+
+export function MediaUploader({
+  slot,
+  label,
+  required,
+  optional,
+  rules,
+  hint,
+  big,
+  validNote,
+}: {
+  slot: string;
+  label: string;
+  required?: boolean | undefined;
+  optional?: boolean | undefined;
+  rules: Rules;
+  hint?: string | undefined;
+  big?: boolean | undefined;
+  validNote?: string | undefined;
+}) {
   const { media, upload, patchMedia, errors } = useWiz();
   const m = media[slot];
   const input = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
+  const [lib, setLib] = useState(false);
   const Icon = KindIcon[rules.kind];
   const pick = (f?: File) => f && upload(slot, f, rules);
   const err = errors[slot];
@@ -676,29 +1258,76 @@ export function MediaUploader({ slot, label, required, optional, rules, hint, bi
           {label} {required && <span className="text-primary-text">*</span>}
           {optional && !required && <OptionalTag />}
         </span>
-        <span className="text-[11px] text-muted-foreground">{rules.exts.map((e) => e.toUpperCase()).join(" · ")}</span>
+        <span className="text-[11px] text-muted-foreground">
+          {rules.exts.map((e) => e.toUpperCase()).join(" · ")}
+        </span>
       </div>
-      <input ref={input} type="file" accept={accept} aria-label={`${label} file`} className="hidden" onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ""; }} />
+      <input
+        ref={input}
+        type="file"
+        accept={accept}
+        aria-label={`${label} file`}
+        className="hidden"
+        onChange={(e) => {
+          pick(e.target.files?.[0]);
+          e.target.value = "";
+        }}
+      />
       {!m ? (
         <div
-          onDragOver={(e) => { e.preventDefault(); setOver(true); }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setOver(true);
+          }}
           onDragLeave={() => setOver(false)}
-          onDrop={(e) => { e.preventDefault(); setOver(false); pick(e.dataTransfer.files[0]); }}
-          className={cn("flex items-center gap-4 rounded-lg border border-dashed bg-surface-2 transition-colors", big ? "flex-col justify-center px-6 py-10 text-center" : "p-3", over ? "border-primary bg-primary/5" : err ? "border-primary" : "border-border")}
+          onDrop={(e) => {
+            e.preventDefault();
+            setOver(false);
+            pick(e.dataTransfer.files[0]);
+          }}
+          className={cn(
+            "flex items-center gap-4 rounded-lg border border-dashed bg-surface-2 transition-colors",
+            big ? "flex-col justify-center px-6 py-10 text-center" : "p-3",
+            over ? "border-primary bg-primary/5" : err ? "border-primary" : "border-border",
+          )}
         >
-          <span className={cn("grid shrink-0 place-items-center rounded-md bg-surface-3 text-soft", big ? "size-12" : "size-9")}>
+          <span
+            className={cn(
+              "grid shrink-0 place-items-center rounded-md bg-surface-3 text-soft",
+              big ? "size-12" : "size-9",
+            )}
+          >
             <Upload className={big ? "size-5" : "size-4"} />
           </span>
           <div className={cn("min-w-0 flex-1", big && "flex-none")}>
-            <div className="text-sm font-semibold">{big ? "Drag & drop your file here" : `Upload ${label.toLowerCase()}`}</div>
-            <div className="text-xs text-muted-foreground">{hint ?? `or browse. Up to ${fmtBytes(rules.maxBytes)}.`}</div>
+            <div className="text-sm font-semibold">
+              {big ? "Drag & drop your file here" : `Upload ${label.toLowerCase()}`}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {hint ?? `or browse. Up to ${fmtBytes(rules.maxBytes)}.`}
+            </div>
           </div>
           <Btn type="button" size="sm" onClick={() => input.current?.click()}>
             Choose file
           </Btn>
+          {!DEMO_MODE && (
+            <Btn
+              type="button"
+              size="sm"
+              onClick={() => setLib(true)}
+              data-testid={`library-${slot}`}
+            >
+              <Library /> Select existing
+            </Btn>
+          )}
         </div>
       ) : (
-        <div className={cn("rounded-lg border bg-surface-2 p-3", m.status === "error" ? "border-primary/50" : "border-border")}>
+        <div
+          className={cn(
+            "rounded-lg border bg-surface-2 p-3",
+            m.status === "error" ? "border-primary/50" : "border-border",
+          )}
+        >
           <div className="flex items-start gap-3">
             <span className="grid size-9 shrink-0 place-items-center rounded-md bg-surface-3 text-soft">
               <Icon className="size-4" />
@@ -706,7 +1335,14 @@ export function MediaUploader({ slot, label, required, optional, rules, hint, bi
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="truncate text-sm font-semibold">{m.name}</span>
-                <span className={cn("rounded border px-1.5 py-0.5 text-[10px] font-bold tracking-wide uppercase", statusChip[m.status])}>{statusText[m.status]}</span>
+                <span
+                  className={cn(
+                    "rounded border px-1.5 py-0.5 text-[10px] font-bold tracking-wide uppercase",
+                    statusChip[m.status],
+                  )}
+                >
+                  {statusText[m.status]}
+                </span>
               </div>
               <div className="text-xs text-muted-foreground">
                 {fmtBytes(m.size)}
@@ -716,36 +1352,76 @@ export function MediaUploader({ slot, label, required, optional, rules, hint, bi
               {(m.status === "uploading" || m.status === "paused") && (
                 <>
                   <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-3">
-                    <div className="h-full bg-primary transition-all" style={{ width: `${m.progress}%` }} />
+                    <div
+                      className="h-full bg-primary transition-all"
+                      style={{ width: `${m.progress}%` }}
+                    />
                   </div>
                   <div className="mt-1 text-[11px] text-muted-foreground">
-                    {Math.round(m.progress)}%{m.status === "uploading" ? ` · ${m.speed.toFixed(1)} MB/s · about ${m.eta}s left` : " · paused"}
+                    {Math.round(m.progress)}%
+                    {m.status === "uploading"
+                      ? ` · ${m.speed.toFixed(1)} MB/s · about ${m.eta}s left`
+                      : " · paused"}
                   </div>
                 </>
               )}
               {m.status === "processing" && (
                 <>
                   <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-3">
-                    <div className="h-full bg-warning transition-all" style={{ width: `${m.proc}%` }} />
+                    <div
+                      className="h-full bg-warning transition-all"
+                      style={{ width: `${m.proc}%` }}
+                    />
                   </div>
-                  <div className="mt-1 text-[11px] text-muted-foreground">{rules.transcode ? "Transcoding renditions on the server…" : "Validating file…"}</div>
+                  <div className="mt-1 text-[11px] text-muted-foreground">
+                    {m.procStep
+                      ? processingLine({
+                          percent: Math.round(m.proc),
+                          step: m.procStep,
+                          startedAt: null,
+                          etaSeconds: m.procEta ?? null,
+                        })
+                      : rules.transcode
+                        ? "Transcoding renditions on the server…"
+                        : "Validating file…"}
+                  </div>
                 </>
               )}
-              {m.status === "error" && <div className="mt-1 text-xs font-medium text-primary-text">{m.error}</div>}
+              {m.status === "error" && (
+                <div className="mt-1 text-xs font-medium text-primary-text">{m.error}</div>
+              )}
             </div>
             <div className="flex shrink-0 gap-1">
-              {m.status === "uploading" && (
-                <button type="button" className="grid size-8 place-items-center rounded-md text-soft hover:bg-surface-3" aria-label="Pause upload" title="Pause" onClick={() => patchMedia(slot, { ...m, status: "paused" })}>
+              {DEMO_MODE && m.status === "uploading" && (
+                <button
+                  type="button"
+                  className="grid size-8 place-items-center rounded-md text-soft hover:bg-surface-3"
+                  aria-label="Pause upload"
+                  title="Pause"
+                  onClick={() => patchMedia(slot, { ...m, status: "paused" })}
+                >
                   <Pause className="size-4" />
                 </button>
               )}
               {m.status === "paused" && (
-                <button type="button" className="grid size-8 place-items-center rounded-md text-soft hover:bg-surface-3" aria-label="Resume upload" title="Resume" onClick={() => patchMedia(slot, { ...m, status: "uploading" })}>
+                <button
+                  type="button"
+                  className="grid size-8 place-items-center rounded-md text-soft hover:bg-surface-3"
+                  aria-label="Resume upload"
+                  title="Resume"
+                  onClick={() => patchMedia(slot, { ...m, status: "uploading" })}
+                >
                   <Play className="size-4" />
                 </button>
               )}
               {m.status === "error" && (
-                <button type="button" className="grid size-8 place-items-center rounded-md text-soft hover:bg-surface-3" aria-label="Retry upload" title="Retry" onClick={() => input.current?.click()}>
+                <button
+                  type="button"
+                  className="grid size-8 place-items-center rounded-md text-soft hover:bg-surface-3"
+                  aria-label="Retry upload"
+                  title="Retry"
+                  onClick={() => input.current?.click()}
+                >
                   <RotateCcw className="size-4" />
                 </button>
               )}
@@ -754,17 +1430,53 @@ export function MediaUploader({ slot, label, required, optional, rules, hint, bi
                   Replace
                 </Btn>
               )}
-              <button type="button" className="grid size-8 place-items-center rounded-md text-soft hover:bg-primary/10 hover:text-primary-text" aria-label={m.status === "ready" || m.status === "error" ? "Remove file" : "Cancel upload"} title={m.status === "ready" || m.status === "error" ? "Remove" : "Cancel"} onClick={() => patchMedia(slot, null)}>
-                {m.status === "ready" || m.status === "error" ? <Trash2 className="size-4" /> : <X className="size-4" />}
+              <button
+                type="button"
+                className="grid size-8 place-items-center rounded-md text-soft hover:bg-primary/10 hover:text-primary-text"
+                aria-label={
+                  m.status === "ready" || m.status === "error" ? "Remove file" : "Cancel upload"
+                }
+                title={m.status === "ready" || m.status === "error" ? "Remove" : "Cancel"}
+                onClick={() => patchMedia(slot, null)}
+              >
+                {m.status === "ready" || m.status === "error" ? (
+                  <Trash2 className="size-4" />
+                ) : (
+                  <X className="size-4" />
+                )}
               </button>
             </div>
           </div>
         </div>
       )}
       {err && (
-        <p role="alert" className="mt-1 flex items-center gap-1 text-[11px] font-medium text-primary-text">
+        <p
+          role="alert"
+          className="mt-1 flex items-center gap-1 text-[11px] font-medium text-primary-text"
+        >
           <AlertCircle className="size-3" /> {err}
         </p>
+      )}
+      {!DEMO_MODE && (
+        <MediaPicker
+          open={lib}
+          onOpenChange={setLib}
+          slot={uploaderPicker(slot, rules, label)}
+          onSelect={(it: MediaListItem) =>
+            patchMedia(slot, {
+              name: it.displayTitle || it.fileName || "Media Library file",
+              size: it.sizeBytes ?? 0,
+              status: "ready",
+              progress: 100,
+              speed: 0,
+              eta: 0,
+              proc: 100,
+              assetId: it.id,
+              ...(it.durationSeconds != null ? { duration: it.durationSeconds } : {}),
+              ...(rules.transcode ? { transcode: true } : {}),
+            })
+          }
+        />
       )}
     </div>
   );
@@ -772,12 +1484,29 @@ export function MediaUploader({ slot, label, required, optional, rules, hint, bi
 
 /* ------------------------------------------------------------------ image slot */
 
-export function ImageSlot({ slot, label, required, optional, rec, compact, ratio: ratioProp }: { slot: string; label: string; required?: boolean | undefined; optional?: boolean | undefined; rec: { w: number; h: number }; compact?: boolean | undefined; ratio?: number | undefined }) {
+export function ImageSlot({
+  slot,
+  label,
+  required,
+  optional,
+  rec,
+  compact,
+  ratio: ratioProp,
+}: {
+  slot: string;
+  label: string;
+  required?: boolean | undefined;
+  optional?: boolean | undefined;
+  rec: { w: number; h: number };
+  compact?: boolean | undefined;
+  ratio?: number | undefined;
+}) {
   const { images, setImage, errors } = useWiz();
   const img = images[slot];
   const ratio = ratioProp ?? rec.w / rec.h;
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const [lib, setLib] = useState(false);
   const [local, setLocal] = useState<string | null>(null);
   const [adjust, setAdjust] = useState(false);
   const [cropRatio, setCropRatio] = useState<number>(ratio);
@@ -788,7 +1517,13 @@ export function ImageSlot({ slot, label, required, optional, rec, compact, ratio
     setBusy(true);
     setLocal(null);
     try {
-      setImage(slot, await ingestImage(f, rec, ratio));
+      const img = await ingestImage(f, rec, ratio);
+      const min = SERVER_MIN[slot];
+      if (!DEMO_MODE && min && (img.w < min[0] || img.h < min[1]))
+        throw new Error(
+          `This picture is ${img.w} x ${img.h}px. The smallest allowed here is ${min[0]} x ${min[1]}px.`,
+        );
+      setImage(slot, img);
     } catch (e) {
       setLocal((e as Error).message);
     } finally {
@@ -807,32 +1542,72 @@ export function ImageSlot({ slot, label, required, optional, rec, compact, ratio
           {rec.w} × {rec.h}
         </span>
       </div>
-      <input ref={input} type="file" accept=".jpg,.jpeg,.png,.webp" aria-label={`${label} image`} className="hidden" onChange={(e) => { void pick(e.target.files?.[0]); e.target.value = ""; }} />
+      <input
+        ref={input}
+        type="file"
+        accept=".jpg,.jpeg,.png,.webp"
+        aria-label={`${label} image`}
+        className="hidden"
+        onChange={(e) => {
+          void pick(e.target.files?.[0]);
+          e.target.value = "";
+        }}
+      />
       <div
         style={{ aspectRatio: String(ratio) }}
-        className={cn("relative grid place-items-center overflow-hidden rounded-md border border-dashed bg-surface", compact && "mx-auto max-w-40", err || img?.lost ? "border-primary" : "border-border")}
+        className={cn(
+          "relative grid place-items-center overflow-hidden rounded-md border border-dashed bg-surface",
+          compact && "mx-auto max-w-40",
+          err || img?.lost ? "border-primary" : "border-border",
+        )}
         onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => { e.preventDefault(); void pick(e.dataTransfer.files[0]); }}
+        onDrop={(e) => {
+          e.preventDefault();
+          void pick(e.dataTransfer.files[0]);
+        }}
       >
         {img && img.url ? (
           <>
-            <img src={img.url} alt={label} style={{ objectPosition: `${img.fx * 100}% ${img.fy * 100}%` }} className="absolute inset-0 size-full object-cover" />
-            <span className="absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-foreground bg-primary/70 shadow" style={{ left: `${img.fx * 100}%`, top: `${img.fy * 100}%` }} aria-hidden />
+            <img
+              src={img.url}
+              alt={label}
+              style={{ objectPosition: `${img.fx * 100}% ${img.fy * 100}%` }}
+              className="absolute inset-0 size-full object-cover"
+            />
+            <span
+              className="absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-foreground bg-primary/70 shadow"
+              style={{ left: `${img.fx * 100}%`, top: `${img.fy * 100}%` }}
+              aria-hidden
+            />
           </>
         ) : img?.placeholder ? (
-          <button type="button" onClick={() => input.current?.click()} className="flex flex-col items-center gap-1 px-3 text-center text-xs text-muted-foreground hover:text-foreground">
+          <button
+            type="button"
+            onClick={() => input.current?.click()}
+            className="flex flex-col items-center gap-1 px-3 text-center text-xs text-muted-foreground hover:text-foreground"
+          >
             <ImagePlus className="size-5" />
             Current artwork is in use
             <span>Upload to replace it</span>
           </button>
         ) : img ? (
-          <button type="button" onClick={() => input.current?.click()} className="flex flex-col items-center gap-1 px-3 text-center text-xs font-bold text-primary-text">
+          <button
+            type="button"
+            onClick={() => input.current?.click()}
+            className="flex flex-col items-center gap-1 px-3 text-center text-xs font-bold text-primary-text"
+          >
             <AlertCircle className="size-5" />
             IMAGE NEEDS TO BE RE-UPLOADED
-            <span className="font-normal text-muted-foreground">It was too large to keep after a refresh.</span>
+            <span className="font-normal text-muted-foreground">
+              It was too large to keep after a refresh.
+            </span>
           </button>
         ) : (
-          <button type="button" onClick={() => input.current?.click()} className="flex flex-col items-center gap-1 px-3 text-center text-xs text-muted-foreground hover:text-foreground">
+          <button
+            type="button"
+            onClick={() => input.current?.click()}
+            className="flex flex-col items-center gap-1 px-3 text-center text-xs text-muted-foreground hover:text-foreground"
+          >
             <ImagePlus className="size-5" />
             {busy ? "Reading image…" : "Drop an image or browse"}
             <span className="text-[10px] uppercase">JPG · PNG · WebP</span>
@@ -850,10 +1625,26 @@ export function ImageSlot({ slot, label, required, optional, rec, compact, ratio
             <Btn type="button" size="sm" onClick={() => input.current?.click()}>
               Replace
             </Btn>
-            <Btn type="button" size="sm" disabled={!img.url} onClick={() => { setCropRatio(ratio); setAdjust(true); }}>
+            <Btn
+              type="button"
+              size="sm"
+              disabled={!img.url}
+              onClick={() => {
+                setCropRatio(ratio);
+                setAdjust(true);
+              }}
+            >
               <Crop /> Crop
             </Btn>
-            <Btn type="button" size="sm" disabled={!img.url} onClick={() => { setCropRatio(ratio); setAdjust(true); }}>
+            <Btn
+              type="button"
+              size="sm"
+              disabled={!img.url}
+              onClick={() => {
+                setCropRatio(ratio);
+                setAdjust(true);
+              }}
+            >
               <Crosshair /> Focal point
             </Btn>
             <Btn type="button" size="sm" variant="ghost" onClick={() => setImage(slot, null)}>
@@ -865,9 +1656,45 @@ export function ImageSlot({ slot, label, required, optional, rec, compact, ratio
             <Upload /> Upload
           </Btn>
         )}
+        {!DEMO_MODE && (
+          <Btn type="button" size="sm" onClick={() => setLib(true)} data-testid={`library-${slot}`}>
+            <Library /> {img ? "Choose another" : "Select from Media Library"}
+          </Btn>
+        )}
       </div>
+      {!DEMO_MODE && img?.up === "uploading" && (
+        <p className="mt-1.5 text-[11px] text-muted-foreground">Uploading to storage…</p>
+      )}
+      {!DEMO_MODE && img?.up === "error" && (
+        <p role="alert" className="mt-1.5 text-[11px] font-medium text-primary-text">
+          {img.upError ?? "Upload failed."} Use Replace to try again.
+        </p>
+      )}
+      {!DEMO_MODE && (
+        <MediaPicker
+          open={lib}
+          onOpenChange={setLib}
+          slot={imagePicker(slot, label, rec)}
+          onSelect={(it: MediaListItem) =>
+            setImage(slot, {
+              name: it.displayTitle || it.fileName || "Library image",
+              size: it.sizeBytes ?? 0,
+              w: it.width ?? rec.w,
+              h: it.height ?? rec.h,
+              url: it.thumbnailUrl ?? "",
+              fx: 0.5,
+              fy: 0.5,
+              assetId: it.id,
+              up: "ready",
+            })
+          }
+        />
+      )}
       {err && (
-        <p role="alert" className="mt-1.5 flex items-center gap-1 text-[11px] font-medium text-primary-text">
+        <p
+          role="alert"
+          className="mt-1.5 flex items-center gap-1 text-[11px] font-medium text-primary-text"
+        >
           <AlertCircle className="size-3" /> {err}
         </p>
       )}
@@ -877,17 +1704,27 @@ export function ImageSlot({ slot, label, required, optional, rec, compact, ratio
             <DialogHeader>
               <DialogTitle>Crop &amp; focal point · {label}</DialogTitle>
             </DialogHeader>
-            <p className="text-xs text-muted-foreground">Click the image to set the focal point. It stays in view when the image is shown at a different shape. Crop trims to the chosen ratio around that point.</p>
+            <p className="text-xs text-muted-foreground">
+              Click the image to set the focal point. It stays in view when the image is shown at a
+              different shape. Crop trims to the chosen ratio around that point.
+            </p>
             <div
               className="relative mx-auto max-h-[50vh] cursor-crosshair overflow-hidden rounded-md border border-border"
               style={{ aspectRatio: `${img.w} / ${img.h}`, maxWidth: "100%" }}
               onClick={(e) => {
                 const r = e.currentTarget.getBoundingClientRect();
-                setImage(slot, { ...img, fx: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), fy: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) });
+                setImage(slot, {
+                  ...img,
+                  fx: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)),
+                  fy: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)),
+                });
               }}
             >
               <img src={img.url} alt="" className="size-full object-cover" draggable={false} />
-              <span className="absolute size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-foreground bg-primary/60" style={{ left: `${img.fx * 100}%`, top: `${img.fy * 100}%` }} />
+              <span
+                className="absolute size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-foreground bg-primary/60"
+                style={{ left: `${img.fx * 100}%`, top: `${img.fy * 100}%` }}
+              />
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-semibold text-soft">Crop to</span>
@@ -898,7 +1735,17 @@ export function ImageSlot({ slot, label, required, optional, rec, compact, ratio
                 ["1:1", 1],
                 ["2:3", 2 / 3],
               ].map(([n, r]) => (
-                <button key={String(n)} type="button" onClick={() => setCropRatio(r as number)} className={cn("h-7 rounded-md border px-2.5 text-xs font-semibold", Math.abs(cropRatio - (r as number)) < 0.001 ? "border-primary bg-primary/15" : "border-border text-soft")}>
+                <button
+                  key={String(n)}
+                  type="button"
+                  onClick={() => setCropRatio(r as number)}
+                  className={cn(
+                    "h-7 rounded-md border px-2.5 text-xs font-semibold",
+                    Math.abs(cropRatio - (r as number)) < 0.001
+                      ? "border-primary bg-primary/15"
+                      : "border-border text-soft",
+                  )}
+                >
                   {n}
                 </button>
               ))}
@@ -932,13 +1779,30 @@ export function ImageSlot({ slot, label, required, optional, rec, compact, ratio
 
 /* ------------------------------------------------------------------ publish step helpers */
 
-export function ReviewSection({ title, onEdit, children, ok }: { title: string; onEdit: () => void; children: ReactNode; ok?: boolean }) {
+export function ReviewSection({
+  title,
+  onEdit,
+  children,
+  ok,
+}: {
+  title: string;
+  onEdit: () => void;
+  children: ReactNode;
+  ok?: boolean;
+}) {
   return (
     <div className="rounded-lg border border-border bg-surface-2">
       <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
         <div className="flex items-center gap-2 text-sm font-bold">
           {ok !== undefined && (
-            <span className={cn("grid size-4 place-items-center rounded-full", ok ? "bg-success/20 text-success" : "bg-primary/20 text-primary-text")}>{ok ? <Check className="size-2.5" /> : <X className="size-2.5" />}</span>
+            <span
+              className={cn(
+                "grid size-4 place-items-center rounded-full",
+                ok ? "bg-success/20 text-success" : "bg-primary/20 text-primary-text",
+              )}
+            >
+              {ok ? <Check className="size-2.5" /> : <X className="size-2.5" />}
+            </span>
           )}
           {title}
         </div>
@@ -953,7 +1817,9 @@ export function ReviewSection({ title, onEdit, children, ok }: { title: string; 
 export const Row = ({ k, v }: { k: string; v?: ReactNode }) => (
   <div className="flex gap-3">
     <span className="w-36 shrink-0 text-xs text-muted-foreground">{k}</span>
-    <span className="min-w-0 flex-1 text-sm break-words">{v || <span className="text-muted-foreground">-</span>}</span>
+    <span className="min-w-0 flex-1 text-sm break-words">
+      {v || <span className="text-muted-foreground">-</span>}
+    </span>
   </div>
 );
 
@@ -962,11 +1828,28 @@ export function Checklist({ items }: { items: { label: string; ok: boolean; step
   return (
     <ul className="grid gap-1.5 sm:grid-cols-2">
       {items.map((i) => (
-        <li key={i.label} className={cn("flex items-center gap-2 rounded-md border px-3 py-2 text-sm", i.ok ? "border-border bg-surface-2" : "border-primary/40 bg-primary/10")}>
-          <span className={cn("grid size-4 shrink-0 place-items-center rounded-full", i.ok ? "bg-success/20 text-success" : "bg-primary/25 text-primary-text")}>{i.ok ? <Check className="size-2.5" /> : <X className="size-2.5" />}</span>
+        <li
+          key={i.label}
+          className={cn(
+            "flex items-center gap-2 rounded-md border px-3 py-2 text-sm",
+            i.ok ? "border-border bg-surface-2" : "border-primary/40 bg-primary/10",
+          )}
+        >
+          <span
+            className={cn(
+              "grid size-4 shrink-0 place-items-center rounded-full",
+              i.ok ? "bg-success/20 text-success" : "bg-primary/25 text-primary-text",
+            )}
+          >
+            {i.ok ? <Check className="size-2.5" /> : <X className="size-2.5" />}
+          </span>
           <span className={cn("flex-1", !i.ok && "font-medium text-primary-text")}>{i.label}</span>
           {!i.ok && i.step !== undefined && (
-            <button type="button" className="text-xs font-semibold underline" onClick={() => goTo(i.step!)}>
+            <button
+              type="button"
+              className="text-xs font-semibold underline"
+              onClick={() => goTo(i.step!)}
+            >
               Fix
             </button>
           )}

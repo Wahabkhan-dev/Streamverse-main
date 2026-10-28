@@ -25,7 +25,7 @@ describe("Homepage (Section 12-14)", () => {
     const { content: movieA } = await makePublishedMovie({ title: "Manual Pick", promo: { featured: true } });
     const manual = await homepageService.createSection({ key: "editors_picks", displayTitle: "Editors' Picks", enabled: true, displayOrder: 1, itemLimit: 12, type: "MANUAL" });
     await homepageService.addItem(manual.id, { contentId: movieA.id, displayOrder: 0 });
-    await homepageService.createSection({ key: "featured", displayTitle: "Featured", enabled: true, displayOrder: 2, itemLimit: 12, type: "FEATURED" });
+    await homepageService.createSection({ key: "featured", displayTitle: "Featured", enabled: true, displayOrder: 2, itemLimit: 12, type: "FEATURED", contentType: "MOVIE" });
     await homepageService.createSection({ key: "disabled_section", displayTitle: "Hidden", enabled: false, displayOrder: 0, itemLimit: 12, type: "MANUAL" });
 
     const res = await request(app).get("/api/v1/homepage");

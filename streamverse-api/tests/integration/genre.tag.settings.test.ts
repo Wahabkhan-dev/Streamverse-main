@@ -8,7 +8,7 @@ vi.mock("../../src/config/database", async () => {
 import { prisma } from "../../src/config/database";
 import { createMovieSchema } from "../../src/validators/movie.validator";
 import { createMovie } from "../../src/services/movie.service";
-import { createGenre, deleteGenre, renameGenre } from "../../src/services/genre.service";
+import { createGenre, deleteGenre, listGenres, renameGenre } from "../../src/services/genre.service";
 import { findOrCreateTag } from "../../src/services/tag.service";
 import { getSetting, setSetting } from "../../src/services/settings.service";
 import * as contentRepository from "../../src/repositories/content.repository";
@@ -33,6 +33,19 @@ describe("genres", () => {
     const genre = await createGenre({ name: "Horror" });
     await createMovie(createMovieSchema.parse({ title: "Scream Test", genreIds: [genre.id] }));
     await expect(deleteGenre(genre.id)).rejects.toMatchObject({ message: expect.stringContaining("used by 1 title") });
+  });
+
+  it("the admin list says how many titles use each genre, and an update can clear its kind", async () => {
+    const used = await createGenre({ name: "Drama", contentType: "MOVIE" });
+    const unused = await createGenre({ name: "Cooking", contentType: "EBOOK" });
+    await createMovie(createMovieSchema.parse({ title: "Two Rooms", genreIds: [used.id] }));
+    const rows = await listGenres();
+    expect(rows.find((g) => g.id === used.id)?.usage).toBe(1);
+    expect(rows.find((g) => g.id === unused.id)?.usage).toBe(0);
+
+    // null makes it apply to every kind of title again
+    await renameGenre(unused.id, { contentType: null });
+    expect((await listGenres()).find((g) => g.id === unused.id)?.contentType).toBeNull();
   });
 
   it("deletes a genre that nothing uses", async () => {

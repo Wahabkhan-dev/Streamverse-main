@@ -1,0 +1,23 @@
+{
+  "name": "StreamVerse",
+  "short_name": "StreamVerse",
+  "description": "Movies, eBooks and audiobooks in one place.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#070707",
+  "theme_color": "#070707",
+  "categories": ["entertainment", "books"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Movies", "url": "/movies" },
+    { "name": "eBooks", "url": "/ebooks" },
+    { "name": "Audiobooks", "url": "/audiobooks" }
+  ]
+}

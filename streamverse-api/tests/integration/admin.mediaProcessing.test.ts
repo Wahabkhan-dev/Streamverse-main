@@ -94,6 +94,47 @@ describe("Movie master video processing (Section 20-26, 96)", () => {
     await waitForStatus(assetId, ["READY"]);
   });
 
+  it("reports how far processing has got while it runs, and nothing once it is ready", async () => {
+    const base = createFakeMediaProcessor();
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    let first = true;
+    fakeProcessorState.current = {
+      probe: base.probe,
+      async transcodeRendition(url, spec, opts) {
+        if (first) {
+          first = false;
+          opts?.onProgress?.(0.5);
+          await held; // keep the first rendition "converting" while the test looks
+        }
+        return base.transcodeRendition(url, spec, opts);
+      },
+    };
+    const headers = await admin();
+    const { content } = await makeDraftMovie();
+    const assetId = await presignAndUpload(headers, content.id, "MOVIE_MASTER", "video/mp4", Buffer.from("fake-movie-bytes"));
+    await request(app).post(`/api/v1/admin/uploads/${assetId}/complete`).set(headers);
+    await waitForStatus(assetId, ["PROCESSING"]);
+
+    let running: { status: string; progress: { percent: number; step: string } | null } | undefined;
+    for (let i = 0; i < 100; i++) {
+      running = (await request(app).get(`/api/v1/admin/uploads/${assetId}/status`).set(headers)).body.data;
+      if (running?.progress?.step.startsWith("Converting")) break;
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    expect(running!.status).toBe("PROCESSING");
+    expect(running!.progress!.step).toBe("Converting to 480p (1 of 3)"); // 1920x1080 source: 480p, 720p, 1080p
+    expect(running!.progress!.percent).toBeGreaterThanOrEqual(1);
+    expect(running!.progress!.percent).toBeLessThan(100);
+    const listed = await request(app).get(`/api/v1/admin/media/${assetId}`).set(headers);
+    expect(listed.body.data.progress.step).toBe("Converting to 480p (1 of 3)");
+
+    release();
+    await waitForStatus(assetId, ["READY"]);
+    const done = await request(app).get(`/api/v1/admin/uploads/${assetId}/status`).set(headers);
+    expect(done.body.data.progress).toBeNull();
+  });
+
   it("does not create duplicate HLS outputs when the job is re-run (Section 29)", async () => {
     const headers = await admin();
     const { content } = await makeDraftMovie();

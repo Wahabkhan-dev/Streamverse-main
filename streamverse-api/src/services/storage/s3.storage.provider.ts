@@ -1,3 +1,4 @@
+import type { Readable } from "node:stream";
 import {
   AbortMultipartUploadCommand,
   CompleteMultipartUploadCommand,
@@ -6,6 +7,8 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
+  ListPartsCommand,
   PutObjectCommand,
   S3Client,
   UploadPartCommand,
@@ -29,6 +32,11 @@ export function createS3StorageProvider(): StorageProvider {
   const bucket = env.AWS_BUCKET!;
 
   return {
+    async listObjects(prefix, limit, continuationToken) {
+      const res = await client.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, MaxKeys: limit, ContinuationToken: continuationToken }));
+      return { objects: (res.Contents ?? []).map((o) => ({ key: o.Key!, sizeBytes: o.Size ?? 0, lastModified: o.LastModified })), nextToken: res.IsTruncated ? res.NextContinuationToken : undefined };
+    },
+
     async createUploadUrl(key, contentType, ttlSeconds): Promise<PresignedUpload> {
       const command = new PutObjectCommand({ Bucket: bucket, Key: key, ContentType: contentType });
       const url = await getSignedUrl(client, command, { expiresIn: ttlSeconds });
@@ -69,6 +77,11 @@ export function createS3StorageProvider(): StorageProvider {
       return Buffer.concat(chunks);
     },
 
+    async getObjectStream(key) {
+      const res = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+      return { stream: res.Body as Readable, ...(res.ContentLength !== undefined ? { sizeBytes: res.ContentLength } : {}) };
+    },
+
     async putObject(key, body, contentType) {
       await client.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentType: contentType }));
     },
@@ -98,6 +111,17 @@ export function createS3StorageProvider(): StorageProvider {
         }),
       );
       return { etag: res.ETag };
+    },
+
+    async listMultipartParts(key, providerUploadId) {
+      const out: MultipartPart[] = [];
+      let marker: string | undefined;
+      do {
+        const res = await client.send(new ListPartsCommand({ Bucket: bucket, Key: key, UploadId: providerUploadId, PartNumberMarker: marker }));
+        for (const p of res.Parts ?? []) if (p.PartNumber && p.ETag) out.push({ partNumber: p.PartNumber, etag: p.ETag });
+        marker = res.IsTruncated ? String(res.NextPartNumberMarker) : undefined;
+      } while (marker);
+      return out;
     },
 
     async abortMultipartUpload(key, providerUploadId) {

@@ -1,0 +1,10 @@
+import { PrismaClient } from "@prisma/client";
+import { execFileSync } from "node:child_process";
+import { getStorageProvider } from "./src/services/storage";
+import ffprobe from "ffprobe-static";
+const p = new PrismaClient();
+const a = await p.mediaAsset.findFirst({ where: { originalFileName: { contains: "Glenda" }, deletedAt: null }, select: { storageKey: true } });
+const url = await getStorageProvider().createDownloadUrl(a!.storageKey!, 600, "video/mp4");
+const out = execFileSync(ffprobe.path, ["-v", "error", "-show_entries", "stream=codec_type,codec_name,profile,pix_fmt,width,height,r_frame_rate,bit_rate:format=format_name,duration,bit_rate", "-of", "default=nw=1", url], { encoding: "utf8", timeout: 120000 });
+console.log(out);
+await p.$disconnect();

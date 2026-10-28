@@ -2,31 +2,19 @@ import { createFileRoute, Outlet } from "@tanstack/react-router";
 import { TopNavbar } from "@/components/sv/TopNavbar";
 import { Logo } from "@/components/sv/Logo";
 import { LEGAL_LINKS } from "@/lib/legal";
+import { AuthGate } from "@/components/sv/AuthGate";
+import { InstallPrompt } from "@/components/sv/InstallPrompt";
+import { MiniPlayer } from "@/components/sv/players/MiniPlayer";
 import { useSettings } from "@/lib/store";
 import { useRole } from "@/lib/user";
-import { useSyncExternalStore } from "react";
-import { WifiOff } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { api, isApiError } from "@/api/client";
+import { DEMO_MODE } from "@/lib/config";
 import { Link } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_site")({
   component: SiteLayout,
 });
-
-/** Tracks the browser's online / offline state. */
-function useOnline() {
-  return useSyncExternalStore(
-    (cb) => {
-      window.addEventListener("online", cb);
-      window.addEventListener("offline", cb);
-      return () => {
-        window.removeEventListener("online", cb);
-        window.removeEventListener("offline", cb);
-      };
-    },
-    () => navigator.onLine,
-    () => true,
-  );
-}
 
 /** One labelled column of footer links. */
 function FooterGroup({ title, links }: { title: string; links: readonly (readonly [string, string])[] }) {
@@ -47,9 +35,19 @@ function FooterGroup({ title, links }: { title: string; links: readonly (readonl
 }
 
 function SiteLayout() {
-  const online = useOnline();
-  const { maintenance } = useSettings();
+  const { maintenance: demoMaintenance } = useSettings();
   const role = useRole();
+  // live mode: the server decides. While maintenance is on it answers every non-admin request with 503 MAINTENANCE_MODE
+  // (and the public settings say so), so either signal shows the screen; an admin always gets through.
+  const publicSettings = useQuery({
+    queryKey: ["settings", "public"],
+    enabled: !DEMO_MODE,
+    retry: false,
+    refetchInterval: 60_000,
+    queryFn: async () => (await api.get<{ data: Record<string, unknown> }>("/settings/public")).data,
+  });
+  const serverMaintenance = isApiError(publicSettings.error) ? publicSettings.error.code === "MAINTENANCE_MODE" : publicSettings.data?.["maintenanceMode"] === true;
+  const maintenance = DEMO_MODE ? demoMaintenance : serverMaintenance && role !== "admin";
   if (maintenance) {
     return (
       <div className="grid min-h-dvh place-items-center bg-background px-4 text-center">
@@ -69,13 +67,12 @@ function SiteLayout() {
   return (
     <div className="min-h-dvh bg-background">
       <TopNavbar />
-      {!online && (
-        <div role="alert" className="flex items-center justify-center gap-2 bg-warning/15 px-4 py-2 text-center text-sm text-warning">
-          <WifiOff className="size-4" /> You appear to be offline. Saved titles still work; new content needs a connection.
-        </div>
-      )}
+      <InstallPrompt />
+      <MiniPlayer />
       <main>
-        <Outlet />
+        <AuthGate>
+          <Outlet />
+        </AuthGate>
       </main>
       <footer className="mt-16 border-t border-border bg-ink">
         <div className="mx-auto max-w-[1600px] px-4 py-10 text-sm text-muted-foreground md:px-8">

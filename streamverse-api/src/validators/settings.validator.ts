@@ -9,6 +9,9 @@ export const SETTING_DEFINITIONS = {
   billingNotifications: "BOOLEAN",
   newContentAlerts: "BOOLEAN",
   autoplayDefaults: "BOOLEAN",
+  autoPublishContent: "BOOLEAN",
+  autoplayNext: "BOOLEAN",
+  autoplayPreview: "BOOLEAN",
 } as const;
 export type SettingKey = keyof typeof SETTING_DEFINITIONS;
 export const SETTING_KEYS = Object.keys(SETTING_DEFINITIONS) as SettingKey[];

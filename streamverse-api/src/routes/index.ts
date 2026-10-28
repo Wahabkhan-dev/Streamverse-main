@@ -9,6 +9,8 @@ import { genreCustomerRouter } from "./genreCustomer.routes";
 import { healthRouter } from "./health.routes";
 import { homepageCustomerRouter } from "./homepageCustomer.routes";
 import { legalCustomerRouter } from "./legalCustomer.routes";
+import { hlsDeliveryRouter } from "./hlsDelivery.routes";
+import { offlineDeliveryRouter } from "./offlineDelivery.routes";
 import { mediaAccessRouter } from "./mediaAccess.routes";
 import { movieCustomerRouter } from "./movieCustomer.routes";
 import { planRouter } from "./plan.routes";
@@ -39,6 +41,9 @@ apiV1Router.use("/legal", legalCustomerRouter);
 apiV1Router.use("/search", searchRouter);
 
 // Phase 6: protected-media-access foundation (Section 53) — requireAuth itself is inside the router.
+// HLS delivery is token-authorised (not bearer), so it must be mounted before the bearer-protected media router.
+apiV1Router.use("/media/hls", hlsDeliveryRouter);
+apiV1Router.use("/media/offline-file", offlineDeliveryRouter);
 apiV1Router.use("/media", mediaAccessRouter);
 
 // Phase 7: public plan pricing list (Section 12).

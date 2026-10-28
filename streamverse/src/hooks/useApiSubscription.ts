@@ -1,19 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { meApi } from "@/api/me.api";
 import { DEMO_MODE } from "@/lib/config";
+import { useIsAuthenticated } from "@/lib/authState";
 
 export const SUBSCRIPTION_QUERY_KEY = ["me", "subscription"] as const;
 export const INVOICES_QUERY_KEY = ["me", "payments"] as const;
 export const PAYMENT_METHODS_QUERY_KEY = ["me", "payment-methods"] as const;
 
 export function useApiSubscriptionQuery() {
+  const authed = useIsAuthenticated();
   return useQuery({
     queryKey: SUBSCRIPTION_QUERY_KEY,
     queryFn: async () => {
       const res = await meApi.getSubscription();
       return res.data;
     },
-    enabled: !DEMO_MODE,
+    enabled: !DEMO_MODE && authed,
     staleTime: 60 * 1000,
   });
 }
@@ -47,7 +49,7 @@ export function useCheckoutMutation() {
     mutationFn: (planId: string) => meApi.checkout(planId),
     onSuccess: (res) => {
       // Redirect to Stripe checkout
-      if (res.data.url) window.location.href = res.data.url;
+      if (res.data.checkoutUrl) window.location.href = res.data.checkoutUrl;
     },
   });
 }

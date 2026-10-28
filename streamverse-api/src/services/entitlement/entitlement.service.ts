@@ -190,7 +190,7 @@ export async function checkAccess(
         return decision;
       }
       const ageVerif = await ageVerificationRepository.findByUserId(context.userId);
-      if (!ageVerif) {
+      if (!ageVerif || (ageVerif.expiresAt && ageVerif.expiresAt <= now)) {
         decision = deny("AGE_NOT_VERIFIED", true);
         return decision;
       }
@@ -214,6 +214,12 @@ export async function checkAccess(
       if (!subAccess.hasAccess) {
         const reason = subAccess.hasSubscription ? "SUBSCRIPTION_INACTIVE" : "SUBSCRIPTION_REQUIRED";
         decision = deny(reason, true);
+        return decision;
+      }
+      // 10b. The subscription must also INCLUDE this kind of content (a plan can be movies-only, books-only, ...)
+      const included = subAccess.plan === null || (contentType === "movie" ? subAccess.plan.moviesEnabled : contentType === "ebook" ? subAccess.plan.ebooksEnabled : subAccess.plan.audiobooksEnabled);
+      if (!included) {
+        decision = deny("PLAN_NOT_ELIGIBLE", true);
         return decision;
       }
     }

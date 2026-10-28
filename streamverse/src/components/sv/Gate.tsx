@@ -46,6 +46,16 @@ export function GateScreen({ gate, item }: { gate: Gate; item: Item }) {
   }
 }
 
+/** An admin's Preview of a title customers can't see yet (the API only sends `previewStatus` to admins). */
+export function PreviewBanner({ status }: { status: string | undefined }) {
+  if (!status) return null;
+  return (
+    <div role="status" data-testid="preview-banner" className="relative z-10 bg-info/15 px-4 py-2 text-center text-sm font-semibold text-info">
+      Preview: customers can't see this title yet. It is {status.toLowerCase()}.
+    </div>
+  );
+}
+
 /** Renders children only when the title is open to this customer; otherwise the matching restriction screen. */
 export function Gated({ item, children }: { item: Item | undefined; children: ReactNode }) {
   const gate = useGate(item);

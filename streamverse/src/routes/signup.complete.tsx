@@ -1,10 +1,16 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { CheckCircle2, Sparkles } from "lucide-react";
+import { takeReturnTo } from "@/lib/authSession";
+import { BILLING_CHANNEL } from "@/components/sv/billing/StripePopupButton";
+import { syncSubscription } from "@/lib/billingSync";
+import { DEMO_MODE } from "@/lib/config";
 import { useProfile, useSubscription, useUserHydrated } from "@/lib/user";
 
 export const Route = createFileRoute("/signup/complete")({
   head: () => ({ meta: [{ title: "Welcome to StreamVerse" }] }),
+  // Stripe sends the popup window back here with popup=1
+  validateSearch: (s: Record<string, unknown>): { popup?: "1" } => (s["popup"] === "1" ? { popup: "1" } : {}),
   component: CompleteStep,
 });
 
@@ -18,6 +24,12 @@ function formatDate(iso: string): string {
 }
 
 function CompleteStep() {
+  // a visitor who was sent to sign up from a protected page carries on to it
+  const [dest, setDest] = useState("/");
+  useEffect(() => {
+    const back = takeReturnTo();
+    if (back) setDest(back);
+  }, []);
   const navigate = useNavigate();
   const profile = useProfile();
   const sub = useSubscription();
@@ -25,11 +37,30 @@ function CompleteStep() {
   const isGuest = profile.email === "alex@streamverse.tv" && profile.name === "Alex Morgan";
   const isActive = !isGuest && sub.status === "active";
 
+  // Live: the membership is whatever Stripe says right now (this page is also where the Stripe popup lands)
+  const { popup } = Route.useSearch();
+  const [checked, setChecked] = useState(DEMO_MODE);
   useEffect(() => {
-    if (hydrated && !isActive) {
+    if (DEMO_MODE) return;
+    void syncSubscription()
+      .then((paid) => {
+        if (paid && popup) {
+          // the window that opened this popup is told over a same-site channel (Stripe cuts the opener link), then this closes
+          const channel = new BroadcastChannel(BILLING_CHANNEL);
+          channel.postMessage({ type: "paid" });
+          channel.close();
+          window.close();
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => setChecked(true));
+  }, [popup]);
+
+  useEffect(() => {
+    if (hydrated && checked && !isActive) {
       void navigate({ to: "/signup/plan", replace: true });
     }
-  }, [hydrated, isActive, navigate]);
+  }, [hydrated, checked, isActive, navigate]);
 
   if (!isActive) return null;
 
@@ -72,11 +103,11 @@ function CompleteStep() {
 
       {/* CTA */}
       <Link
-        to="/"
+        to={dest as "/"}
         className="mt-8 flex items-center gap-2 rounded-lg bg-primary px-8 py-3 text-sm font-bold text-white transition hover:bg-primary/90"
       >
         <Sparkles className="size-4" />
-        Start Exploring
+        {dest === "/" ? "Start Exploring" : "Continue"}
       </Link>
 
       <p className="mt-5 text-xs text-muted-foreground">

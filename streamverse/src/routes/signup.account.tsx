@@ -8,8 +8,8 @@ import { SignupStepper } from "@/components/sv/SignupStepper";
 import { SIGNUP_PLAN_KEY } from "./signup.plan";
 import { DEMO_MODE } from "@/lib/config";
 import { authApi } from "@/api/auth.api";
-import { setAccessToken, isApiError } from "@/api/client";
-import { setAuthUser } from "@/lib/authState";
+import { isApiError } from "@/api/client";
+import { completeSignIn } from "@/lib/authSession";
 
 export const Route = createFileRoute("/signup/account")({
   head: () => ({ meta: [{ title: "Create Your Account — StreamVerse" }] }),
@@ -109,15 +109,9 @@ function AccountStep() {
     // Real API registration
     try {
       const res = await authApi.register(form.name.trim(), form.email, form.password);
-      setAccessToken(res.data.accessToken);
-      setAuthUser(res.data.user);
-      // Mirror into localStorage store so other screens show correct data
-      updateUser((s) => ({
-        ...s,
-        role: res.data.user.role,
-        profile: { ...s.profile, name: res.data.user.fullName, email: res.data.user.email },
-        subscription: { ...s.subscription, status: "canceled" },
-      }));
+      completeSignIn(res.data.user, res.data.accessToken);
+      // Mirror the new account's subscription state into the browser store for the plan flow
+      updateUser((s) => ({ ...s, subscription: { ...s.subscription, status: "canceled" } }));
       setLoading(false);
       void navigate({ to: "/signup/payment" });
     } catch (err) {

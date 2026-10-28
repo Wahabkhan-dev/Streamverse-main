@@ -1,3 +1,5 @@
+import { clearAuthUser } from "@/lib/authState";
+import { setServerReachable } from "@/lib/connection";
 import { API_BASE } from "@/lib/config";
 
 const TOKEN_KEY = "sv-access-token";
@@ -47,7 +49,28 @@ export function isApiError(err: unknown): err is ApiError {
 
 /* ─────────────────────────────── Refresh logic ──────────────────────────── */
 
+/**
+ * Endpoints whose 401 means "bad credentials / no session" rather than "access token expired". They must never
+ * trigger a refresh: a failed login retrying through /auth/refresh (which itself 401s) is what produced a
+ * refresh-and-reload storm for anonymous visitors.
+ */
+const NO_REFRESH_PATHS = [
+  "/auth/login",
+  "/auth/register",
+  "/auth/refresh",
+  "/auth/logout",
+  "/auth/forgot-password",
+  "/auth/reset-password",
+];
+
 let pendingRefresh: Promise<string | null> | null = null;
+/**
+ * After a refresh fails the session is dead. Every other request that was already in flight will also come back 401
+ * moments later; without this they would each try (and fail) their own refresh, multiplying calls against a
+ * rate-limited endpoint. Within this window they fail straight away instead.
+ */
+let lastRefreshFailedAt = 0;
+const REFRESH_COOLDOWN_MS = 10_000;
 
 async function doRefresh(): Promise<string | null> {
   try {
@@ -71,11 +94,7 @@ async function doRefresh(): Promise<string | null> {
 
 /* ─────────────────────────────── Core fetch ────────────────────────────── */
 
-async function apiFetch<T>(
-  path: string,
-  init: RequestInit = {},
-  isRetry = false,
-): Promise<T> {
+async function apiFetch<T>(path: string, init: RequestInit = {}, isRetry = false): Promise<T> {
   const token = getAccessToken();
   const headers = new Headers(init.headers as HeadersInit | undefined);
 
@@ -90,25 +109,34 @@ async function apiFetch<T>(
     ...init,
     headers,
     credentials: "include", // always include for refresh cookie
+  }).catch((err: unknown) => {
+    // no answer at all (server down, blocked network, offline): the site shows a "can't reach StreamVerse" bar
+    setServerReachable(false);
+    throw err;
   });
+  setServerReachable(true); // any answer, even an error status, means the server is there
 
   // ── 401 → try refresh once ──
-  if (res.status === 401 && !isRetry) {
-    if (!pendingRefresh) {
-      pendingRefresh = doRefresh().finally(() => {
-        pendingRefresh = null;
-      });
+  if (res.status === 401 && !isRetry && !NO_REFRESH_PATHS.some((p) => path.startsWith(p))) {
+    let newToken: string | null = null;
+    if (Date.now() - lastRefreshFailedAt >= REFRESH_COOLDOWN_MS) {
+      if (!pendingRefresh) {
+        pendingRefresh = doRefresh().finally(() => {
+          pendingRefresh = null;
+        });
+      }
+      newToken = await pendingRefresh;
+      if (!newToken) lastRefreshFailedAt = Date.now();
+      else lastRefreshFailedAt = 0;
     }
-    const newToken = await pendingRefresh;
     if (newToken) {
       return apiFetch<T>(path, init, true);
     }
-    // Refresh failed — clear state and redirect
+    // Refresh failed: the session is over. Forget it; the route guard sends the visitor to Sign In from a protected page
+    // (public pages simply carry on as a guest). No hard reload, so there is no redirect loop.
     clearAccessToken();
-    if (typeof window !== "undefined") {
-      window.location.href = "/sign-in";
-    }
-    throw new ApiError(401, "UNAUTHORIZED", "Session expired. Please sign in again.");
+    if (token) clearAuthUser({ expired: true });
+    throw new ApiError(401, "UNAUTHORIZED", "Your session has expired. Please sign in again.");
   }
 
   // ── Error responses ──
@@ -116,12 +144,18 @@ async function apiFetch<T>(
     let code = "UNKNOWN";
     let message = `Request failed: ${res.status} ${res.statusText}`;
     try {
+      // The API's envelope is { success, message, errors, code, requestId } — `code` is top-level.
       const body = (await res.json()) as {
+        code?: string;
         error?: { code?: string; message?: string };
         message?: string;
+        errors?: Array<{ message?: string }>;
       };
-      code = body.error?.code ?? code;
+      code = body.code ?? body.error?.code ?? code;
       message = body.error?.message ?? body.message ?? message;
+      // a validation failure says WHAT was wrong (e.g. "this image is too small"), not just "Validation failed"
+      const details = (body.errors ?? []).map((e) => e.message).filter(Boolean);
+      if (details.length) message = details.join(" ");
     } catch {
       /* ignore parse failures */
     }
@@ -133,7 +167,11 @@ async function apiFetch<T>(
     return undefined as unknown as T;
   }
 
-  return res.json() as Promise<T>;
+  const json = (await res.json()) as Record<string, unknown>;
+  // The API names the paging block `pagination`; every consumer reads it as `meta` ({ page, limit, total, totalPages }).
+  if (json && typeof json === "object" && json["pagination"] && !json["meta"])
+    json["meta"] = json["pagination"];
+  return json as T;
 }
 
 /* ─────────────────────────────── Public API ─────────────────────────────── */

@@ -9,10 +9,11 @@ import { PLACEHOLDER_IMAGE } from "@/lib/placeholder";
 import { BANNER_TYPES, update, useBanners, useCollections, type Banner, type BannerType, type LinkKind } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { DEMO_MODE } from "@/lib/config";
+import { LiveBanners } from "@/components/sv/LiveAdminPages";
 import { useAdminBannersQuery, useAdminBannerMutation } from "@/hooks/useAdminApi";
 import type { ApiBanner } from "@/api/types";
 
-export const Route = createFileRoute("/admin/banners")({ component: Banners });
+export const Route = createFileRoute("/admin/banners")({ component: () => (DEMO_MODE ? <Banners /> : <LiveBanners />) });
 
 const TYPE_INFO: Record<BannerType, { blurb: string; where: string; recommended: string }> = {
   "Hero Banner": { blurb: "Full-width feature", where: "Top of the homepage carousel", recommended: "1920 × 800" },

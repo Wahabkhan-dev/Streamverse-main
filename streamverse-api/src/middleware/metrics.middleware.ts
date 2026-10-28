@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import { logger } from "../config/logger";
 
 // Simple in-process counters — replace with Prometheus/StatsD later
 const counters = {
@@ -25,7 +26,7 @@ export function metricsMiddleware(req: Request, res: Response, next: NextFunctio
 
     // Log slow requests
     if (ms > slowRequestThresholdMs) {
-      console.warn(
+      logger.warn(
         `[slow] ${req.method} ${req.path} ${res.statusCode} ${ms}ms requestId=${req.id ?? "unknown"}`,
       );
     }

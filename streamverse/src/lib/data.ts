@@ -8,7 +8,7 @@ import m7 from "@/assets/m7.jpg";
 import m8 from "@/assets/m8.jpg";
 
 /** Published is the only status customers can see. Unpublished is a title that was live and was taken down. */
-export type Status = "Published" | "Draft" | "Scheduled" | "Unpublished" | "Archived";
+export type Status = "Published" | "Draft" | "Scheduled" | "Unpublished" | "Archived" | "Processing" | "Failed";
 export type ItemType = "Movie" | "eBook" | "Audiobook";
 /**
  * A pointer to one catalog title. `id` is the title's stable reference (MOV-000001 ...) and is what the
@@ -59,6 +59,9 @@ export interface BookInfo {
 
 export interface Movie {
   slug: string;
+  /** live mode: which extra videos the admin actually added (demo titles leave these unset and show all three) */
+  hasTrailer?: boolean;
+  hasTeaser?: boolean;
   title: string;
   year: number;
   genres: string[];
@@ -108,6 +111,8 @@ export interface Book {
   meta?: Record<string, string>;
   /** system-generated reference (EBK-000001 / AUD-000001), shown to admins only */
   cid?: string;
+  /** the book also offers a page-turn (flipbook) version */
+  flipbook?: boolean;
   createdAt?: string;
   updatedAt?: string;
   publishAt?: string;

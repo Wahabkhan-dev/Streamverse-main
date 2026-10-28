@@ -20,7 +20,12 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts",
-    "db:up": "docker compose up -d postgres redis"
+    "seed": "tsx prisma/seed.ts",
+    "seed:demo": "tsx prisma/seed-demo.ts",
+    "seed:demo:images": "tsx prisma/seed-demo-images.ts",
+    "seed:demo:delete": "tsx prisma/seed-demo-delete.ts",
+    "seed:homepage": "tsx prisma/seed-homepage.ts",
+    "db:up": "docker compose up -d db redis"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -30,7 +35,6 @@
     "@aws-sdk/s3-request-presigner": "^3.1149.0",
     "@prisma/client": "^6.19.3",
     "@sentry/node": "^11.7.0",
-    "@sentry/profiling-node": "^11.7.0",
     "argon2": "^0.45.1",
     "bullmq": "^6.3.13",
     "cookie-parser": "^1.4.7",
@@ -56,6 +60,8 @@
     "@types/node": "^26.6.5",
     "@types/supertest": "^7.2.1",
     "@types/swagger-ui-express": "^4.1.8",
+    "ffmpeg-static": "^5.3.0",
+    "ffprobe-static": "^3.1.0",
     "pino-pretty": "^13.2.0",
     "prisma": "^6.19.3",
     "supertest": "^7.3.1",

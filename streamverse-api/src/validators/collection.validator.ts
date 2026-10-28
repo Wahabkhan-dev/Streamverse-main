@@ -10,6 +10,8 @@ export const createCollectionSchema = z.object({
 export type CreateCollectionInput = z.infer<typeof createCollectionSchema>;
 
 export const updateCollectionSchema = createCollectionSchema.partial().extend({
+  /** null removes the collection image */
+  bannerAssetId: z.string().min(1).nullable().optional(),
   status: z.enum(["DRAFT", "PUBLISHED", "UNPUBLISHED", "ARCHIVED"]).optional(),
   expectedUpdatedAt: z.coerce.date().optional(),
 });

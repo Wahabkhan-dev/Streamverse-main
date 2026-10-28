@@ -16,7 +16,7 @@ export interface PdfReaderHandle {
   goToPage: (page: number) => void;
 }
 
-interface PdfReaderProps {
+export interface PdfReaderProps {
   url: string;
   initialPage?: number;
   onPageChange: (page: number, totalPages: number) => void;
@@ -29,6 +29,7 @@ export const PdfReader = forwardRef<PdfReaderHandle, PdfReaderProps>(
     const [numPages, setNumPages] = useState(0);
     const [currentPage, setCurrentPage] = useState(initialPage ?? 1);
     const containerRef = useRef<HTMLDivElement>(null);
+    const restoredRef = useRef(false);
     const [containerWidth, setContainerWidth] = useState(0);
 
     // Keep callbacks stable
@@ -85,8 +86,10 @@ export const PdfReader = forwardRef<PdfReaderHandle, PdfReaderProps>(
           onLoadSuccess={({ numPages: n }: { numPages: number }) => {
             setNumPages(n);
             onReadyRef.current(n);
-            // Restore page from progress, clamped to valid range
-            if (initialPage !== undefined) {
+            // Restore the saved page ONCE, clamped to the real page count. The document can (re)load again later; restoring
+            // every time would throw the reader back to the saved page after each page turn.
+            if (!restoredRef.current && initialPage !== undefined) {
+              restoredRef.current = true;
               setCurrentPage(Math.max(1, Math.min(n, initialPage)));
             }
           }}

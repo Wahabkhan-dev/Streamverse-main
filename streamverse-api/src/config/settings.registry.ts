@@ -39,7 +39,7 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     type: "string",
     default: "en",
     public: true,
-    description: "Default UI language code (ISO 639-1).",
+    description: "Language pre-selected as the Primary Language when adding content (the language name, e.g. English).",
   },
   {
     key: "autoplayDefaults",
@@ -47,6 +47,27 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     default: true,
     public: true,
     description: "Default autoplay preference for new users.",
+  },
+  {
+    key: "autoPublishContent",
+    type: "boolean",
+    default: true,
+    public: false,
+    description: "New titles open the Publish step with Publish now already selected.",
+  },
+  {
+    key: "autoplayNext",
+    type: "boolean",
+    default: true,
+    public: true,
+    description: "Offer the next title when a movie ends (a customer can turn it off in Profile).",
+  },
+  {
+    key: "autoplayPreview",
+    type: "boolean",
+    default: true,
+    public: true,
+    description: "Rotate the homepage hero automatically (a customer can turn it off in Profile).",
   },
   {
     key: "newContentAlerts",

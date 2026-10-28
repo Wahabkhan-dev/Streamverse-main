@@ -54,6 +54,7 @@ const statusTone: Record<string, string> = {
   Free: "text-muted-foreground bg-surface-3 border-border",
   Unpublished: "text-muted-foreground bg-surface-3 border-border",
   Scheduled: "text-info bg-info/10 border-info/30",
+  Processing: "text-warning bg-warning/10 border-warning/30",
   Pending: "text-warning bg-warning/10 border-warning/30",
   Degraded: "text-warning bg-warning/10 border-warning/30",
   Archived: "text-warning bg-warning/10 border-warning/30",
@@ -119,19 +120,21 @@ export function PageHeader({ title, sub, actions, eyebrow }: { title: string; su
   );
 }
 
-export function MetricCard({ icon: Icon, label, value, trend }: { icon: React.ElementType; label: string; value: string; trend: number }) {
-  const up = trend >= 0;
+export function MetricCard({ icon: Icon, label, value, trend }: { icon: React.ElementType; label: string; value: string; trend?: number }) {
+  const up = (trend ?? 0) >= 0;
   return (
     <Panel className="p-4 transition-colors hover:border-foreground/20">
       <div className="flex items-center justify-between">
         <span className="grid size-9 place-items-center rounded-md bg-primary/12 text-primary-text">
           <Icon className="size-4" />
         </span>
-        <span className={cn("inline-flex items-center gap-1 text-xs font-semibold", up ? "text-success" : "text-primary-text")}>
-          {up ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />}
-          {up ? "+" : ""}
-          {trend}%<span className="hidden font-normal text-muted-foreground sm:inline"> vs last month</span>
-        </span>
+        {trend !== undefined && (
+          <span className={cn("inline-flex items-center gap-1 text-xs font-semibold", up ? "text-success" : "text-primary-text")}>
+            {up ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />}
+            {up ? "+" : ""}
+            {trend}%<span className="hidden font-normal text-muted-foreground sm:inline"> vs last month</span>
+          </span>
+        )}
       </div>
       <div className="mt-4 text-2xl font-bold tracking-tight">{value}</div>
       <div className="mt-0.5 text-xs text-muted-foreground">{label}</div>

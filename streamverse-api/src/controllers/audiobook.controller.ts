@@ -3,6 +3,7 @@ import * as audiobookService from "../services/audiobook.service";
 import * as contentStatusService from "../services/contentStatus.service";
 import { toAudiobookAdminDto } from "../mappers/audiobook.mapper";
 import { mapContentListRow } from "../mappers/content.mapper";
+import { signCoversByContentId } from "../services/catalog.service";
 import { auditContext } from "../services/auditLog.service";
 import { sendPaginated, sendSuccess } from "../utils/apiResponse";
 
@@ -24,7 +25,8 @@ export async function getOne(req: Request, res: Response) {
 
 export async function list(req: Request, res: Response) {
   const { rows, pagination } = await audiobookService.listAudiobooks(req.query as never);
-  sendPaginated(res, rows.map(mapContentListRow), pagination);
+  const covers = await signCoversByContentId(rows.map((r) => r.id), "AUDIOBOOK");
+  sendPaginated(res, rows.map((r) => mapContentListRow(r, covers.get(r.id) ?? null)), pagination);
 }
 
 export async function remove(req: Request, res: Response) {

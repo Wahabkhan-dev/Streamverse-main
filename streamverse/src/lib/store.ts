@@ -710,23 +710,6 @@ export const useSettings = () => store.use((s) => s.settings);
 export const useAdminNotes = () => store.use((s) => s.adminNotes);
 export const useAnnouncements = () => store.use((s) => s.announcements);
 
-/** Genre filter pills for a content type: "All" first, then admin-managed genres that apply. */
-export function useGenreNames(kind: "Movie" | "eBook" | "Audiobook"): string[] {
-  const genres = useGenres();
-  return useMemo(
-    () => [
-      "All",
-      ...genres
-        .filter(
-          (g) =>
-            g.type === "All" || g.type === kind || (g.type === "eBook" && kind === "Audiobook"),
-        )
-        .map((g) => g.name),
-    ],
-    [genres, kind],
-  );
-}
-
 export const slugify = (t: string) =>
   t
     .toLowerCase()

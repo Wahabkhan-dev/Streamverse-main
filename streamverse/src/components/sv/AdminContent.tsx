@@ -1,11 +1,12 @@
 import { Link, useNavigate } from "@tanstack/react-router";
+import { useGenreNames } from "@/hooks/useGenreNames";
 import { Archive, ArrowDown, ArrowUp, ArrowUpDown, BarChart3, Check, Eye, EyeOff, FilePen, Filter, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { fmt, type Book, type Movie, type Status } from "@/lib/data";
 import { runtimeSeconds } from "@/lib/runtime";
 import { deleteDraft, editDraftId, isEditDraft, newDraftId, useDrafts, useDraftsHydrated, type DraftRec } from "@/lib/drafts";
-import { update, useAudiobooks, useEbooks, useGenreNames, useMovies } from "@/lib/store";
+import { update, useAudiobooks, useEbooks, useMovies } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { BookCover } from "./media";
 import { SearchBox, td, th, tr } from "./admin";
@@ -13,6 +14,7 @@ import { Btn, ConfirmDialog, EmptyState, PageHeader, Panel, Skel, StatusBadge } 
 import { AudiobookWizard } from "./wizard/AudiobookWizard";
 import { EbookWizard } from "./wizard/EbookWizard";
 import { MovieWizard } from "./wizard/MovieWizard";
+import { LiveWizardHost } from "./wizard/LiveWizardHost";
 import { formatSchedule } from "./wizard/shared";
 import { DEMO_MODE } from "@/lib/config";
 import {
@@ -21,25 +23,26 @@ import {
   useAdminAudiobooksQuery, useAdminAudiobookMutation,
 } from "@/hooks/useAdminApi";
 import type { ApiMovie, ApiBook } from "@/api/types";
+import { uiStatus } from "@/lib/api-mappers";
 
 // Mappers from API types to store types (used in !DEMO_MODE for list display)
-function apiMovieToMovie(m: ApiMovie): Movie {
+export function apiMovieToMovie(m: ApiMovie): Movie {
   return {
     slug: m.slug,
     title: m.title,
-    year: m.year,
+    year: m.year ?? (m.releaseDate ? new Date(m.releaseDate).getUTCFullYear() : new Date().getFullYear()),
     genres: m.genres,
-    runtime: m.duration ? `${Math.floor(m.duration / 60)}m` : "",
-    rating: m.rating ?? "",
+    runtime: (m.runtimeMinutes ?? m.duration) ? `${Math.floor((m.runtimeMinutes ?? m.duration ?? 0) / 60)}h ${Math.round((m.runtimeMinutes ?? m.duration ?? 0) % 60)}m` : "",
+    rating: m.ageRating ?? (typeof m.rating === "string" ? m.rating : ""),
     badges: [],
-    description: m.description,
-    image: m.image,
-    status: (m.status ?? "Draft") as Status,
+    description: m.description ?? m.summary ?? "",
+    image: m.image ?? "",
+    status: uiStatus(m.status ?? "DRAFT"),
     views: m.views ?? 0,
-    release: m.createdAt?.slice(0, 10) ?? "",
+    release: (m.releaseDate ?? m.createdAt)?.slice(0, 10) ?? "",
     cast: (m.cast ?? []).map((c) => ({ name: c.name, role: c.role })),
     cid: m.id,
-    meta: m.rating ? { "Age Rating": m.rating } : {},
+    meta: m.ageRating ? { "Age Rating": m.ageRating } : {},
     ...(m.restrictions?.access ? { restrictions: { access: m.restrictions.access === "Subscription" ? "Subscribers Only" as const : m.restrictions.access === "Purchase" ? "Subscribers Only" as const : "Public" as const } } : {}),
     ...(m.promo != null ? { promo: m.promo } : {}),
     ...(m.createdAt != null ? { createdAt: m.createdAt } : {}),
@@ -47,23 +50,25 @@ function apiMovieToMovie(m: ApiMovie): Movie {
   };
 }
 
-function apiBookToBook(b: ApiBook): Book {
+export function apiBookToBook(b: ApiBook): Book {
   const FALLBACK_PALETTE: [string, string, string] = ["oklch(20% 0.05 240)", "oklch(15% 0.05 240)", "oklch(80% 0.05 240)"];
   return {
     slug: b.slug,
     title: b.title,
-    author: b.author,
-    ...(b.narrator != null ? { narrator: b.narrator } : {}),
+    author: b.author ?? "",
+    ...(b.narrator ? { narrator: b.narrator } : {}),
+    // the same signed cover the backend returns for the customer catalog — BookCover prefers it over generated art
+    ...(b.image ? { cover: b.image } : {}),
     genre: b.genres[0] ?? "",
     rating: 4,
     reviews: 0,
-    pages: b.pages ?? 0,
-    ...(b.duration != null ? { duration: `${Math.floor(b.duration / 3600)}h ${Math.floor((b.duration % 3600) / 60)}m` } : {}),
-    year: b.year ?? new Date().getFullYear(),
-    description: b.description,
+    pages: b.pageCount ?? b.pages ?? 0,
+    ...((b.durationSeconds ?? b.duration) != null ? { duration: `${Math.floor((b.durationSeconds ?? b.duration ?? 0) / 3600)}h ${Math.floor(((b.durationSeconds ?? b.duration ?? 0) % 3600) / 60)}m` } : {}),
+    year: b.year ?? (b.releaseDate ? new Date(b.releaseDate).getUTCFullYear() : new Date().getFullYear()),
+    description: b.description ?? b.summary ?? "",
     palette: FALLBACK_PALETTE,
     motif: "line",
-    status: (b.status ?? "Draft") as Status,
+    status: uiStatus(b.status ?? "DRAFT"),
     isbn: "",
     count: 0,
     cid: b.id,
@@ -104,7 +109,9 @@ function StatusCell({ e }: { e: Movie | Book }) {
 }
 
 const Thumb = ({ type, it }: { type: ContentType; it: Movie | Book }) =>
-  type === "Movie" ? <img src={(it as Movie).image} alt="" className="h-9 w-16 shrink-0 rounded object-cover" /> : <BookCover b={it as Book} square className="w-9 shrink-0 rounded" />;
+  type === "Movie" ? (
+    (it as Movie).image ? <img src={(it as Movie).image} alt="" className="h-9 w-16 shrink-0 rounded object-cover" /> : <div className="h-9 w-16 shrink-0 rounded bg-surface-3" />
+  ) : <BookCover b={it as Book} square className="w-9 shrink-0 rounded" />;
 
 /* ================================================================ list */
 
@@ -220,9 +227,10 @@ export function AdminContentList({ type, q: initialQ = "" }: { type: ContentType
   const storeItems = useStoreItems(type);
 
   // Real API hooks (all three always called; enabled: !DEMO_MODE internally)
-  const moviesQ = useAdminMoviesQuery();
-  const ebooksQ = useAdminEbooksQuery();
-  const audiobooksQ = useAdminAudiobooksQuery();
+  // Only the list for the type being shown is fetched — the other two would be wasted requests.
+  const moviesQ = useAdminMoviesQuery(undefined, { enabled: type === "Movie" });
+  const ebooksQ = useAdminEbooksQuery(undefined, { enabled: type === "eBook" });
+  const audiobooksQ = useAdminAudiobooksQuery(undefined, { enabled: type === "Audiobook" });
   const movieMut = useAdminMovieMutation();
   const ebookMut = useAdminEbookMutation();
   const audiobookMut = useAdminAudiobookMutation();
@@ -249,9 +257,32 @@ export function AdminContentList({ type, q: initialQ = "" }: { type: ContentType
   const drafts = useDrafts().filter((d) => d.type === type && !isEditDraft(d));
   const [filtersOpen, setFiltersOpen] = useState(true);
 
+  // live mode: the change is made on the server and the list is read back from it; the row is busy until it answers
+  const [busy, setBusy] = useState<string | null>(null);
+  const onServer = (i: Movie | Book, run: (id: string) => Promise<unknown>, done: string, failed: string) => {
+    if (!i.cid) return void toast.error(`${i.title} has no server id. Reload the page.`);
+    setBusy(i.slug);
+    run(i.cid)
+      .then(() => toast.success(done))
+      .catch((e: unknown) => toast.error(`${failed}: ${e instanceof Error ? e.message : "something went wrong"}`))
+      .finally(() => setBusy(null));
+  };
   const setStatusOf = (i: Movie | Book, next: Status) => {
-    setItems(type, (o) => o.map((x) => (x.slug === i.slug ? { ...x, status: next } : x)));
-    toast.success(`${i.title} · ${next}`);
+    if (DEMO_MODE) {
+      setItems(type, (o) => o.map((x) => (x.slug === i.slug ? { ...x, status: next } : x)));
+      toast.success(`${i.title} · ${next}`);
+      return;
+    }
+    const m = next === "Published" ? apiMut.publish : next === "Unpublished" ? apiMut.unpublish : apiMut.archive;
+    onServer(i, (id) => m.mutateAsync(id), `${i.title} · ${next}`, `${i.title} could not be ${next.toLowerCase()}`);
+  };
+  const remove = (i: Movie | Book) => {
+    if (DEMO_MODE) {
+      setItems(type, (o) => o.filter((x) => x.slug !== i.slug));
+      toast.success(`${i.title} deleted`);
+      return;
+    }
+    onServer(i, (id) => apiMut.remove.mutateAsync(id), `${i.title} deleted`, `${i.title} could not be deleted`);
   };
   const active = Object.values(chosen).filter(Boolean).length + (q ? 1 : 0);
   const clear = () => {
@@ -294,13 +325,13 @@ export function AdminContentList({ type, q: initialQ = "" }: { type: ContentType
       <Link to={`/${base[type]}/$slug` as "/movies/$slug"} params={{ slug: i.slug }} className={icon} title="Preview title" aria-label={`Preview ${i.title}`}>
         <Eye className="size-3.5" />
       </Link>
-      <button className={icon} title={i.status === "Published" ? "Unpublish" : "Publish"} aria-label={i.status === "Published" ? `Unpublish ${i.title}` : `Publish ${i.title}`} onClick={() => setStatusOf(i, i.status === "Published" ? "Unpublished" : "Published")}>
+      <button className={cn(icon, "disabled:opacity-30")} disabled={busy === i.slug} title={i.status === "Published" ? "Unpublish" : "Publish"} aria-label={i.status === "Published" ? `Unpublish ${i.title}` : `Publish ${i.title}`} onClick={() => setStatusOf(i, i.status === "Published" ? "Unpublished" : "Published")}>
         {i.status === "Published" ? <EyeOff className="size-3.5" /> : <Check className="size-3.5" />}
       </button>
-      <button className={icon} title="Archive" aria-label={`Archive ${i.title}`} disabled={i.status === "Archived"} onClick={() => setStatusOf(i, "Archived")}>
-        <Archive className={cn("size-3.5", i.status === "Archived" && "opacity-30")} />
+      <button className={cn(icon, "disabled:opacity-30")} title="Archive" aria-label={`Archive ${i.title}`} disabled={i.status === "Archived" || busy === i.slug} onClick={() => setStatusOf(i, "Archived")}>
+        <Archive className="size-3.5" />
       </button>
-      <button className={cn(icon, "hover:bg-primary/10 hover:text-primary-text")} title="Delete" aria-label={`Delete ${i.title}`} onClick={() => setDel(i)}>
+      <button className={cn(icon, "hover:bg-primary/10 hover:text-primary-text disabled:opacity-30")} disabled={busy === i.slug} title="Delete" aria-label={`Delete ${i.title}`} onClick={() => setDel(i)}>
         <Trash2 className="size-3.5" />
       </button>
     </div>
@@ -375,7 +406,17 @@ export function AdminContentList({ type, q: initialQ = "" }: { type: ContentType
             ))}
           </div>
         )}
-        {list.length === 0 ? (
+        {isLoading ? (
+          <div className="space-y-2 p-5" aria-busy="true">
+            {[0, 1, 2, 3].map((n) => (
+              <Skel key={n} className="h-12 w-full" />
+            ))}
+          </div>
+        ) : isError ? (
+          <div className="p-5">
+            <EmptyState title={`${plural[type]} could not be loaded`} sub={apiQuery.error instanceof Error ? apiQuery.error.message : "The server did not answer."} action={<Btn onClick={() => void apiQuery.refetch()}>Try again</Btn>} />
+          </div>
+        ) : list.length === 0 ? (
           <div className="p-5">
             <EmptyState title={`No ${plural[type].toLowerCase()} match`} sub="Adjust your search or filters." action={<Btn onClick={clear}>Reset filters</Btn>} />
           </div>
@@ -429,8 +470,7 @@ export function AdminContentList({ type, q: initialQ = "" }: { type: ContentType
         title="Delete this title?"
         description={`"${del?.title}" will be removed from the catalog for all customers. This can't be undone.`}
         onConfirm={() => {
-          setItems(type, (o) => o.filter((x) => x.slug !== del?.slug));
-          toast.success(`${del?.title} deleted`);
+          if (del) remove(del);
         }}
       />
     </>
@@ -491,7 +531,15 @@ function DraftChooser({ type, drafts }: { type: ContentType; drafts: DraftRec[] 
 }
 
 /** Add and edit both use the multi-step publishing wizard for the content type. */
+/**
+ * Live mode edits real titles through the API (artwork comes from the Media Library); demo mode keeps the local-storage wizard.
+ */
 export function AdminContentForm({ type, slug, draft }: { type: ContentType; slug?: string; draft?: string | undefined }) {
+  if (!DEMO_MODE) return <LiveWizardHost type={type} {...(slug ? { slug } : {})} />;
+  return <AdminContentFormDemo type={type} {...(slug ? { slug } : {})} draft={draft} />;
+}
+
+function AdminContentFormDemo({ type, slug, draft }: { type: ContentType; slug?: string; draft?: string | undefined }) {
   const items = useStoreItems(type);
   const drafts = useDrafts();
   const draftsReady = useDraftsHydrated();

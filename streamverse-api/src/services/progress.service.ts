@@ -59,5 +59,14 @@ export async function getContinue(userId: string) {
   const ebookContents = ebooks.map((p) => p.ebook.content).filter((c) => isCustomerVisible(c));
   const audiobookContents = audiobooks.map((p) => p.audiobook.content).filter((c) => isCustomerVisible(c));
   const [movieCards, ebookCards, audiobookCards] = await Promise.all([toMixedCards(movieContents), toMixedCards(ebookContents), toMixedCards(audiobookContents)]);
-  return { movies: movieCards, ebooks: ebookCards, audiobooks: audiobookCards };
+  // each card carries how far the customer got, so the homepage row can draw a progress bar without a second request
+  const withPct = <T extends { id: string }>(cards: T[], rows: Array<{ percentage: number; [k: string]: unknown }>, contentOf: (r: never) => { id: string }) => {
+    const pct = new Map(rows.map((r) => [contentOf(r as never).id, r.percentage]));
+    return cards.map((c) => ({ ...c, percentage: pct.get(c.id) ?? 0 }));
+  };
+  return {
+    movies: withPct(movieCards, movies as never, ((p: { movie: { content: { id: string } } }) => p.movie.content) as never),
+    ebooks: withPct(ebookCards, ebooks as never, ((p: { ebook: { content: { id: string } } }) => p.ebook.content) as never),
+    audiobooks: withPct(audiobookCards, audiobooks as never, ((p: { audiobook: { content: { id: string } } }) => p.audiobook.content) as never),
+  };
 }

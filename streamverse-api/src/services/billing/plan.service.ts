@@ -1,5 +1,6 @@
+import { ERROR_CODES } from "../../constants/errors";
 import * as planRepository from "../../repositories/plan.repository";
-import { ConflictError, NotFoundError, ValidationError } from "../../utils/errors";
+import { AppError, ConflictError, NotFoundError, ValidationError } from "../../utils/errors";
 import type { AuditContext } from "../auditLog.service";
 import { recordAudit } from "../auditLog.service";
 import type { CreatePlanInput, UpdatePlanInput } from "../../validators/plan.validator";
@@ -51,17 +52,26 @@ export async function listCustomerPlans() {
   return plans.map(toCustomerPlan);
 }
 
-export function toCustomerPlan(plan: { id: string; name: string; slug: string; description: string | null; priceAmount: number; currency: string; billingInterval: string; trialDays: number | null; features: unknown }) {
+export function toCustomerPlan(plan: { id: string; name: string; slug: string; description: string | null; priceAmount: number; currency: string; billingInterval: string; trialDays: number | null; features: unknown; maxDevices?: number | null; maxConcurrentStreams?: number | null; maxVideoQuality?: string | null; moviesEnabled?: boolean; ebooksEnabled?: boolean; audiobooksEnabled?: boolean }) {
   return {
     id: plan.id,
     name: plan.name,
     slug: plan.slug,
     description: plan.description,
     price: plan.priceAmount,
+    /** same value under the name the web app reads (minor units) */
+    priceAmount: plan.priceAmount,
     currency: plan.currency,
     billingInterval: plan.billingInterval,
     trialDays: plan.trialDays,
     features: Array.isArray(plan.features) ? (plan.features as string[]) : [],
+    // null = unlimited / unrestricted
+    maxDevices: plan.maxDevices ?? null,
+    maxConcurrentStreams: plan.maxConcurrentStreams ?? null,
+    maxVideoQuality: plan.maxVideoQuality ?? null,
+    moviesEnabled: plan.moviesEnabled ?? true,
+    ebooksEnabled: plan.ebooksEnabled ?? false,
+    audiobooksEnabled: plan.audiobooksEnabled ?? false,
   };
 }
 
@@ -69,5 +79,7 @@ export function toCustomerPlan(plan: { id: string; name: string; slug: string; d
 export async function resolveActivePlanOrThrow(planId: string) {
   const plan = await planRepository.findActiveById(planId);
   if (!plan) throw new ValidationError([{ path: "planId", message: "This plan does not exist or is not available." }]);
+  // plans seeded without Stripe (scripts/seed-plans.ts --offline) have a placeholder price: never send that to Stripe
+  if (plan.stripePriceId.startsWith("price_offline_")) throw new AppError("Payments are not set up for this plan yet. Please try again later.", 503, ERROR_CODES.SERVICE_UNAVAILABLE);
   return plan;
 }

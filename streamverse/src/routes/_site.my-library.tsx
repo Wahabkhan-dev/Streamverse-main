@@ -11,8 +11,8 @@ import { UnavailableContent } from "@/components/sv/UnavailableContent";
 import { cn } from "@/lib/utils";
 import { DEMO_MODE } from "@/lib/config";
 import { useApiLibraryQuery } from "@/hooks/useApiMe";
-import type { ApiListItem, ApiMovie, ApiBook } from "@/api/types";
 import type { Movie, Book, ItemRef, Status } from "@/lib/data";
+import { mixedCardToItem } from "@/lib/api-mappers";
 
 type Tab = "all" | "movies" | "ebooks" | "audiobooks";
 type Filter = "all" | "recent" | "progress" | "completed";
@@ -35,43 +35,6 @@ export const Route = createFileRoute("/_site/my-library")({
   }),
   component: LibraryPage,
 });
-
-function apiMovieToItem(m: ApiMovie): Item {
-  const mins = m.duration ?? 0;
-  const h = Math.floor(mins / 60);
-  const min = mins % 60;
-  const movie: Movie = {
-    slug: m.slug, title: m.title, year: m.year, genres: m.genres,
-    runtime: h > 0 ? `${h}h ${min}m` : `${min}m`,
-    rating: m.rating ?? "PG", badges: [], description: m.description,
-    image: m.image, status: (m.status ?? "Published") as Status,
-    views: m.views ?? 0, release: `${m.year}-01-01`,
-    cast: m.cast.map((c) => ({ name: c.name, role: c.role })), cid: m.id,
-  };
-  return toItem("Movie", movie);
-}
-
-function apiBookToItem(b: ApiBook, type: "eBook" | "Audiobook"): Item {
-  const book = {
-    slug: b.slug, title: b.title, author: b.author,
-    ...(b.narrator !== undefined ? { narrator: b.narrator } : {}),
-    genre: b.genres[0] ?? "Fiction", rating: 4.0, reviews: 0, pages: b.pages ?? 0,
-    year: b.year ?? new Date().getFullYear(), description: b.description,
-    palette: ["oklch(0.3 0.05 240)", "oklch(0.2 0.05 240)", "oklch(0.8 0.1 240)"] as [string, string, string],
-    motif: "sun" as const, status: (b.status ?? "Published") as Status,
-    isbn: "", count: 0,
-    ...(b.image ? { cover: b.image } : {}),
-    cid: b.id,
-  } as Book;
-  return toItem(type, book);
-}
-
-function apiListItemToItem(entry: ApiListItem): Item | null {
-  if (entry.contentType === "movie" && entry.movie) return apiMovieToItem(entry.movie);
-  if (entry.contentType === "ebook" && entry.ebook) return apiBookToItem(entry.ebook, "eBook");
-  if (entry.contentType === "audiobook" && entry.audiobook) return apiBookToItem(entry.audiobook, "Audiobook");
-  return null;
-}
 
 function LibraryPage() {
   const [tab, setTab] = useState<Tab>("all");
@@ -106,8 +69,7 @@ function LibraryPage() {
     // API mode: build from API library data + local progress
     const map = new Map<string, { item: Item; addedAt: number; touched: number }>();
     const apiItems = (apiLibraryQuery.data ?? [])
-      .map((entry) => ({ item: apiListItemToItem(entry), addedAt: new Date(entry.addedAt).getTime() }))
-      .filter((e): e is { item: Item; addedAt: number } => e.item !== null);
+      .map((entry) => ({ item: mixedCardToItem(entry), addedAt: entry.addedAt ? new Date(entry.addedAt).getTime() : 0 }));
     for (const { item, addedAt } of apiItems) {
       map.set(refKey(item), { item, addedAt, touched: addedAt });
     }

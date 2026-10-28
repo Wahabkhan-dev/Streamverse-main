@@ -61,6 +61,8 @@ export interface PurposeRule {
 }
 
 export const PURPOSE_RULES: Record<UploadPurpose, PurposeRule> = {
+  // Media Library: a generic picture that is not tied to any title yet; it can fill any shareable artwork slot later.
+  LIBRARY_IMAGE: { kind: KIND.IMAGE, contentTypes: "ANY", requiresContentId: false },
   MOVIE_MASTER: { kind: KIND.VIDEO, contentTypes: ["MOVIE"], requiresContentId: true },
   TRAILER: { kind: KIND.VIDEO, contentTypes: ["MOVIE"], requiresContentId: true },
   TEASER: { kind: KIND.VIDEO, contentTypes: ["MOVIE"], requiresContentId: true },
@@ -93,5 +95,5 @@ export function isPurposeAllowedForContentType(purpose: UploadPurpose, contentTy
 }
 
 /** Section 4: which purposes produce a PRIVATE object vs one that may be served from a public CDN URL. */
-const PUBLIC_PURPOSES = new Set<UploadPurpose>(["POSTER", "BACKDROP", "THUMBNAIL", "NORMAL_BANNER", "HERO_BANNER", "LATEST_RELEASE_BANNER", "MOBILE_BANNER", "EBOOK_FRONT_COVER", "EBOOK_BACK_COVER", "EBOOK_SPINE", "EBOOK_FULL_WRAP", "AUDIOBOOK_COVER", "NARRATOR_IMAGE"]);
+const PUBLIC_PURPOSES = new Set<UploadPurpose>(["LIBRARY_IMAGE", "POSTER", "BACKDROP", "THUMBNAIL", "NORMAL_BANNER", "HERO_BANNER", "LATEST_RELEASE_BANNER", "MOBILE_BANNER", "EBOOK_FRONT_COVER", "EBOOK_BACK_COVER", "EBOOK_SPINE", "EBOOK_FULL_WRAP", "AUDIOBOOK_COVER", "NARRATOR_IMAGE"]);
 export const isPublicPurpose = (purpose: UploadPurpose): boolean => PUBLIC_PURPOSES.has(purpose);

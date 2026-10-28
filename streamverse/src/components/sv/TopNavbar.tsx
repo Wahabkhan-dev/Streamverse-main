@@ -1,16 +1,16 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Bell, Bookmark, ChevronDown, CreditCard, History, Library, ListPlus, LogOut, Menu, Shield, UserCog, UserRound, Wallet, X } from "lucide-react";
+import { Bell, Bookmark, Download, ChevronDown, CreditCard, History, Library, ListPlus, LogOut, Menu, Shield, UserCog, UserRound, Wallet, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DEMO_MODE } from "@/lib/demo";
 import { markAllNotesRead, markNoteRead, timeAgo, useCustomerNotifications } from "@/lib/notifications";
-import { setRole, updateUser, useProfile, useRole, useSubscription } from "@/lib/user";
-import { authApi } from "@/api/auth.api";
-import { clearAccessToken } from "@/api/client";
-import { clearAuthUser } from "@/lib/authState";
+import { setRole, updateUser, useProfile, useRole, useSubscription, useUserHydrated } from "@/lib/user";
+import { useAuthState } from "@/lib/authState";
+import { signOut } from "@/lib/authSession";
 import { cn } from "@/lib/utils";
+import { AppNavButtons } from "./AppNav";
 import { Logo } from "./Logo";
 import { SearchField } from "./SearchField";
 import { PlanBadge } from "./ui";
@@ -44,9 +44,23 @@ export function TopNavbar() {
   const unread = notes.filter((n) => !n.read);
   const profile = useProfile();
   const sub = useSubscription();
-  const role = useRole();
-  // Guest = seed default or explicitly signed out (email unchanged from factory default)
-  const isGuest = profile.email === "alex@streamverse.tv" && profile.name === "Alex Morgan";
+  const storeRole = useRole();
+  const auth = useAuthState();
+  const hydrated = useUserHydrated();
+  // Demo only: guest = seed default or explicitly signed out (email unchanged from factory default)
+  const demoGuest = profile.email === "alex@streamverse.tv" && profile.name === "Alex Morgan";
+  // Live: the session check has THREE answers. "Still checking" is never treated as "signed out", so a signed-in customer
+  // who refreshes sees their own header (from what this browser last knew) or a quiet placeholder, never Sign in / Sign up.
+  const view: "guest" | "member" | "pending" = DEMO_MODE
+    ? demoGuest ? "guest" : "member"
+    : auth.status === "unauthenticated" ? "guest"
+    : auth.status === "authenticated" ? "member"
+    : hydrated && !demoGuest ? "member"
+    : "pending";
+  const isGuest = view === "guest";
+  const role = DEMO_MODE ? storeRole : (auth.user?.role ?? "user");
+  const shownName = !DEMO_MODE && auth.user ? auth.user.fullName : profile.name;
+  const shownEmail = !DEMO_MODE && auth.user ? auth.user.email : profile.email;
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-ink/95 backdrop-blur">
@@ -54,6 +68,7 @@ export function TopNavbar() {
         <button className="grid size-9 place-items-center rounded-md hover:bg-surface-3 lg:hidden" onClick={() => setOpen(!open)} aria-label={open ? "Close menu" : "Open menu"} aria-expanded={open}>
           {open ? <X className="size-5" /> : <Menu className="size-5" />}
         </button>
+        <AppNavButtons className="-mx-1" />
         <Logo />
         <nav aria-label="Main" className="hidden items-center gap-5 lg:flex">
           {links.map((l) => (
@@ -104,8 +119,10 @@ export function TopNavbar() {
               </Link>
             </PopoverContent>
           </Popover>
-          {isGuest ? (
-            <div className="hidden items-center gap-2 sm:flex">
+          {view === "pending" ? (
+            <span className="size-8 animate-pulse rounded-md bg-surface-3" aria-hidden data-testid="auth-pending" />
+          ) : isGuest ? (
+            <div className="hidden items-center gap-2 sm:flex" data-testid="auth-guest">
               <Link to="/sign-in" className="rounded-md px-3.5 py-1.5 text-sm font-medium text-soft transition hover:bg-surface-3 hover:text-foreground">
                 Sign in
               </Link>
@@ -117,15 +134,15 @@ export function TopNavbar() {
           <DropdownMenu>
             <DropdownMenuTrigger className="flex items-center gap-2.5 rounded-md py-1 pr-1 pl-1 hover:bg-surface-3">
               <span className="sr-only">Account menu</span>
-              <Avatar name={profile.name} index={profile.avatar} />
+              <Avatar name={shownName} index={profile.avatar} />
               <span className="hidden text-left xl:block">
-                <span className="block text-xs leading-tight font-semibold">{profile.name}</span>
-                {sub.status === "expired" || sub.status === "canceled" ? <span className="rounded border border-warning/40 bg-warning/10 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-warning uppercase">{sub.status}</span> : <PlanBadge plan={sub.plan} />}
+                <span className="block text-xs leading-tight font-semibold">{shownName}</span>
+                {!sub.plan ? null : sub.status === "expired" || sub.status === "canceled" ? <span className="rounded border border-warning/40 bg-warning/10 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-warning uppercase">{sub.status}</span> : <PlanBadge plan={sub.plan} />}
               </span>
               <ChevronDown className="size-4 text-muted-foreground" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56 border-border bg-surface-2">
-              <DropdownMenuLabel className="truncate text-xs font-normal text-muted-foreground">{profile.email}</DropdownMenuLabel>
+              <DropdownMenuLabel className="truncate text-xs font-normal text-muted-foreground">{shownEmail}</DropdownMenuLabel>
               <DropdownMenuItem asChild>
                 <Link to="/profile">
                   <UserRound /> Profile
@@ -144,6 +161,11 @@ export function TopNavbar() {
               <DropdownMenuItem asChild>
                 <Link to="/my-library">
                   <Library /> My Library
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link to="/downloads">
+                  <Download /> Downloads
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
@@ -184,14 +206,12 @@ export function TopNavbar() {
               )}
               <DropdownMenuItem
                 onSelect={() => {
-                  // Always reset local demo state
-                  setRole("user");
-                  updateUser((s) => ({ ...s, profile: { ...s.profile, name: "Alex Morgan", email: "alex@streamverse.tv" } }));
-                  // In real-API mode, also invalidate server session
-                  if (!DEMO_MODE) {
-                    void authApi.logout().catch(() => { /* best-effort */ });
-                    clearAccessToken();
-                    clearAuthUser();
+                  if (DEMO_MODE) {
+                    setRole("user");
+                    updateUser((s) => ({ ...s, profile: { ...s.profile, name: "Alex Morgan", email: "alex@streamverse.tv" } }));
+                  } else {
+                    // forgets the session, clears every cached customer view and updates the header at once
+                    signOut();
                   }
                   toast.success("Signed out");
                   void navigate({ to: "/sign-in" });

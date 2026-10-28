@@ -21,6 +21,7 @@ const EXTENSION_BY_MIME: Record<string, string> = {
 };
 
 const PURPOSE_PREFIX: Partial<Record<UploadPurpose, string>> = {
+  LIBRARY_IMAGE: "images/library",
   MOVIE_MASTER: "movie/master",
   TRAILER: "movie/trailer",
   TEASER: "movie/teaser",
@@ -52,11 +53,13 @@ const PURPOSE_PREFIX: Partial<Record<UploadPurpose, string>> = {
  * `content/{contentId}/{purpose-prefix}/{uuid}.{ext}` for content-scoped purposes; banners (not tied to
  * one content row) use `banners/{purpose-prefix}/{uuid}.{ext}` instead.
  */
-export function buildStorageKey(purpose: UploadPurpose, mimeType: string, contentId: string | undefined): string {
+export function buildStorageKey(purpose: UploadPurpose, mimeType: string, contentId: string | undefined, library = false): string {
   const prefix = PURPOSE_PREFIX[purpose] ?? "misc";
   const ext = EXTENSION_BY_MIME[mimeType] ?? "bin";
   const uuid = randomUUID();
-  return contentId ? `content/${contentId}/${prefix}/${uuid}.${ext}` : `banners/${prefix}/${uuid}.${ext}`;
+  if (contentId) return `content/${contentId}/${prefix}/${uuid}.${ext}`;
+  if (library) return `media/${prefix}/${uuid}.${ext}`;
+  return `banners/${prefix}/${uuid}.${ext}`;
 }
 
 /** Section 13: a filename is kept only as metadata (never as a path) and stripped of anything dangerous first. */
@@ -66,9 +69,14 @@ export function sanitizeFileName(name: string): string {
   return cleaned || "file";
 }
 
+/** `media/movie/master/{uuid}.mp4` (library upload) -> `media/hls/{uuid}`; legacy `content/{id}/movie/master/{uuid}.mp4` -> `content/{id}/hls`. */
+export const hlsRoot = (masterKey: string): string => {
+  const lib = /^(media)\/movie\/master\/([^/.]+)\.[^/]+$/.exec(masterKey);
+  return lib ? `${lib[1]}/hls/${lib[2]}` : masterKey.replace(/\/movie\/master\/.+$/, "/hls");
+};
+
 export function renditionSegmentKey(masterKey: string, variant: string, segmentName: string): string {
-  const dir = masterKey.replace(/\/movie\/master\/.+$/, `/hls/${variant}`);
-  return `${dir}/${segmentName}`;
+  return `${hlsRoot(masterKey)}/${variant}/${segmentName}`;
 }
 
 export function renditionPlaylistKey(masterKey: string, variant: string): string {
@@ -76,5 +84,5 @@ export function renditionPlaylistKey(masterKey: string, variant: string): string
 }
 
 export function masterPlaylistKey(masterKey: string): string {
-  return masterKey.replace(/\/movie\/master\/.+$/, "/hls/master.m3u8");
+  return `${hlsRoot(masterKey)}/master.m3u8`;
 }

@@ -25,7 +25,7 @@ async function makeContent(title: string) {
 describe("admin homepage CMS", () => {
   it("renaming displayTitle never changes key", async () => {
     const { accessToken } = await createAdmin(app, db);
-    const created = await request(app).post("/api/v1/admin/homepage/sections").set("Authorization", `Bearer ${accessToken}`).send({ key: "trending_movies", displayTitle: "Trending Now", type: "TRENDING" });
+    const created = await request(app).post("/api/v1/admin/homepage/sections").set("Authorization", `Bearer ${accessToken}`).send({ key: "trending_movies", displayTitle: "Trending Now", type: "TRENDING", contentType: "MOVIE" });
     expect(created.status).toBe(201);
     const res = await request(app).put(`/api/v1/admin/homepage/sections/${created.body.data.id}`).set("Authorization", `Bearer ${accessToken}`).send({ displayTitle: "What's Hot" });
     expect(res.body.data.key).toBe("trending_movies");
@@ -34,8 +34,8 @@ describe("admin homepage CMS", () => {
 
   it("rejects a duplicate key", async () => {
     const { accessToken } = await createAdmin(app, db);
-    await request(app).post("/api/v1/admin/homepage/sections").set("Authorization", `Bearer ${accessToken}`).send({ key: "featured", displayTitle: "Featured", type: "FEATURED" });
-    const dupe = await request(app).post("/api/v1/admin/homepage/sections").set("Authorization", `Bearer ${accessToken}`).send({ key: "featured", displayTitle: "Featured Again", type: "FEATURED" });
+    await request(app).post("/api/v1/admin/homepage/sections").set("Authorization", `Bearer ${accessToken}`).send({ key: "featured", displayTitle: "Featured", type: "FEATURED", contentType: "MOVIE" });
+    const dupe = await request(app).post("/api/v1/admin/homepage/sections").set("Authorization", `Bearer ${accessToken}`).send({ key: "featured", displayTitle: "Featured Again", type: "FEATURED", contentType: "MOVIE" });
     expect(dupe.status).toBe(409);
   });
 
@@ -109,14 +109,16 @@ describe("admin banners", () => {
     const badDates = await request(app)
       .post("/api/v1/admin/banners")
       .set("Authorization", `Bearer ${accessToken}`)
-      .send({ type: "HERO", title: "Bad Dates", startsAt: "2026-06-01", endsAt: "2026-01-01" });
+      .send({ type: "HERO", placement: "MOVIES", title: "Bad Dates", startsAt: "2026-06-01", endsAt: "2026-01-01" });
     expect(badDates.status).toBe(400);
 
-    const created = await request(app).post("/api/v1/admin/banners").set("Authorization", `Bearer ${accessToken}`).send({ type: "HERO", title: "Crimson Horizon", linkedContentId: contentId, priority: 1, active: true });
+    const created = await request(app).post("/api/v1/admin/banners").set("Authorization", `Bearer ${accessToken}`).send({ type: "HERO", placement: "MOVIES", title: "Crimson Horizon", linkedContentId: contentId, priority: 1, active: true });
     expect(created.status).toBe(201);
     expect(created.body.data.linkedContent.id).toBe(contentId);
 
-    const badLink = await request(app).post("/api/v1/admin/banners").set("Authorization", `Bearer ${accessToken}`).send({ type: "HERO", title: "Broken Link", linkedContentId: "does-not-exist" });
+    // a hero banner must say which sub-page it leads; the homepage hero is managed in Homepage settings
+    expect((await request(app).post("/api/v1/admin/banners").set("Authorization", `Bearer ${accessToken}`).send({ type: "HERO", title: "No page" })).status).toBe(400);
+    const badLink = await request(app).post("/api/v1/admin/banners").set("Authorization", `Bearer ${accessToken}`).send({ type: "HERO", placement: "MOVIES", title: "Broken Link", linkedContentId: "does-not-exist" });
     expect(badLink.status).toBe(400);
 
     const deactivated = await request(app).put(`/api/v1/admin/banners/${created.body.data.id}`).set("Authorization", `Bearer ${accessToken}`).send({ active: false });

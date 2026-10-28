@@ -1,5 +1,7 @@
 // Safe, fake values: tests never touch a real database, Stripe or storage.
 process.env["NODE_ENV"] = "test";
+// Tests must never reach a real email provider, whatever the developer .env says.
+process.env["EMAIL_PROVIDER"] = "console";
 process.env["PORT"] = "4000";
 process.env["DATABASE_URL"] = "mysql://test:test@localhost:3306/streamverse_test";
 process.env["FRONTEND_URL"] = "http://localhost:5173";
@@ -10,6 +12,7 @@ process.env["JWT_REFRESH_SECRET"] = "test-jwt-refresh-secret-test-0002";
 process.env["STORAGE_PROVIDER"] = "local";
 process.env["LOCAL_STORAGE_DIR"] = "./.data/test-media";
 process.env["QUEUE_DRIVER"] = "inline";
+process.env["HOMEPAGE_CACHE_TTL_SECONDS"] = "0";
 // Phase 7: Stripe is never actually called in tests — services/stripe/stripe.service.ts is mocked via
 // vi.mock the same way storage/media processing are. These just need to satisfy env validation.
 process.env["STRIPE_SECRET_KEY"] = "sk_test_fake_key_for_tests_only_000000";

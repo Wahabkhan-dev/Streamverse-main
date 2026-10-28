@@ -1,4 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
+import { AppNavButtons } from "./AppNav";
 import {
   Activity,
   Bell,
@@ -8,6 +9,7 @@ import {
   CreditCard,
   ExternalLink,
   Film,
+  FolderOpen,
   Headphones,
   Home,
   Image as ImageIcon,
@@ -47,6 +49,7 @@ const nav = [
       { to: "/admin/collections", label: "Collections", icon: Layers },
       { to: "/admin/homepage", label: "Homepage", icon: Home },
       { to: "/admin/banners", label: "Banners", icon: ImageIcon },
+      { to: "/admin/media", label: "Media", icon: FolderOpen },
     ],
   },
   {
@@ -243,6 +246,7 @@ export function AdminTopbar({ onMenu }: { onMenu: () => void }) {
       <button className="grid size-9 place-items-center rounded-md hover:bg-surface-3 lg:hidden" onClick={onMenu} aria-label="Open menu">
         <Menu className="size-5" />
       </button>
+      <AppNavButtons className="-mx-2" />
       <AdminSearch />
       <div className="ml-auto flex items-center gap-3">
         <Link to="/admin/notifications" className="relative grid size-9 place-items-center rounded-md text-soft hover:bg-surface-3 hover:text-foreground" aria-label={unread ? `Notifications, ${unread} unread` : "Notifications"}>

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import * as offlineController from "../controllers/offline.controller";
 import * as mediaAccessController from "../controllers/mediaAccess.controller";
 import { requireAuth } from "../middleware/auth.middleware";
 import { buildAccessContext } from "../middleware/buildAccessContext";
@@ -19,5 +20,10 @@ mediaAccessRouter.use(requireAuth);
 mediaAccessRouter.use(buildAccessContext);
 
 mediaAccessRouter.post("/movies/:contentId/playback", validate({ params: contentIdParam }), asyncHandler(mediaAccessController.moviePlayback));
+mediaAccessRouter.post("/movies/:contentId/trailer", validate({ params: contentIdParam, body: z.object({ variant: z.enum(["trailer", "teaser"]).default("trailer") }).default({ variant: "trailer" }) }), asyncHandler(mediaAccessController.movieTrailer));
 mediaAccessRouter.post("/audiobooks/:contentId/playback", validate({ params: contentIdParam }), asyncHandler(mediaAccessController.audiobookPlayback));
-mediaAccessRouter.post("/ebooks/:contentId/access", validate({ params: contentIdParam }), asyncHandler(mediaAccessController.ebookAccess));
+mediaAccessRouter.post("/ebooks/:contentId/access", validate({ params: contentIdParam, body: z.object({ format: z.enum(["pdf"]).optional() }).default({}) }), asyncHandler(mediaAccessController.ebookAccess));
+
+// Offline copies: the entitlement check (and the list of files) is bearer-authorised; the files themselves are token-authorised.
+mediaAccessRouter.post("/offline/:contentId/authorize", validate({ params: contentIdParam }), asyncHandler(offlineController.authorize));
+mediaAccessRouter.post("/offline/:contentId/renew", validate({ params: contentIdParam }), asyncHandler(offlineController.renew));

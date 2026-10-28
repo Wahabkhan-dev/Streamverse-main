@@ -14,6 +14,10 @@ export async function createTestPlan(overrides: Record<string, unknown> = {}) {
     features: ["HD streaming"],
     active: true,
     displayOrder: 0,
+    // a full-access plan unless a test says otherwise
+    moviesEnabled: true,
+    ebooksEnabled: true,
+    audiobooksEnabled: true,
     ...overrides,
   } as never);
 }

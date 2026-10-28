@@ -4,19 +4,21 @@ import { mapCustomerBase, type CustomerContentBaseRow } from "./customerContent.
 interface MovieListRow {
   content: CustomerContentBaseRow;
   posterAssetId: string | null;
+  posterAsset?: { storageKey: string | null } | null;
   backdropAssetId: string | null;
   thumbnailAssetId: string | null;
   runtimeMinutes: number | null;
 }
 
 /** Card data for GET /movies — Section 5. */
-export function toMovieCard(row: MovieListRow) {
+export function toMovieCard(row: MovieListRow, posterUrl?: string | null) {
   const base = mapCustomerBase(row.content);
   return {
     id: base.id,
     slug: base.slug,
     title: base.title,
     summary: base.summary,
+    image: posterUrl ?? null,
     posterAssetId: row.posterAssetId,
     thumbnailAssetId: row.thumbnailAssetId,
     backdropAssetId: row.backdropAssetId,
@@ -34,6 +36,8 @@ interface MovieDetailRow extends MovieListRow {
   trailerAssetId: string | null;
   teaserAssetId: string | null;
   masterAssetId: string | null;
+  trailerAsset?: { status: string } | null;
+  teaserAsset?: { status: string } | null;
   productionStudio: string | null;
   countryOfOrigin: string | null;
   cast: { name: string; characterName: string | null; imageAssetId: string | null; displayOrder: number }[];
@@ -53,6 +57,9 @@ export function toMovieDetail(row: MovieDetailRow, access: AccessResult) {
     thumbnailAssetId: row.thumbnailAssetId,
     trailerAssetId: row.trailerAssetId,
     teaserAssetId: row.teaserAssetId,
+    // the movie page shows a Trailer / Teaser only when the admin added one and it is ready to play
+    hasTrailer: row.trailerAsset?.status === "READY",
+    hasTeaser: row.teaserAsset?.status === "READY",
     // the playable master file is never named until access.canConsume is true — see Section 56/6
     mediaReady: access.canConsume && !!row.masterAssetId,
     runtimeMinutes: row.runtimeMinutes,

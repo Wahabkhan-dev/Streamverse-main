@@ -99,7 +99,8 @@ export function mapContentBase(content: ContentBaseRow) {
   };
 }
 
-export const mapContentListRow = (content: ContentBaseRow) => ({
+/** `image` is the signed cover/poster URL for this row, batched in by the caller — never fetched per-row. */
+export const mapContentListRow = (content: ContentBaseRow, image: string | null = null) => ({
   id: content.id,
   contentCode: content.contentCode,
   title: content.title,
@@ -111,4 +112,5 @@ export const mapContentListRow = (content: ContentBaseRow) => ({
   publishedAt: content.publishedAt,
   createdAt: content.createdAt,
   updatedAt: content.updatedAt,
+  image,
 });

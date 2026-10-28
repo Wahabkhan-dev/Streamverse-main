@@ -3,7 +3,12 @@ import { isMaintenanceMode } from "../services/settings/appSettings.service";
 import { readMaintenanceCache, writeMaintenanceCache } from "../utils/maintenanceModeCache";
 import { sendError } from "../utils/apiResponse";
 
-const EXEMPT_PATHS = ["/health", "/api/v1/health", "/api/v1/webhooks"];
+/**
+ * Always reachable during maintenance: health checks and webhooks, and the sign-in / session endpoints. Signing in must work
+ * so an administrator can always get back in to turn maintenance off (the guard still blocks everything else for customers),
+ * and the public settings are how the site learns it should show its maintenance screen.
+ */
+const EXEMPT_PATHS = ["/health", "/api/v1/health", "/api/v1/webhooks", "/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/logout", "/api/v1/auth/me", "/api/v1/settings/public"];
 const MAINTENANCE_CODE = "MAINTENANCE_MODE";
 
 // Maximum time (ms) we'll wait for the DB before failing-open.
@@ -30,7 +35,7 @@ async function getMaintenanceMode(): Promise<boolean> {
 
 /**
  * Returns 503 when maintenanceMode=true, unless:
- * - The request path starts with an exempt prefix (/health, /api/v1/webhooks)
+ * - The request path starts with an exempt prefix (health, webhooks, sign-in and session endpoints, public settings)
  * - The authenticated user has ADMIN role
  */
 export const maintenanceModeGuard: RequestHandler = (req: Request, res: Response, next: NextFunction) => {

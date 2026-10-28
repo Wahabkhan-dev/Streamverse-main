@@ -9,6 +9,6 @@ export async function list(req: Request, res: Response) {
 }
 
 export async function getOne(req: Request, res: Response) {
-  const ebook = await catalogService.getEbookBySlug(req.params["slug"]!, req.auth?.userId);
+  const ebook = await catalogService.getEbookBySlug(req.params["slug"]!, req.auth?.userId, req.auth?.role === "ADMIN");
   sendSuccess(res, ebook, "eBook");
 }
