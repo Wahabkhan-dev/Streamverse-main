@@ -4,8 +4,8 @@ const fs = require("node:fs");
 const say = (m) => fs.writeSync(1, `[diag] ${m}\n`);
 (async () => {
   say(`node ${process.version} ${process.platform} ${process.arch}`);
-  say("1. require argon2"); const argon2 = require("argon2");
-  say("2. argon2.hash"); await argon2.hash("test");
+  say("1. require hash-wasm"); const { argon2id } = require("hash-wasm");
+  say("2. argon2id hash"); await argon2id({ password: "test", salt: Buffer.alloc(16, 1), parallelism: 1, iterations: 2, memorySize: 19456, hashLength: 32, outputType: "encoded" });
   say("3. require @prisma/client"); const { PrismaClient } = require("@prisma/client");
   say("4. new PrismaClient"); const prisma = new PrismaClient();
   say("5. prisma $connect"); await prisma.$connect();
