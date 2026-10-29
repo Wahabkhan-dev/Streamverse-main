@@ -28,6 +28,10 @@ export function createS3StorageProvider(): StorageProvider {
     endpoint: env.AWS_ENDPOINT,
     forcePathStyle: env.AWS_FORCE_PATH_STYLE ?? !!env.AWS_ENDPOINT,
     credentials: { accessKeyId: env.AWS_ACCESS_KEY_ID!, secretAccessKey: env.AWS_SECRET_ACCESS_KEY! },
+    // Newer SDKs add a CRC32 checksum to presigned PUTs by default; for a browser upload that is the checksum of an EMPTY
+    // body, so R2/B2/Spaces reject the real file. Only send checksums when an operation requires them.
+    requestChecksumCalculation: "WHEN_REQUIRED",
+    responseChecksumValidation: "WHEN_REQUIRED",
   });
   const bucket = env.AWS_BUCKET!;
 
