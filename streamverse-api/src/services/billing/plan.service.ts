@@ -4,6 +4,7 @@ import { AppError, ConflictError, NotFoundError, ValidationError } from "../../u
 import type { AuditContext } from "../auditLog.service";
 import { recordAudit } from "../auditLog.service";
 import type { CreatePlanInput, UpdatePlanInput } from "../../validators/plan.validator";
+import { analyticsCache, publicCacheWindow } from "../../utils/analyticsCache";
 
 const NO_ACTOR: AuditContext = { userId: undefined, ip: undefined, userAgent: undefined, requestId: undefined };
 
@@ -47,9 +48,10 @@ export async function getPlan(id: string) {
 export const listAdminPlans = planRepository.listAll;
 
 /** Section 12: customer-visible list — active only, no unnecessary Stripe ids exposed. */
-export async function listCustomerPlans() {
-  const plans = await planRepository.listActive();
-  return plans.map(toCustomerPlan);
+export function listCustomerPlans() {
+  // Public and identical for every visitor; cached briefly. Any admin write (see admin.routes.ts) drops the "homepage:" prefix.
+  const { ttl, stale } = publicCacheWindow();
+  return analyticsCache.getOrSet("homepage:plans:public", async () => (await planRepository.listActive()).map(toCustomerPlan), ttl, stale);
 }
 
 export function toCustomerPlan(plan: { id: string; name: string; slug: string; description: string | null; priceAmount: number; currency: string; billingInterval: string; trialDays: number | null; features: unknown; maxDevices?: number | null; maxConcurrentStreams?: number | null; maxVideoQuality?: string | null; moviesEnabled?: boolean; ebooksEnabled?: boolean; audiobooksEnabled?: boolean }) {
