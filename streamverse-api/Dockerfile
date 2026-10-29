@@ -7,8 +7,13 @@ WORKDIR /app
 # Prisma's engines link against OpenSSL.
 RUN apt-get update -y && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 
+# Run Prisma's query engine as a separate process instead of loading it into Node: a crash in it then shows up as
+# an error message instead of killing the whole server with a segfault (exit 139).
+ENV PRISMA_CLIENT_ENGINE_TYPE=binary
+
 COPY package*.json ./
-RUN npm ci --ignore-scripts
+# --omit=optional skips msgpackr-extract (a native BullMQ speed-up with known segfaults); it falls back to plain JS.
+RUN npm ci --ignore-scripts --omit=optional
 
 COPY . .
 RUN npx prisma generate
