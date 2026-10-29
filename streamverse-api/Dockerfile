@@ -30,7 +30,7 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends openssl ca-c
 
 # Copy only what the running server needs
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder --chown=appuser:appgroup /app/node_modules ./node_modules
 COPY --from=builder /app/prisma ./prisma
 COPY package*.json ./
 
@@ -43,4 +43,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD node -e "fetch('http://localhost:'+(process.env.PORT||4000)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 # Apply pending migrations before starting, so a fresh database gets its tables.
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/server.js"]
+# (The migration CLI only needs the schema engine, so it runs with the default engine type; only the server uses the binary one.)
+CMD ["sh", "-c", "PRISMA_CLIENT_ENGINE_TYPE=library npx prisma migrate deploy && node dist/server.js"]
