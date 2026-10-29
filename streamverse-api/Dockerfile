@@ -12,8 +12,9 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends openssl ca-c
 ENV PRISMA_CLIENT_ENGINE_TYPE=binary
 
 COPY package*.json ./
-# --omit=optional skips msgpackr-extract (a native BullMQ speed-up with known segfaults); it falls back to plain JS.
-RUN npm ci --ignore-scripts --omit=optional
+# Remove msgpackr-extract (a native BullMQ speed-up with known segfaults); msgpackr falls back to plain JS.
+# (Not --omit=optional: TypeScript ships its Linux compiler binary as an optional package.)
+RUN npm ci --ignore-scripts && rm -rf node_modules/@msgpackr-extract
 
 COPY . .
 RUN npx prisma generate
