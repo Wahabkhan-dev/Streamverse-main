@@ -21,7 +21,7 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts",
     "seed": "tsx prisma/seed.ts",
-    "seed:demo": "tsx prisma/seed-demo.ts",
+    "seed:demo": "tsx prisma/seedDemo.ts",
     "seed:demo:images": "tsx prisma/seed-demo-images.ts",
     "seed:demo:delete": "tsx prisma/seed-demo-delete.ts",
     "seed:homepage": "tsx prisma/seed-homepage.ts",
