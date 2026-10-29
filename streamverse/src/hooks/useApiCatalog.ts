@@ -94,24 +94,18 @@ export function useApiHomepageQuery() {
 }
 
 /**
- * The homepage in two requests: the first two sections right away (high priority), the rest once the browser is idle or the
- * reader scrolls near them. Each request resolves only its own slice on the server, so nothing is fetched twice.
+ * The whole homepage in ONE request (the server caches and pre-warms exactly this one), so every section appears together
+ * instead of trickling in. Kept fresh in the background; the last copy is shown instantly on return visits.
  */
-export function useApiHomepagePages(enableRest: boolean) {
-  const first = useQuery({
-    queryKey: [...HOMEPAGE_QUERY_KEY, "first"],
-    queryFn: () => catalogApi.getHomepage({ offset: 0, limit: 2 }),
+export function useApiHomepagePages() {
+  return useQuery({
+    queryKey: [...HOMEPAGE_QUERY_KEY, "all"],
+    queryFn: () => catalogApi.getHomepage({ offset: 0, limit: 100 }),
     enabled: !DEMO_MODE,
-    staleTime: 15_000,
+    staleTime: 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnWindowFocus: false,
   });
-  const total = first.data?.meta?.total ?? 0;
-  const rest = useQuery({
-    queryKey: [...HOMEPAGE_QUERY_KEY, "rest"],
-    queryFn: () => catalogApi.getHomepage({ offset: 2, limit: 100 }),
-    enabled: !DEMO_MODE && enableRest && first.isSuccess && total > 2,
-    staleTime: 15_000,
-  });
-  return { first, rest, total };
 }
 
 export function useApiBannersQuery(placement?: "MOVIES" | "EBOOKS" | "AUDIOBOOKS") {

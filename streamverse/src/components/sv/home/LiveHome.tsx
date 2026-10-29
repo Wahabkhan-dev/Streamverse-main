@@ -1,5 +1,5 @@
 import { Film } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useMemo } from "react";
 import type { ApiHomeBanner, ApiHomeSection, ApiMixedCard } from "@/api/types";
 import { useApiHomepagePages } from "@/hooks/useApiCatalog";
 import { apiBannerToLocal } from "@/lib/banner-mapper";
@@ -30,32 +30,6 @@ function SectionSkeleton({ hero }: { hero?: boolean }) {
       </div>
     </div>
   );
-}
-
-/** Mounts its children only once it is (nearly) on screen, so sections far down the page cost nothing until they are needed. */
-function LazySection({ children, hero }: { children: ReactNode; hero?: boolean }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [seen, setSeen] = useState(false);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || seen) return undefined;
-    if (typeof IntersectionObserver === "undefined") {
-      setSeen(true);
-      return undefined;
-    }
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((e) => e.isIntersecting)) {
-          setSeen(true);
-          io.disconnect();
-        }
-      },
-      { rootMargin: "600px 0px" },
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, [seen]);
-  return <div ref={ref}>{seen ? children : <SectionSkeleton {...(hero ? { hero } : {})} />}</div>;
 }
 
 function heroSlides(items: ApiMixedCard[]): HeroSlide[] {
@@ -160,30 +134,9 @@ function Section({ s }: { s: ApiHomeSection }) {
  * reader nears them. Order and presence come only from Admin -> Homepage.
  */
 export function LiveHome() {
-  const [wantRest, setWantRest] = useState(false);
-  const sentinel = useRef<HTMLDivElement>(null);
-  const { first, rest, total } = useApiHomepagePages(wantRest);
-
-  // the rest loads when the browser is idle, or sooner when the reader scrolls toward it
-  useEffect(() => {
-    if (!first.isSuccess || wantRest) return undefined;
-    const idle = window.setTimeout(() => setWantRest(true), 1200);
-    const el = sentinel.current;
-    let io: IntersectionObserver | undefined;
-    if (el && typeof IntersectionObserver !== "undefined") {
-      io = new IntersectionObserver((e) => e.some((x) => x.isIntersecting) && setWantRest(true), {
-        rootMargin: "400px 0px",
-      });
-      io.observe(el);
-    }
-    return () => {
-      window.clearTimeout(idle);
-      io?.disconnect();
-    };
-  }, [first.isSuccess, wantRest]);
-
+  const first = useApiHomepagePages();
+  const total = first.data?.meta?.total ?? first.data?.data?.length ?? 0;
   const firstSections = first.data?.data ?? [];
-  const restSections = rest.data?.data ?? [];
 
   if (first.isLoading) {
     return (
@@ -238,17 +191,6 @@ export function LiveHome() {
       >
         {firstSections.map((s) => (
           <Section key={s.id} s={s} />
-        ))}
-        <div ref={sentinel} aria-hidden />
-        {!rest.isSuccess &&
-          total > 2 &&
-          Array.from({ length: Math.min(total - 2, 4) }, (_, i) => (
-            <SectionSkeleton key={`sk${i}`} />
-          ))}
-        {restSections.map((s) => (
-          <LazySection key={s.id}>
-            <Section s={s} />
-          </LazySection>
         ))}
       </div>
     </>
