@@ -1,16 +1,37 @@
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { BookOpen, Headphones, Play } from "lucide-react";
 import type { Item } from "@/lib/items";
 import { playTarget } from "@/lib/links";
 import { useProgressOf } from "@/lib/user";
 import { cn } from "@/lib/utils";
+import { catalogApi } from "@/api/catalog.api";
+import { DEMO_MODE } from "@/lib/config";
 import { AudiobookCard, BookCard, BookCover, MovieCard } from "./media";
 
 /** The right card for any catalog entry. */
 export function ItemCard({ item, fixed = true }: { item: Item; fixed?: boolean }) {
-  if (item.type === "Movie") return <MovieCard m={item.m} wide={fixed} />;
-  if (item.type === "eBook") return <BookCard b={item.b} fixed={fixed} />;
-  return <AudiobookCard b={item.b} fixed={fixed} />;
+  let qc: QueryClient | undefined;
+  try {
+    qc = useQueryClient();
+  } catch {
+    qc = undefined; // rendered outside a QueryClientProvider (isolated tests)
+  }
+  // Start loading the detail page's data as soon as the pointer or focus reaches the card, so the click opens it already filled.
+  const warm = () => {
+    if (DEMO_MODE || !qc) return;
+    const { type, slug } = item;
+    if (type === "Movie") void qc.prefetchQuery({ queryKey: ["catalog", "movie", slug], queryFn: async () => (await catalogApi.getMovie(slug)).data, staleTime: 60_000 });
+    else if (type === "eBook") void qc.prefetchQuery({ queryKey: ["catalog", "ebook", slug], queryFn: async () => (await catalogApi.getEbook(slug)).data, staleTime: 60_000 });
+    else void qc.prefetchQuery({ queryKey: ["catalog", "audiobook", slug], queryFn: async () => (await catalogApi.getAudiobook(slug)).data, staleTime: 60_000 });
+  };
+  const card =
+    item.type === "Movie" ? <MovieCard m={item.m} wide={fixed} /> : item.type === "eBook" ? <BookCard b={item.b} fixed={fixed} /> : <AudiobookCard b={item.b} fixed={fixed} />;
+  return (
+    <div className="contents" onPointerEnter={warm} onFocus={warm} onTouchStart={warm}>
+      {card}
+    </div>
+  );
 }
 
 const verb = { Movie: ["Resume", "Replay", "Play"], eBook: ["Continue reading", "Read again", "Start reading"], Audiobook: ["Continue listening", "Listen again", "Start listening"] } as const;

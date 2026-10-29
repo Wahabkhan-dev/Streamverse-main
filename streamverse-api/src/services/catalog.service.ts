@@ -146,9 +146,11 @@ const previewOf = (content: Visible) => (isCustomerVisible(content) ? {} : { pre
 export async function getMovieBySlug(slug: string, userId: string | undefined, adminPreview = false) {
   const row = await catalogRepository.findMovieBySlug(slug);
   if (!row || !visible(row.content, adminPreview)) throw new NotFoundError("Movie not found");
-  const access = await accessFor(row.content, userId);
-  const related = await getRelatedContent("MOVIE", row.content.id);
-  const urls = await signAssetsById([row.posterAssetId, row.backdropAssetId, row.thumbnailAssetId]);
+  const [access, related, urls] = await Promise.all([
+    accessFor(row.content, userId),
+    getRelatedContent("MOVIE", row.content.id),
+    signAssetsById([row.posterAssetId, row.backdropAssetId, row.thumbnailAssetId]),
+  ]);
   const image = (row.posterAssetId && urls.get(row.posterAssetId)) || null;
   const backdropImage = (row.backdropAssetId && urls.get(row.backdropAssetId)) || null;
   return { ...toMovieDetail(row, access), image, backdropImage, related, ...previewOf(row.content) };
@@ -157,9 +159,11 @@ export async function getMovieBySlug(slug: string, userId: string | undefined, a
 export async function getEbookBySlug(slug: string, userId: string | undefined, adminPreview = false) {
   const row = await catalogRepository.findEbookBySlug(slug);
   if (!row || !visible(row.content, adminPreview)) throw new NotFoundError("eBook not found");
-  const access = await accessFor(row.content, userId);
-  const related = await getRelatedContent("EBOOK", row.content.id);
-  const urls = await signAssetsById([row.frontCoverAssetId]);
+  const [access, related, urls] = await Promise.all([
+    accessFor(row.content, userId),
+    getRelatedContent("EBOOK", row.content.id),
+    signAssetsById([row.frontCoverAssetId]),
+  ]);
   const image = (row.frontCoverAssetId && urls.get(row.frontCoverAssetId)) || null;
   return { ...toEbookDetail(row, access), image, related, ...previewOf(row.content) };
 }
@@ -167,9 +171,11 @@ export async function getEbookBySlug(slug: string, userId: string | undefined, a
 export async function getAudiobookBySlug(slug: string, userId: string | undefined, adminPreview = false) {
   const row = await catalogRepository.findAudiobookBySlug(slug);
   if (!row || !visible(row.content, adminPreview)) throw new NotFoundError("Audiobook not found");
-  const access = await accessFor(row.content, userId);
-  const related = await getRelatedContent("AUDIOBOOK", row.content.id);
-  const urls = await signAssetsById([row.coverAssetId]);
+  const [access, related, urls] = await Promise.all([
+    accessFor(row.content, userId),
+    getRelatedContent("AUDIOBOOK", row.content.id),
+    signAssetsById([row.coverAssetId]),
+  ]);
   const image = (row.coverAssetId && urls.get(row.coverAssetId)) || null;
   return { ...toAudiobookDetail(row, access), image, related, ...previewOf(row.content) };
 }

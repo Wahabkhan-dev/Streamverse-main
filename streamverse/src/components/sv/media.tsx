@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight, Info, Play, Headphones, BookOpen, Film } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { DEMO_MODE } from "@/lib/config";
 import type { Book, Movie } from "@/lib/data";
 import type { Collection } from "@/lib/store";
 import type { LinkTarget } from "@/lib/links";
@@ -329,8 +330,10 @@ export function CollectionCard({ c, fixed = true }: { c: Collection; fixed?: boo
 
 /** Simple async simulation so pages can show skeletons on first paint. */
 export function useFakeLoad(ms = 500) {
-  const [loading, setLoading] = useState(true);
+  // live mode shows real loading states from the API; the artificial delay is only for the demo catalog
+  const [loading, setLoading] = useState(DEMO_MODE);
   useEffect(() => {
+    if (!DEMO_MODE) return undefined;
     const t = setTimeout(() => setLoading(false), ms);
     return () => clearTimeout(t);
   }, [ms]);
