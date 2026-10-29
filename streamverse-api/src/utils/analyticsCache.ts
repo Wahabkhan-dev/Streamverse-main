@@ -6,6 +6,9 @@ interface CacheEntry<T> {
   expiresAt: number;
   /** May still be served (while a refresh runs in the background) until here. */
   staleUntil: number;
+  /** How to rebuild it, and when it was last asked for — lets refreshAging() keep popular entries warm. */
+  rebuild?: { fn: () => Promise<unknown>; ttl: number; stale: number };
+  lastHit: number;
 }
 
 /**
@@ -29,10 +32,17 @@ class AnalyticsCache {
     return entry.value as T;
   }
 
-  set<T>(key: string, value: T, ttlSeconds: number, staleSeconds = 0): void {
+  set<T>(key: string, value: T, ttlSeconds: number, staleSeconds = 0, rebuild?: () => Promise<T>): void {
     if (ttlSeconds <= 0) return; // caching disabled
     const now = Date.now();
-    this.store.set(key, { value, expiresAt: now + ttlSeconds * 1000, staleUntil: now + (ttlSeconds + Math.max(0, staleSeconds)) * 1000 });
+    const previous = this.store.get(key);
+    this.store.set(key, {
+      value,
+      expiresAt: now + ttlSeconds * 1000,
+      staleUntil: now + (ttlSeconds + Math.max(0, staleSeconds)) * 1000,
+      rebuild: rebuild ? { fn: rebuild, ttl: ttlSeconds, stale: staleSeconds } : previous?.rebuild,
+      lastHit: previous?.lastHit ?? now,
+    });
   }
 
   invalidate(prefix?: string): void {
@@ -52,7 +62,7 @@ class AnalyticsCache {
     const startedAt = this.generation;
     const promise = fn()
       .then((value) => {
-        if (this.generation === startedAt) this.set(key, value, ttlSeconds, staleSeconds);
+        if (this.generation === startedAt) this.set(key, value, ttlSeconds, staleSeconds, fn);
         return value;
       })
       .finally(() => {
@@ -70,6 +80,7 @@ class AnalyticsCache {
     const ttl = ttlSeconds ?? env.ANALYTICS_CACHE_TTL_SECONDS;
     const entry = this.store.get(key) as CacheEntry<T> | undefined;
     const now = Date.now();
+    if (entry) entry.lastHit = now;
     if (entry && now <= entry.expiresAt) return entry.value;
     if (entry && now <= entry.staleUntil) {
       void this.compute(key, fn, ttl, staleSeconds).catch(() => undefined); // keep serving the stale copy if the refresh fails
@@ -77,6 +88,26 @@ class AnalyticsCache {
     }
     if (entry) this.store.delete(key);
     return this.compute(key, fn, ttl, staleSeconds);
+  }
+
+  /**
+   * Rebuilds, in the background, entries under `prefix` that are 60% through their fresh time and were asked for within the
+   * last `maxIdleMs` — so anything people are actually using never expires and no visitor waits for a rebuild. Returns how
+   * many rebuilds were started. A failed rebuild keeps the old entry.
+   */
+  refreshAging(prefix: string, maxIdleMs: number): number {
+    const now = Date.now();
+    let started = 0;
+    for (const [key, entry] of this.store) {
+      if (!key.startsWith(prefix) || !entry.rebuild) continue;
+      if (now - entry.lastHit > maxIdleMs) continue;
+      const freshFor = entry.rebuild.ttl * 1000;
+      if (now < entry.expiresAt - freshFor * 0.4) continue; // still young
+      if (this.inflight.has(key)) continue;
+      started++;
+      void this.compute(key, entry.rebuild.fn, entry.rebuild.ttl, entry.rebuild.stale).catch(() => undefined);
+    }
+    return started;
   }
 }
 

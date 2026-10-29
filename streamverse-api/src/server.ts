@@ -4,7 +4,8 @@ import { disconnectDatabase, prisma } from "./config/database";
 import { env, validateProductionEnv } from "./config/env";
 import { onShutdown, runShutdownHooks } from "./config/lifecycle";
 import { logger } from "./config/logger";
-import { getCustomerHomepage } from "./services/homepage.service";
+import { HOMEPAGE_CACHE_PREFIX, getCustomerHomepage } from "./services/homepage.service";
+import { analyticsCache } from "./utils/analyticsCache";
 
 // Refuse to start in production if critical environment variables are absent.
 validateProductionEnv();
@@ -18,6 +19,8 @@ const server: Server = app.listen(env.PORT, () => {
       () => logger.info("homepage cache warmed"),
       (err: unknown) => logger.warn({ err }, "homepage cache warm-up failed (will build on first request)"),
     );
+    // Keep whatever visitors have recently asked for fresh in the background, so nobody waits for a rebuild (see refreshAging).
+    setInterval(() => analyticsCache.refreshAging(HOMEPAGE_CACHE_PREFIX, 10 * 60 * 1000), 10_000).unref();
   }
 });
 
