@@ -22,6 +22,7 @@ RUN npm run build
 # Stage 2: runner — minimal production image, non-root user
 FROM node:20-bookworm-slim AS runner
 WORKDIR /app
+ENV PRISMA_CLIENT_ENGINE_TYPE=binary
 
 RUN apt-get update -y && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/* \
   && groupadd --system appgroup && useradd --system --gid appgroup appuser
