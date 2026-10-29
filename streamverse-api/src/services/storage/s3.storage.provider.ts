@@ -49,7 +49,12 @@ export function createS3StorageProvider(): StorageProvider {
 
     async createDownloadUrl(key, ttlSeconds, responseContentType) {
       const command = new GetObjectCommand({ Bucket: bucket, Key: key, ResponseContentType: responseContentType });
-      return getSignedUrl(client, command, { expiresIn: ttlSeconds });
+      // Sign as of the start of a 5-minute window, so every request inside the window gets the IDENTICAL link and the browser can
+      // reuse its cached copy of the image. expiresIn is padded by the window, so the link is still valid for at least ttlSeconds.
+      const WINDOW_MS = 5 * 60 * 1000;
+      if (ttlSeconds < 60) return getSignedUrl(client, command, { expiresIn: ttlSeconds });
+      const signingDate = new Date(Math.floor(Date.now() / WINDOW_MS) * WINDOW_MS);
+      return getSignedUrl(client, command, { expiresIn: ttlSeconds + WINDOW_MS / 1000, signingDate });
     },
 
     async headObject(key): Promise<HeadResult> {

@@ -90,7 +90,7 @@ const schema = z
     RATE_LIMIT_MULTIPLIER: z.coerce.number().int().min(1).max(1000).default(1),
 
     /** Seconds the public homepage payload is cached in memory (must stay well under DOWNLOAD_URL_TTL_SECONDS — it embeds signed image URLs). 0 = disabled. */
-    HOMEPAGE_CACHE_TTL_SECONDS: z.coerce.number().int().min(0).max(120).default(15),
+    HOMEPAGE_CACHE_TTL_SECONDS: z.coerce.number().int().min(0).max(300).default(60),
 
     /** How long a movie playback token (and so the right to fetch its playlists) lasts. */
     HLS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(300).max(24 * 60 * 60).default(4 * 60 * 60),

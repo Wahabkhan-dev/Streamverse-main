@@ -45,7 +45,7 @@ export function withCustomerFilters(base: Prisma.ContentWhereInput, filters: Cus
 export async function listMovies(contentWhere: Prisma.ContentWhereInput, skip: number, take: number, orderBy: Prisma.ContentOrderByWithRelationInput) {
   const where: Prisma.MovieWhereInput = { content: contentWhere };
   const [rows, total] = await Promise.all([
-    prisma.movie.findMany({ where, skip, take, orderBy: { content: orderBy }, include: { content: { include: WITH_CONTENT_RELATIONS }, posterAsset: { select: { storageKey: true } } } }),
+    prisma.movie.findMany({ relationLoadStrategy: "join", where, skip, take, orderBy: { content: orderBy }, include: { content: { include: WITH_CONTENT_RELATIONS }, posterAsset: { select: { storageKey: true } } } }),
     prisma.movie.count({ where }),
   ]);
   return { rows, total };
@@ -54,7 +54,7 @@ export async function listMovies(contentWhere: Prisma.ContentWhereInput, skip: n
 export async function listEbooks(contentWhere: Prisma.ContentWhereInput, skip: number, take: number, orderBy: Prisma.ContentOrderByWithRelationInput) {
   const where: Prisma.EbookWhereInput = { content: contentWhere };
   const [rows, total] = await Promise.all([
-    prisma.ebook.findMany({ where, skip, take, orderBy: { content: orderBy }, include: { content: { include: WITH_CONTENT_RELATIONS }, frontCoverAsset: { select: { storageKey: true } } } }),
+    prisma.ebook.findMany({ relationLoadStrategy: "join", where, skip, take, orderBy: { content: orderBy }, include: { content: { include: WITH_CONTENT_RELATIONS }, frontCoverAsset: { select: { storageKey: true } } } }),
     prisma.ebook.count({ where }),
   ]);
   return { rows, total };
@@ -63,7 +63,7 @@ export async function listEbooks(contentWhere: Prisma.ContentWhereInput, skip: n
 export async function listAudiobooks(contentWhere: Prisma.ContentWhereInput, skip: number, take: number, orderBy: Prisma.ContentOrderByWithRelationInput) {
   const where: Prisma.AudiobookWhereInput = { content: contentWhere };
   const [rows, total] = await Promise.all([
-    prisma.audiobook.findMany({ where, skip, take, orderBy: { content: orderBy }, include: { content: { include: WITH_CONTENT_RELATIONS }, coverAsset: { select: { storageKey: true } } } }),
+    prisma.audiobook.findMany({ relationLoadStrategy: "join", where, skip, take, orderBy: { content: orderBy }, include: { content: { include: WITH_CONTENT_RELATIONS }, coverAsset: { select: { storageKey: true } } } }),
     prisma.audiobook.count({ where }),
   ]);
   return { rows, total };
@@ -82,7 +82,7 @@ export const findAudiobookBySlug = (slug: string) =>
 
 /** Used by the related-content service: every customer-visible title of one type, lightly loaded. */
 export const listAllVisible = (type: "MOVIE" | "EBOOK" | "AUDIOBOOK", now = new Date()) =>
-  prisma.content.findMany({ where: { ...customerVisibleWhere(now), type }, include: WITH_CONTENT_RELATIONS });
+  prisma.content.findMany({ relationLoadStrategy: "join", where: { ...customerVisibleWhere(now), type }, include: WITH_CONTENT_RELATIONS });
 
 /**
  * Section 14: a dynamic homepage section derives from Content flags/dates directly — never a duplicate
@@ -100,9 +100,9 @@ export const listAllVisible = (type: "MOVIE" | "EBOOK" | "AUDIOBOOK", now = new 
  */
 export async function listDynamic(flag: "FEATURED" | "TRENDING" | "POPULAR" | "NEW_RELEASE" | "LATEST", limit: number, contentType?: Prisma.ContentWhereInput["type"], now = new Date()) {
   const where: Prisma.ContentWhereInput = { ...customerVisibleWhere(now), ...(contentType ? { type: contentType } : {}) };
-  if (flag === "LATEST") return prisma.content.findMany({ where, take: limit, orderBy: [{ releaseDate: "desc" }, { publishedAt: "desc" }], include: WITH_CONTENT_RELATIONS });
+  if (flag === "LATEST") return prisma.content.findMany({ relationLoadStrategy: "join", where, take: limit, orderBy: [{ releaseDate: "desc" }, { publishedAt: "desc" }], include: WITH_CONTENT_RELATIONS });
   const flagField = { FEATURED: "featured", TRENDING: "trending", POPULAR: "popular", NEW_RELEASE: "newRelease" }[flag];
-  const flagged = await prisma.content.findMany({ where: { ...where, [flagField]: true }, take: limit, orderBy: { publishedAt: "desc" }, include: WITH_CONTENT_RELATIONS });
+  const flagged = await prisma.content.findMany({ relationLoadStrategy: "join", where: { ...where, [flagField]: true }, take: limit, orderBy: { publishedAt: "desc" }, include: WITH_CONTENT_RELATIONS });
   if (flagged.length >= limit) return flagged;
   const fill = await prisma.content.findMany({
     where: { ...where, id: { notIn: flagged.map((c) => c.id) } },

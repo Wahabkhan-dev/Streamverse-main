@@ -7,7 +7,7 @@ import * as collectionRepository from "../repositories/collection.repository";
 import { toMixedCards } from "./mixedContent.service";
 import { signAssetsById } from "./assetUrl.service";
 import { env } from "../config/env";
-import { analyticsCache } from "../utils/analyticsCache";
+import { analyticsCache, publicCacheWindow } from "../utils/analyticsCache";
 import { assertNotStale } from "../utils/concurrency";
 import { ConflictError, NotFoundError } from "../utils/errors";
 import { DYNAMIC_SECTION_QUERIES, type AddHomepageItemInput, type CreateHomepageSectionInput, type ReorderHomepageItemsInput, type UpdateHomepageSectionInput } from "../validators/homepage.validator";
@@ -131,7 +131,8 @@ function kindOf(section: { key: string; type: string }): SectionKind {
  * sections; any admin write drops every slice (see admin.routes.ts).
  */
 export function getCustomerHomepage(offset = 0, limit = 100) {
-  return analyticsCache.getOrSet(`${HOMEPAGE_CACHE_PREFIX}public:${offset}:${limit}`, () => computeCustomerHomepage(offset, limit), env.HOMEPAGE_CACHE_TTL_SECONDS);
+  const { ttl, stale } = publicCacheWindow();
+  return analyticsCache.getOrSet(`${HOMEPAGE_CACHE_PREFIX}public:${offset}:${limit}`, () => computeCustomerHomepage(offset, limit), ttl, stale);
 }
 
 type HomepageSectionRow = Awaited<ReturnType<typeof homepageRepository.listSections>>[number];

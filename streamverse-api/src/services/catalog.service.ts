@@ -12,6 +12,8 @@ import { toEbookCard, toEbookDetail } from "../mappers/ebookCustomer.mapper";
 import { toAudiobookCard, toAudiobookDetail } from "../mappers/audiobookCustomer.mapper";
 import { getRelatedContent } from "./relatedContent.service";
 import { signAssetsById, signStorageKey as signCoverUrl } from "./assetUrl.service";
+import { analyticsCache, publicCacheWindow } from "../utils/analyticsCache";
+import { HOMEPAGE_CACHE_PREFIX } from "./homepage.service";
 
 /** "genre"/"language" query params are a slug/code (what the frontend has); resolve to the real ids. */
 async function resolveFilters(query: CatalogListQuery) {
@@ -34,7 +36,13 @@ function buildWhere(query: CatalogListQuery, filters: Awaited<ReturnType<typeof 
   return catalogRepository.withCustomerFilters(catalogRepository.customerVisibleWhere(), filters);
 }
 
-export async function listMovies(query: CatalogListQuery) {
+/** Public and identical for every visitor, so cached briefly; any admin write drops it (see admin.routes.ts). */
+export function listMovies(query: CatalogListQuery) {
+  const { ttl, stale } = publicCacheWindow();
+  return analyticsCache.getOrSet(`${HOMEPAGE_CACHE_PREFIX}catalog:movies:${JSON.stringify(query)}`, () => computeMovies(query), ttl, stale);
+}
+
+async function computeMovies(query: CatalogListQuery) {
   const filters = await resolveFilters(query);
   const where = buildWhere(query, filters);
   const { skip, take } = toSkipTake(query.page, query.limit);
@@ -48,7 +56,13 @@ export async function listMovies(query: CatalogListQuery) {
   return { rows: cards, pagination: buildPagination(total, query.page, query.limit) };
 }
 
-export async function listEbooks(query: CatalogListQuery) {
+/** Public and identical for every visitor, so cached briefly; any admin write drops it (see admin.routes.ts). */
+export function listEbooks(query: CatalogListQuery) {
+  const { ttl, stale } = publicCacheWindow();
+  return analyticsCache.getOrSet(`${HOMEPAGE_CACHE_PREFIX}catalog:ebooks:${JSON.stringify(query)}`, () => computeEbooks(query), ttl, stale);
+}
+
+async function computeEbooks(query: CatalogListQuery) {
   const filters = await resolveFilters(query);
   const where = buildWhere(query, filters);
   const { skip, take } = toSkipTake(query.page, query.limit);
@@ -62,7 +76,13 @@ export async function listEbooks(query: CatalogListQuery) {
   return { rows: cards, pagination: buildPagination(total, query.page, query.limit) };
 }
 
-export async function listAudiobooks(query: CatalogListQuery) {
+/** Public and identical for every visitor, so cached briefly; any admin write drops it (see admin.routes.ts). */
+export function listAudiobooks(query: CatalogListQuery) {
+  const { ttl, stale } = publicCacheWindow();
+  return analyticsCache.getOrSet(`${HOMEPAGE_CACHE_PREFIX}catalog:audiobooks:${JSON.stringify(query)}`, () => computeAudiobooks(query), ttl, stale);
+}
+
+async function computeAudiobooks(query: CatalogListQuery) {
   const filters = await resolveFilters(query);
   const where = buildWhere(query, filters);
   const { skip, take } = toSkipTake(query.page, query.limit);

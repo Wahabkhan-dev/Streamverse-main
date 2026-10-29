@@ -4,6 +4,7 @@ import { disconnectDatabase, prisma } from "./config/database";
 import { env, validateProductionEnv } from "./config/env";
 import { onShutdown, runShutdownHooks } from "./config/lifecycle";
 import { logger } from "./config/logger";
+import { getCustomerHomepage } from "./services/homepage.service";
 
 // Refuse to start in production if critical environment variables are absent.
 validateProductionEnv();
@@ -11,6 +12,13 @@ validateProductionEnv();
 const app = createApp();
 const server: Server = app.listen(env.PORT, () => {
   logger.info({ port: env.PORT, env: env.NODE_ENV, docs: env.docsEnabled }, "StreamVerse API listening");
+  // Fill the public homepage cache now, so the first visitor after a (re)start is served instantly instead of waiting for ~20 queries.
+  if (env.HOMEPAGE_CACHE_TTL_SECONDS > 0) {
+    void getCustomerHomepage(0, 100).then(
+      () => logger.info("homepage cache warmed"),
+      (err: unknown) => logger.warn({ err }, "homepage cache warm-up failed (will build on first request)"),
+    );
+  }
 });
 
 // With the in-process queue a restart kills any conversion that was running, and nothing would ever finish it: the file would

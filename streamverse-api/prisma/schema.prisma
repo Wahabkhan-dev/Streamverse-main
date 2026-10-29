@@ -3,7 +3,9 @@
 // (User/Auth in Phase 2, Content in Phase 3, ...) and each one ships with a Prisma migration.
 
 generator client {
-  provider      = "prisma-client-js"
+  provider        = "prisma-client-js"
+  // relationJoins: load relations in ONE query (JOIN) instead of one query per relation — big win on a remote database.
+  previewFeatures = ["relationJoins"]
   // "native" for local dev; debian-openssl-3.0.x for the node:20-bookworm-slim Docker image.
   binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
