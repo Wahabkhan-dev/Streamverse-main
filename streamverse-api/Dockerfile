@@ -33,6 +33,7 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder --chown=appuser:appgroup /app/node_modules ./node_modules
 COPY --from=builder /app/prisma ./prisma
 COPY package*.json ./
+COPY diag.cjs ./
 
 USER appuser
 
@@ -44,4 +45,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 
 # Apply pending migrations before starting, so a fresh database gets its tables.
 # (The migration CLI only needs the schema engine, so it runs with the default engine type; only the server uses the binary one.)
-CMD ["sh", "-c", "PRISMA_CLIENT_ENGINE_TYPE=library npx prisma migrate deploy && node dist/server.js"]
+CMD ["sh", "-c", "PRISMA_CLIENT_ENGINE_TYPE=library npx prisma migrate deploy && if [ \"$DIAG\" = \"1\" ]; then node diag.cjs; else node dist/server.js; fi"]
