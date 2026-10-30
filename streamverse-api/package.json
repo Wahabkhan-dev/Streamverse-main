@@ -23,6 +23,7 @@
     "seed": "tsx prisma/seed.ts",
     "seed:demo": "tsx prisma/seedDemo.ts",
     "seed:demo:images": "tsx prisma/seed-demo-images.ts",
+    "seed:demo:artwork": "tsx prisma/seed-demo-artwork.ts",
     "seed:demo:delete": "tsx prisma/seed-demo-delete.ts",
     "seed:homepage": "tsx prisma/seed-homepage.ts",
     "db:up": "docker compose up -d db redis"
