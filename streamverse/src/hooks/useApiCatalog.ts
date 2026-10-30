@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { catalogApi, type CatalogListParams } from "@/api/catalog.api";
 import { DEMO_MODE } from "@/lib/config";
 
@@ -142,4 +142,30 @@ export function useApiCollectionQuery(idOrSlug: string) {
     enabled: !DEMO_MODE && !!idOrSlug,
     staleTime: 10 * 60 * 1000,
   });
+}
+
+/** Finds a title the app has already downloaded (homepage rows or any list) so a detail page can show it before its own request returns. */
+export function useCachedCard(slug: string): { title: string; image?: string | null; description?: string | null } | null {
+  const qc = useQueryClient();
+  if (DEMO_MODE || !slug) return null;
+  const hit = (o: unknown): { title: string; image?: string | null; description?: string | null } | null => {
+    if (!o || typeof o !== "object") return null;
+    const c = o as { slug?: unknown; title?: unknown; image?: unknown; posterUrl?: unknown; description?: unknown; summary?: unknown };
+    if (c.slug === slug && typeof c.title === "string") {
+      const image = (c.image ?? c.posterUrl) as string | null | undefined;
+      return { title: c.title, image: image ?? null, description: (c.description ?? c.summary ?? null) as string | null };
+    }
+    return null;
+  };
+  for (const [, data] of qc.getQueriesData<{ data?: unknown }>({ queryKey: ["catalog"] })) {
+    const rows = (data as { data?: unknown } | undefined)?.data;
+    if (!Array.isArray(rows)) continue;
+    for (const r of rows) {
+      const direct = hit(r);
+      if (direct) return direct;
+      const items = (r as { items?: unknown })?.items; // a homepage section
+      if (Array.isArray(items)) for (const it of items) { const f = hit(it); if (f) return f; }
+    }
+  }
+  return null;
 }

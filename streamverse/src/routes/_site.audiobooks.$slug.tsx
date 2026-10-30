@@ -2,7 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { BookDetail } from "@/components/sv/BookDetail";
 import { Gated, PreviewBanner } from "@/components/sv/Gate";
 import { ContentUnavailable, GeneralError } from "@/components/sv/states";
-import { useApiAudiobookQuery } from "@/hooks/useApiCatalog";
+import { useApiAudiobookQuery, useCachedCard } from "@/hooks/useApiCatalog";
+import { DetailSkeleton } from "@/components/sv/DetailSkeleton";
 import { DEMO_MODE } from "@/lib/config";
 import { findAudiobook, type Book } from "@/lib/data";
 import { itemEntity, toItem, useCatalog } from "@/lib/items";
@@ -30,8 +31,9 @@ function AudiobookDetail() {
   const { slug } = Route.useParams();
   const cat = useCatalog();
   const apiQuery = useApiAudiobookQuery(slug);
+  const peek = useCachedCard(slug);
 
-  if (!DEMO_MODE && apiQuery.isLoading) return <div className="py-24" aria-busy="true" />;
+  if (!DEMO_MODE && apiQuery.isLoading) return <DetailSkeleton peek={peek} />;
   if (!DEMO_MODE && apiQuery.isError) return <GeneralError />;
 
   const b: Book | undefined = DEMO_MODE

@@ -7,7 +7,8 @@ import { DownloadButton } from "@/components/sv/DownloadButton";
 import { MyListButton } from "@/components/sv/SaveButtons";
 import { ContentUnavailable, GeneralError } from "@/components/sv/states";
 import { EmptyState, TabBar, Tag } from "@/components/sv/ui";
-import { useApiMovieQuery } from "@/hooks/useApiCatalog";
+import { useApiMovieQuery, useCachedCard } from "@/hooks/useApiCatalog";
+import { DetailSkeleton } from "@/components/sv/DetailSkeleton";
 import { DEMO_MODE } from "@/lib/config";
 import { findMovie, type Movie } from "@/lib/data";
 import { itemEntity, toItem, useCatalog } from "@/lib/items";
@@ -44,8 +45,9 @@ function MovieDetailPage() {
   const { slug } = Route.useParams();
   const cat = useCatalog();
   const apiQuery = useApiMovieQuery(slug);
+  const peek = useCachedCard(slug);
 
-  if (!DEMO_MODE && apiQuery.isLoading) return <div className="py-24" aria-busy="true" />;
+  if (!DEMO_MODE && apiQuery.isLoading) return <DetailSkeleton peek={peek} />;
   if (!DEMO_MODE && apiQuery.isError) return <GeneralError />;
 
   const m: Movie | undefined = DEMO_MODE

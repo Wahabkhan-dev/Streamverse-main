@@ -4,6 +4,7 @@ import { ItemCard } from "@/components/sv/ItemCard";
 import { ContentUnavailable, GeneralError } from "@/components/sv/states";
 import { EmptyState } from "@/components/sv/ui";
 import { useApiCollectionQuery } from "@/hooks/useApiCatalog";
+import { DetailSkeleton } from "@/components/sv/DetailSkeleton";
 import { DEMO_MODE } from "@/lib/config";
 import { apiCollectionToItems, apiCollectionToLocal } from "@/lib/api-mappers";
 import { useCatalog, type Item } from "@/lib/items";
@@ -20,7 +21,7 @@ function CollectionPage() {
   const cat = useCatalog();
   const apiQuery = useApiCollectionQuery(slug);
 
-  if (!DEMO_MODE && apiQuery.isLoading) return <div className="py-24" aria-busy="true" />;
+  if (!DEMO_MODE && apiQuery.isLoading) return <DetailSkeleton tall={false} />;
   if (!DEMO_MODE && apiQuery.isError) return <GeneralError />;
 
   const collection = DEMO_MODE ? demoCollection : apiQuery.data ? apiCollectionToLocal(apiQuery.data) : undefined;
