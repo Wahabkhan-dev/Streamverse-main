@@ -10,7 +10,9 @@ export function useApiPlansQuery() {
     queryKey: PLANS_QUERY_KEY,
     queryFn: async () => {
       const res = await plansApi.list();
-      return res.data;
+      // The public list only ever contains active plans and leaves the `active` flag out; without it every
+      // `.filter((p) => p.active)` would drop all of them and the plan pickers would show nothing.
+      return res.data.map((p) => ({ ...p, active: p.active ?? true }));
     },
     enabled: !DEMO_MODE,
     staleTime: 10 * 60 * 1000, // 10 min — plans rarely change
