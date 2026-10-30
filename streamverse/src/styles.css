@@ -186,6 +186,53 @@
   .wiz-pane { animation: none !important; }
 }
 
+/* Brand loader (SvLoader): "S" badge with red rings rippling out. Transparent, and contained in its own size box. */
+.sv-loader {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: var(--sv-loader-size, 72px);
+  aspect-ratio: 1;
+  flex-shrink: 0;
+}
+.sv-loader-ring {
+  position: absolute;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  border-top-color: var(--primary);
+  background: linear-gradient(0deg, color-mix(in oklab, var(--primary-deep) 22%, transparent), color-mix(in oklab, var(--primary) 6%, transparent));
+  animation: sv-loader-ripple 2s ease-in-out infinite;
+}
+/* rings shrink inward from the outer edge, so the ripple (scale up to 1.15) stays roughly inside the box */
+.sv-loader-ring:nth-child(1) { inset: 33%; animation-delay: 0s; }
+.sv-loader-ring:nth-child(2) { inset: 24%; animation-delay: 0.2s; border-top-color: color-mix(in oklab, var(--primary) 70%, transparent); }
+.sv-loader-ring:nth-child(3) { inset: 15%; animation-delay: 0.4s; border-top-color: color-mix(in oklab, var(--primary) 45%, transparent); }
+.sv-loader-ring:nth-child(4) { inset: 6%; animation-delay: 0.6s; border-top-color: color-mix(in oklab, var(--primary) 22%, transparent); }
+.sv-loader-logo {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 26%;
+  aspect-ratio: 1;
+  border-radius: 22%;
+  color: var(--primary-foreground);
+  font-weight: 900;
+  font-size: calc(var(--sv-loader-size, 72px) * 0.15);
+  line-height: 1;
+  animation: sv-loader-pulse 2s ease-in-out infinite;
+}
+@keyframes sv-loader-ripple {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+}
+@keyframes sv-loader-pulse {
+  0%, 100% { opacity: 0.75; }
+  50% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sv-loader-ring, .sv-loader-logo { animation: none; }
+}
+
 /* visible keyboard focus everywhere (mouse clicks stay quiet) */
 :where(a, button, input, select, textarea, summary, [role="button"], [role="tab"], [role="radio"], [role="switch"], [tabindex]):focus-visible {
   outline: 2px solid var(--ring);
