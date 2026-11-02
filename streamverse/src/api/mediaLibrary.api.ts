@@ -139,6 +139,12 @@ export const mediaLibraryApi = {
     ),
   reconcile: (opts: { batch?: number; scanBucket?: boolean; scanLimit?: number } = {}) =>
     api.post<{ data: ReconcileReport }>("/admin/media/reconcile", opts),
+  /** Deletes storage files the health check found with no library entry; the server re-checks each one first. */
+  deleteOrphans: (keys: string[]) =>
+    api.post<{ data: { deleted: number; freedBytes: number; skipped: Array<{ key: string; reason: string }> } }>(
+      "/admin/media/orphans/delete",
+      { keys },
+    ),
   retryProcessing: (id: string) =>
     api.post<{ data: unknown }>(`/admin/media/${id}/retry-processing`),
 };

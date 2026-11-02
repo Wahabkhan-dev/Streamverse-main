@@ -362,6 +362,28 @@ describe("Media Library: reconciliation (report only)", () => {
     spy.mockRestore();
     expect(await getStorageProvider().objectExists("media/images/library/stray.jpg")).toBe(true);
   });
+
+  it("deletes unknown storage files on request, but never one the library uses or a file outside the checked folders", async () => {
+    const headers = await admin();
+    const ok = await asset("POSTER");
+    const storage = getStorageProvider();
+    await storage.putObject("media/images/library/stray2.jpg", Buffer.from("zz"), "image/jpeg");
+    await storage.putObject("media/hls/x/720p/seg0.ts", Buffer.from("zz"), "video/mp2t");
+    const res = await request(app)
+      .post("/api/v1/admin/media/orphans/delete")
+      .set(headers)
+      .send({ keys: ["media/images/library/stray2.jpg", ok.storageKey, "media/hls/x/720p/seg0.ts", "other/secret.txt"] });
+    expect(res.status).toBe(200);
+    expect(res.body.data.deleted).toBe(1);
+    expect(res.body.data.skipped.map((s: { key: string }) => s.key).sort()).toEqual(["media/hls/x/720p/seg0.ts", ok.storageKey, "other/secret.txt"].sort());
+    expect(await storage.objectExists("media/images/library/stray2.jpg")).toBe(false);
+    expect(await storage.objectExists(ok.storageKey!)).toBe(true);
+    expect(await storage.objectExists("media/hls/x/720p/seg0.ts")).toBe(true);
+    await storage.deleteObject("media/hls/x/720p/seg0.ts");
+    // customers cannot reach it
+    const { accessToken } = await createUser(app);
+    expect((await request(app).post("/api/v1/admin/media/orphans/delete").set({ Authorization: `Bearer ${accessToken}` }).send({ keys: ["media/images/library/stray2.jpg"] })).status).toBe(403);
+  });
 });
 
 describe("Media Library: banner and collection images", () => {

@@ -27,6 +27,9 @@ export async function remove(req: Request, res: Response) {
 export async function bulkDelete(req: Request, res: Response) {
   sendSuccess(res, await mediaLibraryService.bulkDelete(req.body.ids, auditContext(req)), "Bulk delete finished");
 }
+export async function deleteOrphans(req: Request, res: Response) {
+  sendSuccess(res, await mediaLibraryService.deleteOrphans(req.body.keys, auditContext(req)), "Unknown storage files deleted");
+}
 export async function reconcile(req: Request, res: Response) {
   sendSuccess(res, await mediaLibraryService.reconcile(req.body), "Reconciliation report");
 }

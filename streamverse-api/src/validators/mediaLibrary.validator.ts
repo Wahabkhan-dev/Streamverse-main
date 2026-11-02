@@ -31,6 +31,7 @@ export type UpdateMediaMetadataInput = z.infer<typeof updateMediaMetadataSchema>
 export const mediaIdParamSchema = z.object({ assetId: z.string().min(1) });
 export const replaceMediaSchema = z.object({ newAssetId: z.string().min(1) });
 export const bulkDeleteSchema = z.object({ ids: z.array(z.string().min(1)).min(1).max(100) });
+export const deleteOrphansSchema = z.object({ keys: z.array(z.string().min(1).max(1024)).min(1).max(1000) });
 export const reconcileSchema = z.object({
   batch: z.number().int().min(1).max(500).default(100),
   scanBucket: z.boolean().default(true),

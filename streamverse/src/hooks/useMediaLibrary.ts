@@ -95,5 +95,18 @@ export function useMediaMutations() {
       mutationFn: () =>
         mediaLibraryApi.reconcile({ batch: 200, scanBucket: true, scanLimit: 2000 }),
     }),
+    deleteOrphans: useMutation({
+      mutationFn: async (keys: string[]) => {
+        // the server takes up to 1000 keys per request
+        const out = { deleted: 0, freedBytes: 0, skipped: [] as Array<{ key: string; reason: string }> };
+        for (let i = 0; i < keys.length; i += 1000) {
+          const { data } = await mediaLibraryApi.deleteOrphans(keys.slice(i, i + 1000));
+          out.deleted += data.deleted;
+          out.freedBytes += data.freedBytes;
+          out.skipped.push(...data.skipped);
+        }
+        return out;
+      },
+    }),
   };
 }

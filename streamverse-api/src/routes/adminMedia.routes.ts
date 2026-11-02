@@ -5,7 +5,7 @@ import { validate } from "../middleware/validate.middleware";
 import { asyncHandler } from "../utils/asyncHandler";
 
 import * as libraryController from "../controllers/mediaLibrary.controller";
-import { bulkDeleteSchema, libraryListQuerySchema, mediaIdParamSchema, reconcileSchema, replaceMediaSchema, updateMediaMetadataSchema } from "../validators/mediaLibrary.validator";
+import { bulkDeleteSchema, deleteOrphansSchema, libraryListQuerySchema, mediaIdParamSchema, reconcileSchema, replaceMediaSchema, updateMediaMetadataSchema } from "../validators/mediaLibrary.validator";
 
 const assetIdParam = z.object({ assetId: z.string().min(1) });
 const contentIdParam = z.object({ contentId: z.string().min(1) });
@@ -18,6 +18,7 @@ export const adminMediaRouter = Router();
 adminMediaRouter.get("/", validate({ query: libraryListQuerySchema }), asyncHandler(libraryController.list));
 adminMediaRouter.get("/stats", asyncHandler(libraryController.stats));
 adminMediaRouter.post("/reconcile", validate({ body: reconcileSchema }), asyncHandler(libraryController.reconcile));
+adminMediaRouter.post("/orphans/delete", validate({ body: deleteOrphansSchema }), asyncHandler(libraryController.deleteOrphans));
 adminMediaRouter.post("/bulk-delete", validate({ body: bulkDeleteSchema }), asyncHandler(libraryController.bulkDelete));
 adminMediaRouter.get("/:assetId", validate({ params: mediaIdParamSchema }), asyncHandler(libraryController.detail));
 adminMediaRouter.patch("/:assetId", validate({ params: mediaIdParamSchema, body: updateMediaMetadataSchema }), asyncHandler(libraryController.update));

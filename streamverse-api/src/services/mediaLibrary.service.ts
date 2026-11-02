@@ -270,6 +270,41 @@ export interface ReconcileReport {
 const ORPHAN_PREFIXES = ["media/", "content/", "banners/"];
 
 /**
+ * Deletes storage files the health check reported as unknown. Each key is checked again here (the report may be stale): only
+ * top-level source files under the scanned folders, never a stream file (/hls/), and never a key any media row still points at
+ * - including deleted rows and uploads still in progress. Anything that fails a check is skipped and listed with the reason.
+ */
+export async function deleteOrphans(keys: string[], ctx: AuditContext) {
+  const unique = [...new Set(keys)];
+  const known = new Set(await library.existingKeys(unique));
+  const storage = getStorageProvider();
+  const skipped: Array<{ key: string; reason: string }> = [];
+  let deleted = 0;
+  let freedBytes = 0;
+  for (const key of unique) {
+    if (!ORPHAN_PREFIXES.some((p) => key.startsWith(p)) || key.includes("/hls/") || key.split("/").includes("..")) {
+      skipped.push({ key, reason: "Not a file the health check looks after." });
+      continue;
+    }
+    if (known.has(key)) {
+      skipped.push({ key, reason: "The library uses this file." });
+      continue;
+    }
+    try {
+      const head = await storage.headObject(key);
+      if (!head.exists) continue;
+      await storage.deleteObject(key);
+      deleted++;
+      freedBytes += head.sizeBytes ?? 0;
+    } catch (err) {
+      skipped.push({ key, reason: err instanceof Error ? err.message : "Could not delete" });
+    }
+  }
+  if (deleted) await recordAudit(ctx, { action: "media.orphans_deleted", entityType: "MEDIA_ASSET", metadata: { deleted, freedBytes, keys: unique.slice(0, 50) } });
+  return { deleted, freedBytes, skipped };
+}
+
+/**
  * Compares the database with the bucket. It only REPORTS - nothing is deleted or changed except each checked row's `checkedAt`
  * cursor. The DB side is checked in bounded batches (HEAD per asset), the bucket side in bounded listing pages, so one call is
  * always cheap no matter how large the library is; call again to continue.

@@ -127,8 +127,20 @@ function HealthDialog({
   open: boolean;
   onOpenChange: (o: boolean) => void;
 }) {
-  const { reconcile } = useMediaMutations();
+  const { reconcile, deleteOrphans } = useMediaMutations();
   const [report, setReport] = useState<ReconcileReport | null>(null);
+  // the unknown files waiting for the admin to confirm their deletion (one file, or all of them)
+  const [toDelete, setToDelete] = useState<string[] | null>(null);
+  const removeOrphans = (keys: string[]) =>
+    deleteOrphans.mutate(keys, {
+      onSuccess: (r) => {
+        const kept = new Set(r.skipped.map((s) => s.key));
+        setReport((prev) => (prev ? { ...prev, orphans: prev.orphans.filter((o) => !keys.includes(o.key) || kept.has(o.key)) } : prev));
+        if (r.deleted) toast.success(`Deleted ${r.deleted} file${r.deleted === 1 ? "" : "s"} · ${fmtBytes(r.freedBytes)} freed`);
+        if (r.skipped.length) toast.info(`${r.skipped.length} kept: ${r.skipped[0]!.reason}`);
+      },
+      onError: (e) => toast.error(isApiError(e) ? e.message : "The files could not be deleted"),
+    });
   const run = () =>
     reconcile.mutate(undefined, {
       onSuccess: (r) => setReport(r.data),
@@ -189,14 +201,41 @@ function HealthDialog({
             )}
             {report.orphans.length > 0 && (
               <section>
-                <h3 className="mb-1 font-bold">Files in storage with no library entry</h3>
+                <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="font-bold">Files in storage with no library entry</h3>
+                  <Btn
+                    variant="danger"
+                    onClick={() => setToDelete(report.orphans.map((o) => o.key))}
+                    disabled={deleteOrphans.isPending}
+                    data-testid="orphans-delete-all"
+                  >
+                    <Trash2 /> {deleteOrphans.isPending ? "Deleting…" : `Delete all ${report.orphans.length}`}
+                  </Btn>
+                </div>
+                <p className="mb-2 text-xs text-muted-foreground">
+                  Nothing on the site uses these ({fmtBytes(report.orphans.reduce((n, o) => n + o.sizeBytes, 0))} in total).
+                </p>
                 <ul className="space-y-1 text-xs">
                   {report.orphans.slice(0, 50).map((o) => (
-                    <li key={o.key} className="break-all rounded border border-border px-2 py-1">
-                      {o.key} · {fmtBytes(o.sizeBytes)}
+                    <li key={o.key} className="flex items-center gap-2 rounded border border-border px-2 py-1">
+                      <span className="min-w-0 flex-1 break-all">
+                        {o.key} · {fmtBytes(o.sizeBytes)}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label={`Delete ${o.key}`}
+                        disabled={deleteOrphans.isPending}
+                        onClick={() => setToDelete([o.key])}
+                        className="grid size-7 shrink-0 place-items-center rounded-md text-soft hover:bg-primary/10 hover:text-primary-text disabled:opacity-50 [&_svg]:size-4"
+                      >
+                        <Trash2 />
+                      </button>
                     </li>
                   ))}
                 </ul>
+                {report.orphans.length > 50 && (
+                  <p className="mt-1 text-xs text-muted-foreground">…and {report.orphans.length - 50} more (included in Delete all).</p>
+                )}
               </section>
             )}
             {report.missing.length === 0 && report.orphans.length === 0 && (
@@ -205,6 +244,16 @@ function HealthDialog({
           </div>
         )}
       </DialogContent>
+      <ConfirmDialog
+        open={toDelete !== null}
+        onOpenChange={(o) => !o && setToDelete(null)}
+        title={toDelete?.length === 1 ? "Delete this file from storage?" : `Delete ${toDelete?.length ?? 0} files from storage?`}
+        description="They are not in the library and nothing on the site uses them. They are removed from storage permanently and cannot be recovered."
+        onConfirm={() => {
+          if (toDelete) removeOrphans(toDelete);
+          setToDelete(null);
+        }}
+      />
     </Dialog>
   );
 }
