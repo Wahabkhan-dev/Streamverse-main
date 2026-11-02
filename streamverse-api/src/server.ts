@@ -5,6 +5,7 @@ import { env, validateProductionEnv } from "./config/env";
 import { onShutdown, runShutdownHooks } from "./config/lifecycle";
 import { logger } from "./config/logger";
 import { HOMEPAGE_CACHE_PREFIX, getCustomerHomepage } from "./services/homepage.service";
+import { syncAllRuntimes } from "./services/movieRuntime.service";
 import { analyticsCache } from "./utils/analyticsCache";
 
 // Refuse to start in production if critical environment variables are absent.
@@ -13,12 +14,20 @@ validateProductionEnv();
 const app = createApp();
 const server: Server = app.listen(env.PORT, () => {
   logger.info({ port: env.PORT, env: env.NODE_ENV, docs: env.docsEnabled }, "StreamVerse API listening");
+  // Titles saved before runtimes were measured kept a typed runtime: bring them in line with their video files first, so the
+  // homepage warmed below does not hold the old numbers.
+  const runtimes = syncAllRuntimes().then(
+    (n) => void (n && logger.info({ count: n }, "movie runtimes updated from their video files")),
+    (err: unknown) => logger.warn({ err }, "movie runtime sync failed"),
+  );
   // Fill the public homepage cache now, so the first visitor after a (re)start is served instantly instead of waiting for ~20 queries.
   if (env.HOMEPAGE_CACHE_TTL_SECONDS > 0) {
-    void getCustomerHomepage(0, 100).then(
-      () => logger.info("homepage cache warmed"),
-      (err: unknown) => logger.warn({ err }, "homepage cache warm-up failed (will build on first request)"),
-    );
+    void runtimes
+      .then(() => getCustomerHomepage(0, 100))
+      .then(
+        () => logger.info("homepage cache warmed"),
+        (err: unknown) => logger.warn({ err }, "homepage cache warm-up failed (will build on first request)"),
+      );
     // Keep whatever visitors have recently asked for fresh in the background, so nobody waits for a rebuild (see refreshAging).
     setInterval(() => analyticsCache.refreshAging(HOMEPAGE_CACHE_PREFIX, 10 * 60 * 1000), 10_000).unref();
   }

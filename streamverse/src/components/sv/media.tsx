@@ -88,7 +88,8 @@ const btnLg = (v: "primary" | "glass") =>
 export function MovieMeta({ m, className }: { m: Movie; className?: string }) {
   return (
     <div className={cn("flex flex-wrap items-center gap-2 text-sm text-soft", className)}>
-      <span className="font-semibold text-success">98% Match</span>
+      {/* there is no real match score behind this, so live titles leave it out */}
+      {DEMO_MODE && <span className="font-semibold text-success">98% Match</span>}
       <span>{m.year}</span>
       <Tag tone="outline">{m.rating}</Tag>
       <span>{m.runtime}</span>
