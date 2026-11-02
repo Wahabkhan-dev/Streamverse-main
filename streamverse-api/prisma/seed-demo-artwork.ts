@@ -44,6 +44,7 @@ async function upload(purpose: string, name: string, art: { file: string; data: 
 const alreadyDone = async (contentId: string) => !!(await prisma.mediaAsset.findFirst({ where: { contentId, originalFileName: { startsWith: MARKER } }, select: { id: true } }));
 
 async function main() {
+  log(`Database: ${new URL(process.env["DATABASE_URL"] ?? "mysql://unset").host}`);
   const adminUser = await prisma.user.findFirst({ where: { role: "ADMIN" }, select: { id: true } });
   if (!adminUser) throw new Error("No ADMIN user found — create one first (scripts/createAdmin.ts).");
   ctx = { userId: adminUser.id, ip: undefined, userAgent: "seedDemoArtwork", requestId: "seed-demo-artwork" };

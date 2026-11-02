@@ -1,7 +1,8 @@
 import { useNavigate } from "@tanstack/react-router";
 import { BookOpen, Clock, Film, Headphones, Search, Tag, User, X } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
-import { itemTitle, useCatalog, type Item } from "@/lib/items";
+import { itemTitle, type Item } from "@/lib/items";
+import { useLiveCatalog } from "@/hooks/useLiveCatalog";
 import { detailTarget } from "@/lib/links";
 import { peopleOf, suggest } from "@/lib/search";
 import { useGenreCatalog } from "@/hooks/useGenreNames";
@@ -19,7 +20,7 @@ const TypeGlyph = ({ item }: { item: Item }) => {
  */
 export function SearchField({ value, onChange, onSubmit, className, inputClassName, autoFocus, id = "global-search", label = "Search movies, books, audiobooks" }: { value: string; onChange: (v: string) => void; onSubmit?: (q: string) => void; className?: string; inputClassName?: string; autoFocus?: boolean; id?: string; label?: string }) {
   const navigate = useNavigate();
-  const cat = useCatalog();
+  const cat = useLiveCatalog();
   const genres = useGenreCatalog();
   const recent = useRecentSearches();
   const [open, setOpen] = useState(false);

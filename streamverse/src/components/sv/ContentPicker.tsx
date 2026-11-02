@@ -2,7 +2,8 @@ import { ArrowDown, ArrowUp, BookOpen, Film, Headphones, Plus, Search, X } from 
 import { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { ItemRef, ItemType } from "@/lib/data";
-import { itemTitle, refOf, typeLabel, useCatalog, type Item } from "@/lib/items";
+import { itemTitle, refOf, typeLabel, type Item } from "@/lib/items";
+import { useLiveCatalog } from "@/hooks/useLiveCatalog";
 import { cn } from "@/lib/utils";
 import { Btn, StatusBadge, useRovingTabs } from "./ui";
 import { DragHandle, useReorder } from "./wizard/kit";
@@ -15,7 +16,7 @@ const keyOf = (r: ItemRef) => `${r.type}:${r.slug}`;
  * Used by the homepage sections and by collections.
  */
 export function ContentPicker({ open, onOpenChange, title, description, initial, onSave, types = ["Movie", "eBook", "Audiobook"] }: { open: boolean; onOpenChange: (o: boolean) => void; title: string; description?: string; initial: ItemRef[]; onSave: (refs: ItemRef[]) => void; types?: ItemType[] }) {
-  const cat = useCatalog();
+  const cat = useLiveCatalog();
   const [tab, setTab] = useState<ItemType>(types[0]!);
   const tabProps = useRovingTabs(types.length);
   const [q, setQ] = useState("");

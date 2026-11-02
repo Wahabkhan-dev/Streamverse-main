@@ -5,7 +5,8 @@ import { useQuery } from "@tanstack/react-query";
 import { ItemCard } from "@/components/sv/ItemCard";
 import { SearchField } from "@/components/sv/SearchField";
 import { Btn, EmptyState, Skel, useRovingTabs } from "@/components/sv/ui";
-import { itemAge, itemGenres, itemLanguage, useCatalog, type Item } from "@/lib/items";
+import { itemAge, itemGenres, itemLanguage, type Item } from "@/lib/items";
+import { useLiveCatalog } from "@/hooks/useLiveCatalog";
 import { NO_FILTERS, filtersActive, peopleOf, searchItems, searchPeople, type Filters } from "@/lib/search";
 import { useGenreCatalog } from "@/hooks/useGenreNames";
 import { addRecentSearch, clearRecentSearches, useRecentSearches } from "@/lib/user";
@@ -62,7 +63,7 @@ const apiBookToItem = (b: ApiBook, type: "eBook" | "Audiobook"): Item => toItem(
 function SearchPage() {
   const { q = "", tab = "all" } = Route.useSearch();
   const navigate = useNavigate();
-  const cat = useCatalog();
+  const cat = useLiveCatalog();
   const genres = useGenreCatalog();
   const recent = useRecentSearches();
   const [text, setText] = useState(q);
@@ -111,11 +112,8 @@ function SearchPage() {
     return searchItems(items, "", filters); // empty string = no text filter (API already filtered)
   }, [DEMO_MODE, cat.listed, applied, filters, apiSearchQuery.data]);
 
-  const peopleHits = useMemo(() => {
-    if (DEMO_MODE) return searchPeople(people, applied);
-    // In API mode, people search is not supported via the API; use local catalog people
-    return searchPeople(people, applied);
-  }, [DEMO_MODE, people, applied, cat.listed]);
+  // people come from the catalog of titles that exist (demo store, or the server's titles in live mode)
+  const peopleHits = useMemo(() => searchPeople(people, applied), [people, applied]);
 
   const genreHits = useMemo(() => (applied ? genres.map((g) => g.name).filter((g) => g.toLowerCase().includes(applied.toLowerCase())) : []), [genres, applied]);
 

@@ -10,7 +10,7 @@ import { meApi } from "@/api/me.api";
 import type { Movie } from "@/lib/data";
 import { DEMO_MODE } from "@/lib/config";
 import { useSaveProgressMutation } from "@/hooks/useApiMe";
-import { useCatalog } from "@/lib/items";
+import { useLiveCatalog } from "@/hooks/useLiveCatalog";
 import { movieFileKey, useStoredFileUrl } from "@/lib/media-store";
 import { clock, runtimeSeconds } from "@/lib/runtime";
 import { useSettings } from "@/lib/store";
@@ -59,7 +59,7 @@ type Flash = { id: number; kind: "volume" | "mute" | "back" | "forward" | "speed
 
 export function MoviePlayer({ m, trailer }: { m: Movie; trailer?: Trailer | undefined }) {
   const navigate = useNavigate();
-  const cat = useCatalog();
+  const cat = useLiveCatalog();
   const prefs = usePrefs();
   const settings = useSettings();
   const box = useRef<HTMLDivElement>(null);
