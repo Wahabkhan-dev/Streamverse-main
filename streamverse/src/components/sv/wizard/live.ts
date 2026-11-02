@@ -505,7 +505,15 @@ export interface AudiobookLive {
   rightsNotes: string;
   chapterMode: "single" | "chapters";
   thumbFromCover: boolean;
-  chapters: Array<{ id: string; title: string; duration: string }>;
+  /** start/end/seconds are worked out by the wizard (from the start times, or each chapter file's length); 0 = unknown */
+  chapters: Array<{
+    id: string;
+    title: string;
+    duration: string;
+    start: number;
+    end: number;
+    seconds: number;
+  }>;
   editions: Array<{ id: string; language: string; narrator: string; bio: string }>;
   mode: PublishMode;
   publishDate: string;
@@ -559,13 +567,31 @@ export async function saveAudiobookLive(
       )
     : await unwrap(api.post<{ data: Row }>("/admin/audiobooks", payload));
   const id = String(saved["id"]);
+  if (a.chapterMode === "single") {
+    // chapter markers inside the one audiobook file: the saved list is replaced on every save (create and edit)
+    for (const old of (saved["chapters"] as Row[] | undefined) ?? []) {
+      await api.delete(`/admin/audiobooks/${id}/chapters/${String(old["id"])}`);
+    }
+    const marked = a.chapters.filter((c) => c.title.trim());
+    for (const [i, c] of marked.entries()) {
+      await api.post(`/admin/audiobooks/${id}/chapters`, {
+        chapterNumber: i + 1,
+        title: c.title.trim().slice(0, 200),
+        displayOrder: i,
+        startTimeSeconds: Math.round(c.start),
+        ...(c.end > c.start ? { endTimeSeconds: Math.round(c.end) } : {}),
+        ...(c.seconds >= 1 ? { durationSeconds: Math.round(c.seconds) } : {}),
+      });
+    }
+  }
   if (!existing) {
     if (a.chapterMode === "chapters") {
       let n = 0;
       for (const c of a.chapters) {
         n++;
         const audioAssetId = assetOf(s, `ch:${c.id}`);
-        const dur = seconds(c.duration);
+        // the chapter file's own length, falling back to a typed one for files whose length could not be read
+        const dur = c.seconds >= 1 ? Math.round(c.seconds) : seconds(c.duration);
         await api.post(`/admin/audiobooks/${id}/chapters`, {
           chapterNumber: n,
           title: (c.title || `Chapter ${n}`).slice(0, 200),

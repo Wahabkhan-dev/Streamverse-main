@@ -549,7 +549,17 @@ export function AudiobookWizard({
           rightsNotes: d.rightsNotes,
           chapterMode: d.chapterMode,
           thumbFromCover: d.thumbFromCover,
-          chapters: d.chapters.map((c) => ({ id: c.id, title: c.title, duration: c.duration })),
+          chapters: d.chapters.map((c, i) => {
+            const t = timings(d, s.media).rows[i];
+            return {
+              id: c.id,
+              title: c.title,
+              duration: c.duration,
+              start: t?.start ?? 0,
+              end: t?.end ?? 0,
+              seconds: t?.secs ?? 0,
+            };
+          }),
           editions: d.editions.map((e) => ({
             id: e.id,
             language: e.language,
@@ -1095,28 +1105,31 @@ function AudioStep() {
   const showManual = manual || !!d.totalDuration.trim();
   return (
     <>
-      <Section
-        title="How is this audiobook delivered?"
-        desc="Choose one. You never need to upload both."
-      >
-        <RadioCards
-          name="chapter-mode"
-          value={d.chapterMode}
-          onChange={(chapterMode) => set((x) => ({ ...x, chapterMode }))}
-          options={[
-            {
-              value: "single",
-              title: "Single audiobook file",
-              desc: "One file; chapters are optional markers",
-            },
-            {
-              value: "chapters",
-              title: "Chapter files",
-              desc: "Upload one audio file per chapter",
-            },
-          ]}
-        />
-      </Section>
+      {/* audiobooks are one file with chapter markers; the choice only appears for an older title saved as chapter files */}
+      {!single && (
+        <Section
+          title="How is this audiobook delivered?"
+          desc="This audiobook was saved as one file per chapter. New audiobooks use one file with chapter markers."
+        >
+          <RadioCards
+            name="chapter-mode"
+            value={d.chapterMode}
+            onChange={(chapterMode) => set((x) => ({ ...x, chapterMode }))}
+            options={[
+              {
+                value: "single",
+                title: "Single audiobook file",
+                desc: "One file; chapters are markers with a start time",
+              },
+              {
+                value: "chapters",
+                title: "Chapter files",
+                desc: "Upload one audio file per chapter",
+              },
+            ]}
+          />
+        </Section>
+      )}
       <Section
         title="Primary audiobook"
         desc={
@@ -1213,25 +1226,20 @@ function ChaptersStep() {
   const { rows, total } = timings(d, media);
   return (
     <>
-      <Section
-        title="Chapter source"
-        desc={
-          individual
-            ? "Chapter files: each chapter has its own audio file."
-            : "Single audiobook file: chapters are optional markers inside the master file."
-        }
-      >
-        <p className="text-sm text-muted-foreground">
-          Chosen in Audio files.{" "}
-          <button
-            type="button"
-            className="font-semibold text-primary-text hover:underline"
-            onClick={() => goTo(2)}
-          >
-            Change
-          </button>
-        </p>
-      </Section>
+      {individual && (
+        <Section title="Chapter source" desc="Chapter files: each chapter has its own audio file.">
+          <p className="text-sm text-muted-foreground">
+            Chosen in Audio files.{" "}
+            <button
+              type="button"
+              className="font-semibold text-primary-text hover:underline"
+              onClick={() => goTo(2)}
+            >
+              Change
+            </button>
+          </p>
+        </Section>
+      )}
       <Section
         title="Chapters"
         desc={

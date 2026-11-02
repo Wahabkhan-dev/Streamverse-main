@@ -40,7 +40,7 @@ interface AudiobookDetailRow extends AudiobookListRow {
   mainAssetId: string | null;
   previewAssetId: string | null;
   editions: { narrator: string; narratorBio: string | null; language: { code: string; name: string } }[];
-  chapters: { chapterNumber: number; title: string; durationSeconds: number | null; audioAssetId: string | null; displayOrder: number }[];
+  chapters: { chapterNumber: number; title: string; durationSeconds: number | null; startTimeSeconds: number | null; audioAssetId: string | null; displayOrder: number }[];
 }
 
 /** Full detail for GET /audiobooks/:slug — Section 10. Never a raw private audio storage key. */
@@ -60,7 +60,8 @@ export function toAudiobookDetail(row: AudiobookDetailRow, access: AccessResult)
     deliveryMode: row.deliveryMode,
     // the playable audio is never named until access.canConsume is true — see Section 56/10
     listeningReady: access.canConsume && hasAudio,
-    chapters: row.chapters.map((c) => ({ chapterNumber: c.chapterNumber, title: c.title, durationSeconds: c.durationSeconds, hasAudio: !!c.audioAssetId })),
+    // startTimeSeconds: where the chapter begins inside the single audiobook file (chapter markers)
+    chapters: row.chapters.map((c) => ({ chapterNumber: c.chapterNumber, title: c.title, durationSeconds: c.durationSeconds, startTimeSeconds: c.startTimeSeconds, hasAudio: !!c.audioAssetId })),
     editions: row.editions.map((e) => ({ narrator: e.narrator, narratorBio: e.narratorBio, language: e.language.code })),
     access,
   };

@@ -437,12 +437,19 @@ export async function loadAudiobook(
     ...editions.map((x) => x["narratorImageAssetId"]),
   ] as Array<string | null>);
   const base = emptyAudioDraft(sh.contentId);
+  // a chapter marker's start inside the single file, as the wizard types it ("12:30", "1:02:03")
+  const clock = (secs: number) => {
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = String(Math.round(secs % 60)).padStart(2, "0");
+    return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
+  };
   const chapterRows = chapters.map((c, i) => ({
     id: `ch${i}`,
     title: str(c["title"]),
     duration:
       c["durationSeconds"] != null ? str(Math.round(Number(c["durationSeconds"]) / 60)) : "",
-    start: "",
+    start: i > 0 && c["startTimeSeconds"] != null ? clock(Number(c["startTimeSeconds"])) : "",
     end: "",
   }));
   const d: AudioDraft = {

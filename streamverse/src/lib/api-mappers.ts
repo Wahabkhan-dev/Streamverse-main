@@ -32,6 +32,34 @@ const hm = (totalMinutes: number) => {
   return h > 0 ? `${h}h ${min}m` : `${min}m`;
 };
 
+const clock = (secs: number) => {
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = String(Math.round(secs % 60)).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
+};
+
+/**
+ * An audiobook detail's chapters as the player reads them (title + length, laid end to end from 0:00). A chapter's length is
+ * its saved duration, else the gap to the next chapter's start, else what is left of the book; "" when none of those is known.
+ */
+function bookChapters(b: ApiBook): { title: string; duration: string }[] | undefined {
+  if (!Array.isArray(b.chapters) || b.chapters.length === 0) return undefined;
+  const list = [...b.chapters].sort((x, y) => x.chapterNumber - y.chapterNumber);
+  return list.map((c, i) => {
+    const start = c.startTimeSeconds ?? null;
+    const nextStart = list[i + 1]?.startTimeSeconds ?? null;
+    const secs =
+      c.durationSeconds ??
+      (start !== null && nextStart !== null
+        ? nextStart - start
+        : start !== null && b.durationSeconds
+          ? b.durationSeconds - start
+          : 0);
+    return { title: c.title, duration: secs > 0 ? clock(secs) : "" };
+  });
+}
+
 export function apiMovieToLocal(m: ApiMovie): Movie {
   const mins = m.runtimeMinutes ?? m.duration ?? 0;
   const year = yearOf(m);
@@ -80,6 +108,7 @@ export function apiMovieToLocal(m: ApiMovie): Movie {
 
 /** Convert an ApiBook to the local Book shape expected by UI components. */
 export function apiBookToLocal(b: ApiBook): Book {
+  const chapters = bookChapters(b);
   return {
     slug: b.slug,
     title: b.title,
@@ -109,13 +138,14 @@ export function apiBookToLocal(b: ApiBook): Book {
           },
         }
       : {}),
-    ...(b.language !== undefined || b.languages !== undefined || b.publisher !== undefined || b.tags !== undefined
+    ...(b.language !== undefined || b.languages !== undefined || b.publisher !== undefined || b.tags !== undefined || chapters
       ? {
           info: {
             ...(b.language !== undefined ? { language: b.language } : {}),
             ...(b.languages !== undefined ? { languages: b.languages } : {}),
             ...(b.publisher ? { publisher: b.publisher } : {}),
             ...(b.tags !== undefined ? { tags: b.tags } : {}),
+            ...(chapters ? { chapters } : {}),
           },
         }
       : {}),

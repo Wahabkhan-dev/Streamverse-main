@@ -164,6 +164,14 @@ export interface ApiMovie {
   updatedAt?: string;
 }
 
+/** One chapter on an audiobook's detail: a marker inside the single file (startTimeSeconds), or its own file. */
+export interface ApiBookChapter {
+  chapterNumber: number;
+  title: string;
+  durationSeconds: number | null;
+  startTimeSeconds?: number | null;
+}
+
 export interface ApiBook {
   id: string;
   cid?: string;
@@ -184,7 +192,8 @@ export interface ApiBook {
   narrator?: string | null;
   language?: string;
   languages?: string[];
-  chapters?: number;
+  /** a count on list cards; the chapter list on an audiobook's detail */
+  chapters?: number | ApiBookChapter[];
   publisher?: string | null;
   promo?: ApiPromo;
   restrictions?: ApiRestrictions;
