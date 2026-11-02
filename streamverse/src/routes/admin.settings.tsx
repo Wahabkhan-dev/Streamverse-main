@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
-import { adminUser } from "@/components/sv/admin";
+import { useAdminUser } from "@/components/sv/admin";
 import { BackendBadge, showBackendNotice } from "@/components/sv/BackendNotice";
 import { Btn, PageHeader, Panel, PanelHeader, SelectInput, Skel, Toggle } from "@/components/sv/ui";
 import { LANGUAGES } from "@/components/sv/wizard/kit";
@@ -35,6 +35,7 @@ const rows: Row[] = [
 const groups = ["Platform", "Catalog", "Safety", "Playback defaults", "Notifications"];
 
 function SettingsPage() {
+  const admin = useAdminUser();
   const demoSettings = useSettings();
   const server = useServerSettings();
   const save = useSaveSettings();
@@ -125,8 +126,9 @@ function SettingsPage() {
           <h2 className="mt-3 font-bold">Administrator account</h2>
           <p className="mt-1 text-sm text-muted-foreground">You're signed in as the StreamVerse administrator{DEMO_MODE ? " (demo)" : ""}.</p>
           {[
-            ["Name", adminUser.name],
-            ["Account type", adminUser.role],
+            ["Name", admin.name],
+            ...(admin.email ? [["Email", admin.email]] : []),
+            ["Account type", admin.role],
             ["Workspace", "StreamVerse"],
           ].map(([k, v]) => (
             <div key={k} className="mt-3 flex justify-between border-t border-border pt-3 text-sm">

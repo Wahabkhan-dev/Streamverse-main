@@ -17,7 +17,6 @@ async function movieBasics() {
   setVal("Short Description", "A short pitch");
   setVal("Full Description / Synopsis", "A longer synopsis");
   setVal("Release Date", "2019-06-01");
-  setVal("Runtime", "142");
   fireEvent.change(screen.getByLabelText("Primary Genre"), { target: { value: "Drama" } });
 }
 
@@ -48,11 +47,12 @@ describe("movie form cleanup", () => {
     expect(screen.getByLabelText("Writer")).toBeTruthy();
   });
 
-  it("derives obvious values: runtime display, release year, original language, SEO title/description and slug", async () => {
+  it("derives obvious values: runtime from the file, release year, original language, SEO title/description and slug", async () => {
     renderAt("/admin/movies/new");
     await screen.findByLabelText("Movie Title");
     await movieBasics();
-    expect(screen.getByText("Shown to customers as 2h 22m")).toBeTruthy();
+    // runtime is never typed: it is read from the movie file
+    expect((screen.getByLabelText("Runtime") as HTMLInputElement).readOnly).toBe(true);
     expect(screen.getByText("Release year: 2019")).toBeTruthy();
     next();
     await screen.findByLabelText("Primary Language");
@@ -233,10 +233,10 @@ describe("audiobook form cleanup", () => {
     await screen.findByLabelText("Narrator");
     setVal("Narrator", "Daniel Brooks");
     next();
-    await screen.findByRole("radio", { name: /Single audiobook file/ });
+    await screen.findByLabelText("Primary Audiobook Master File file");
   }
 
-  it("has a content ID, and a clear single-file or chapter-files choice that never asks for both", async () => {
+  it("has a content ID, and new audiobooks are one audio file (no chapter-files choice)", async () => {
     renderAt("/admin/audiobooks/new");
     await screen.findByLabelText("Title");
     expect(systemText()).toMatch(/AUD-0000\d\d/);
@@ -244,9 +244,7 @@ describe("audiobook form cleanup", () => {
     await audioToFiles();
     expect(screen.getByLabelText("Primary Audiobook Master File file")).toBeTruthy();
     expect(screen.getByText("Total Duration")).toBeTruthy();
-    fireEvent.click(screen.getByRole("radio", { name: /Chapter files/ }));
-    await waitFor(() => expect(screen.queryByLabelText("Primary Audiobook Master File file")).toBeNull());
-    expect(screen.getByText("Each chapter's audio file is added in Chapters.")).toBeTruthy();
+    expect(screen.queryByRole("radio", { name: /Chapter files/ })).toBeNull();
   }, 60000);
 
   it("chapter end times and durations are calculated from the next chapter's start", async () => {

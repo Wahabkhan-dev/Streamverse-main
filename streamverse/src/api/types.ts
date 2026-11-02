@@ -269,8 +269,10 @@ export interface ApiHistoryEntry {
 export interface ApiBookmark {
   id: string;
   ebookId: string;
-  page: number;
-  note?: string;
+  /** where in the book: an EPUB position (CFI) or, for a PDF, the page number as text */
+  location: string;
+  page: number | null;
+  label: string | null;
   createdAt: string;
 }
 

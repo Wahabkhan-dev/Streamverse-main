@@ -2,7 +2,7 @@
 import { ArrowLeft, Bookmark, BookmarkCheck, ChevronLeft, ChevronRight, ListTree, Maximize, Minimize, Minus, Plus, Search, X } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { meApi } from "@/api/me.api";
-import type { ApiEbookAccess } from "@/api/types";
+import type { ApiBookmark, ApiEbookAccess } from "@/api/types";
 import type { Book } from "@/lib/data";
 import { DEMO_MODE } from "@/lib/config";
 import { useSaveProgressMutation } from "@/hooks/useApiMe";
@@ -10,7 +10,7 @@ import { chaptersOf, pageContent, searchBook, totalPagesOf } from "@/lib/book-co
 import { getUser, refKey, saveProgress, toggleBookmark, updateUser, useUser } from "@/lib/user";
 import { cn } from "@/lib/utils";
 import { useFullscreen, useKey } from "./common";
-import { EpubReader, type EpubReaderHandle, type TocItem } from "./EpubReader";
+import { EpubReader, type EpubPlace, type EpubReaderHandle, type TocItem } from "./EpubReader";
 import type { PdfReaderHandle } from "./PdfReader";
 import { PdfReaderClient } from "./PdfReaderClient";
 
@@ -89,7 +89,9 @@ export function BookReader({ b, accessData }: { b: Book; accessData?: BookReader
   );
   const [epubToc, setEpubToc] = useState<TocItem[]>([]);
   const [totalPages, setTotalPages] = useState(0);
-  const [apiBookmarks, setApiBookmarks] = useState<string[]>([]);
+  // saved on the server per reader; `id` is missing only for a moment while a new one is being saved
+  const [apiBookmarks, setApiBookmarks] = useState<Array<Omit<ApiBookmark, "id" | "ebookId" | "createdAt"> & { id?: string }>>([]);
+  const [epubPlace, setEpubPlace] = useState<EpubPlace | null>(null);
   const [readerError, setReaderError] = useState<string | null>(null);
 
   const currentPctRef = useRef(currentPct);
@@ -178,8 +180,9 @@ export function BookReader({ b, accessData }: { b: Book; accessData?: BookReader
 
   // ─── Real reader: location change handler ─────────────────────────────────
   const handleLocationChange = useCallback(
-    (cfi: string, pct: number, edges?: { atStart: boolean; atEnd: boolean }) => {
+    (cfi: string, pct: number, edges?: { atStart: boolean; atEnd: boolean }, place?: EpubPlace | null) => {
       if (edges) setEpubEdges(edges);
+      setEpubPlace(place ?? null);
       setSeekPct(null);
       setCurrentPct(pct);
       setCurrentLocation(cfi);
@@ -253,9 +256,13 @@ export function BookReader({ b, accessData }: { b: Book; accessData?: BookReader
     ? { heading: null as string | null, paragraphs: [] as string[], chapter: 0 }
     : pageContent(b, page, chapters);
 
-  const marked = useRealReader
-    ? apiBookmarks.includes(currentLocation ?? "")
-    : bookmarks.includes(page);
+  // an EPUB page can start at slightly different spots, so a bookmark on the same page counts once pages are known
+  const markOnScreen = useRealReader
+    ? apiBookmarks.find((m) =>
+        accessData?.fileType === "epub" && epubPlace ? m.page === epubPlace.page : m.location === (currentLocation ?? ""),
+      )
+    : undefined;
+  const marked = useRealReader ? !!markOnScreen : bookmarks.includes(page);
 
   const results = useMemo(
     () => (panel === "search" && !useRealReader ? searchBook(b, query, chapters) : []),
@@ -278,17 +285,46 @@ export function BookReader({ b, accessData }: { b: Book; accessData?: BookReader
   });
 
   // ─── Bookmark helpers for real reader ──────────────────────────────────────
+  const contentId = accessData?.contentId;
+  useEffect(() => {
+    if (!useRealReader || !contentId) return;
+    let live = true;
+    meApi
+      .getBookmarks(contentId)
+      .then((res) => live && setApiBookmarks(res.data.map(({ id, location, page, label }) => ({ id, location, page, label }))))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [useRealReader, contentId]);
+
+  const removeApiBookmark = (m: (typeof apiBookmarks)[number]) => {
+    setApiBookmarks((prev) => prev.filter((x) => x !== m));
+    if (contentId && m.id) void meApi.removeBookmark(contentId, m.id).catch(() => undefined);
+  };
+
   const toggleApiBookmark = () => {
+    if (markOnScreen) return removeApiBookmark(markOnScreen);
     const loc = currentLocation;
-    if (!loc) return;
-    setApiBookmarks((prev) =>
-      prev.includes(loc) ? prev.filter((l) => l !== loc) : [...prev, loc],
-    );
+    if (!loc || !contentId) return;
+    const isPdf = accessData?.fileType === "pdf";
+    const mark = {
+      location: loc,
+      page: isPdf ? Number(loc) || null : (epubPlace?.page ?? null),
+      label: isPdf ? null : epubPlace?.chapter || null,
+    };
+    setApiBookmarks((prev) => [...prev, mark]);
+    meApi
+      .addBookmark(contentId, { location: loc, ...(mark.page ? { page: mark.page } : {}), ...(mark.label ? { label: mark.label.slice(0, 120) } : {}) })
+      .then((res) => setApiBookmarks((prev) => prev.map((x) => (x === mark ? { ...mark, id: res.data.id } : x))))
+      .catch(() => setApiBookmarks((prev) => prev.filter((x) => x !== mark)));
   };
 
   // ─── Current chapter label (header subtitle) ───────────────────────────────
   const subLabel = useRealReader
-    ? (currentPct > 0 ? `${currentPct}% read` : "")
+    ? epubPlace
+      ? [epubPlace.chapter, `Page ${epubPlace.page} of ${epubPlace.total}`].filter(Boolean).join(" · ")
+      : (currentPct > 0 ? `${currentPct}% read` : "")
     : (content.heading ?? chapters[content.chapter]?.title ?? "");
 
   // ─── PDF current page (derived from currentLocation) ──────────────────────
@@ -335,7 +371,6 @@ export function BookReader({ b, accessData }: { b: Book; accessData?: BookReader
           label={useRealReader ? `Bookmarks ${apiBookmarks.length}` : `Bookmarks ${bookmarks.length}`}
           active={panel === "bookmarks"}
           onClick={() => setPanel(panel === "bookmarks" ? null : "bookmarks")}
-          className="hidden sm:grid"
         >
           <span className="text-xs font-bold">{useRealReader ? apiBookmarks.length : bookmarks.length}</span>
         </RBtn>
@@ -431,14 +466,18 @@ export function BookReader({ b, accessData }: { b: Book; accessData?: BookReader
                   epubToc.length === 0 ? (
                     <p className={cn("p-6 text-center text-sm", T.muted)}>No table of contents available.</p>
                   ) : (
-                    epubToc.map((item) => (
+                    epubToc.map((item, i) => (
                       <button
                         key={item.id}
                         type="button"
                         onClick={() => { epubRef.current?.jumpTo(item.href); setPanel(null); }}
-                        className="flex w-full items-center gap-3 border-b border-current/10 px-4 py-3 text-left text-sm hover:bg-current/5"
+                        className="flex w-full items-center justify-between gap-3 border-b border-current/10 px-4 py-3 text-left text-sm hover:bg-current/5"
                       >
-                        <span className="truncate">{item.label}</span>
+                        {/* many EPUBs leave entries unnamed or call them "Untitled": name those by where they start */}
+                        <span className="truncate">
+                          {item.label && !/^untitled\b/i.test(item.label) ? item.label : item.page ? `Page ${item.page}` : `Section ${i + 1}`}
+                        </span>
+                        {item.page && <span className={cn("shrink-0 text-xs", T.muted)}>p. {item.page}</span>}
                       </button>
                     ))
                   )
@@ -458,25 +497,23 @@ export function BookReader({ b, accessData }: { b: Book; accessData?: BookReader
                   apiBookmarks.length === 0 ? (
                     <p className={cn("p-6 text-center text-sm", T.muted)}>No bookmarks yet. Use the bookmark button to save a position.</p>
                   ) : (
-                    apiBookmarks.map((loc) => {
-                      const isPage = /^\d+$/.test(loc);
+                    [...apiBookmarks].sort((a, b) => (a.page ?? Infinity) - (b.page ?? Infinity)).map((m, i) => {
+                      const name = m.page ? `Page ${m.page}` : `Bookmark ${i + 1}`;
                       return (
-                        <div key={loc} className="flex items-center border-b border-current/10">
+                        <div key={m.id ?? m.location} className="flex items-center border-b border-current/10">
                           <button
                             type="button"
                             onClick={() => {
-                              if (isPage) pdfRef.current?.goToPage(Number(loc));
-                              else epubRef.current?.jumpTo(loc);
+                              if (accessData?.fileType === "pdf") pdfRef.current?.goToPage(Number(m.location));
+                              else epubRef.current?.jumpTo(m.location);
                               setPanel(null);
                             }}
                             className="min-w-0 flex-1 px-4 py-3 text-left text-sm hover:bg-current/5"
                           >
-                            <span className="font-semibold">{isPage ? `Page ${loc}` : `Position ${loc.slice(0, 20)}…`}</span>
+                            <span className="font-semibold">{name}</span>
+                            {m.label && !/^untitled\b/i.test(m.label) && <span className={cn("block truncate text-xs", T.muted)}>{m.label}</span>}
                           </button>
-                          <RBtn
-                            label="Remove bookmark"
-                            onClick={() => setApiBookmarks((prev) => prev.filter((l) => l !== loc))}
-                          >
+                          <RBtn label={`Remove bookmark on ${name}`} onClick={() => removeApiBookmark(m)}>
                             <X />
                           </RBtn>
                         </div>
@@ -570,7 +607,14 @@ export function BookReader({ b, accessData }: { b: Book; accessData?: BookReader
                   <div>{currentPct}% read</div>
                 </>
               ) : (
-                <div>{currentPct}% read</div>
+                <>
+                  {epubPlace && (
+                    <div>
+                      Page {epubPlace.page} / {epubPlace.total}
+                    </div>
+                  )}
+                  <div>{currentPct}% read</div>
+                </>
               )}
             </div>
             <RBtn

@@ -6,6 +6,15 @@ export interface TocItem {
   id: string;
   label: string;
   href: string;
+  /** the page it starts on, once the book's pages have been counted */
+  page?: number;
+}
+
+/** Where the reader is: page n of total, and the contents entry it falls under ("" when the book has none for it). */
+export interface EpubPlace {
+  page: number;
+  total: number;
+  chapter: string;
 }
 
 export interface EpubReaderHandle {
@@ -19,7 +28,8 @@ export interface EpubReaderHandle {
 interface EpubReaderProps {
   url: string;
   initialLocation?: string | null;
-  onLocationChange: (cfi: string, pct: number, edges: { atStart: boolean; atEnd: boolean }) => void;
+  /** `place` is null until the book's pages have been counted (a few seconds after opening). */
+  onLocationChange: (cfi: string, pct: number, edges: { atStart: boolean; atEnd: boolean }, place: EpubPlace | null) => void;
   onReady: (toc: TocItem[]) => void;
   onError: (msg: string) => void;
   theme: "dark" | "light" | "sepia";
@@ -57,6 +67,40 @@ function percentAt(book: EpubBook, location: EpubLocation, positionsReady: boole
   return Math.round(((at + within) / sections.length) * 100);
 }
 
+/** The file part of a contents link ("Text/ch1.xhtml#part2" -> "Text/ch1.xhtml"). */
+const fileOf = (href: string) => href.split("#")[0] ?? href;
+
+/**
+ * Pages are epub.js's reading positions (about a screenful of text each). Books that are mostly images have none of those,
+ * so there each section of the book (usually one picture) counts as a page.
+ */
+function pageCount(book: EpubBook): number {
+  return book.locations.length() > 1 ? book.locations.length() : linearSections(book).length;
+}
+
+function pageAtCfi(book: EpubBook, cfi: string, sectionIndex: number): number | null {
+  const total = pageCount(book);
+  if (!total) return null;
+  if (book.locations.length() > 1) {
+    // epub.js types this as a Location, but it returns the position number
+    const at = book.locations.locationFromCfi(cfi) as unknown as number;
+    return at < 0 ? null : Math.max(1, Math.min(total, at + 1));
+  }
+  const at = linearSections(book).findIndex((s) => s.index === sectionIndex);
+  return at < 0 ? null : at + 1;
+}
+
+/** The page a contents entry starts on. */
+function pageOfHref(book: EpubBook, href: string): number | undefined {
+  try {
+    const section = book.spine.get(fileOf(href)) as unknown as { index: number; cfiBase: string } | null;
+    if (!section) return undefined;
+    return pageAtCfi(book, `epubcfi(${section.cfiBase}!/4)`, section.index) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(function EpubReader(
   { url, initialLocation, onLocationChange, onReady, onError, theme, fontSize },
   ref,
@@ -65,6 +109,7 @@ export const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(function
   const bookRef = useRef<EpubBook | null>(null);
   const renditionRef = useRef<Rendition | null>(null);
   const locationsReadyRef = useRef(false);
+  const tocRef = useRef<TocItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Keep callbacks stable across renders without causing effect to re-run
@@ -199,19 +244,30 @@ export const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(function
 
     book.loaded.navigation
       .then((nav) => {
-        onReadyRef.current(
-          nav.toc.map((item) => ({ id: item.id, label: item.label.trim(), href: item.href })),
-        );
+        tocRef.current = nav.toc.map((item) => ({ id: item.id, label: item.label.trim(), href: item.href }));
+        onReadyRef.current(tocRef.current);
       })
       .catch(() => {
         onReadyRef.current([]);
       });
 
-    rendition.on("relocated", (location: EpubLocation) => {
-      const cfi = location.start.cfi;
-      const edges = { atStart: !!location.atStart, atEnd: !!location.atEnd };
-      onLocationChangeRef.current(cfi, percentAt(book, location, locationsReadyRef.current), edges);
-    });
+    const placeOf = (location: EpubLocation): EpubPlace | null => {
+      if (!locationsReadyRef.current) return null;
+      const page = pageAtCfi(book, location.start.cfi, location.start.index);
+      if (page === null) return null;
+      const file = fileOf(location.start.href);
+      const chapter = tocRef.current.find((t) => fileOf(t.href) === file || file.endsWith(`/${fileOf(t.href)}`))?.label ?? "";
+      return { page, total: pageCount(book), chapter };
+    };
+    const report = (location: EpubLocation) =>
+      onLocationChangeRef.current(
+        location.start.cfi,
+        percentAt(book, location, locationsReadyRef.current),
+        { atStart: !!location.atStart, atEnd: !!location.atEnd },
+        placeOf(location),
+      );
+
+    rendition.on("relocated", report);
 
     book.ready
       .then(() => {
@@ -220,18 +276,20 @@ export const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(function
       })
       .then(() => {
         locationsReadyRef.current = true;
-        // Page turns made before the locations finished generating reported 0%; re-report where the reader is now.
+        // now that pages are counted, the contents can say where each entry starts
+        if (tocRef.current.length) {
+          tocRef.current = tocRef.current.map((t) => {
+            const page = pageOfHref(book, t.href);
+            return page ? { ...t, page } : t;
+          });
+          onReadyRef.current(tocRef.current);
+        }
+        // Page turns made before the locations finished generating reported 0% and no page; re-report where the reader is now.
         try {
           const here = (
             rendition as unknown as { currentLocation: () => EpubLocation | null }
           ).currentLocation();
-          const cfi = here?.start?.cfi;
-          if (cfi)
-            onLocationChangeRef.current(
-              cfi,
-              percentAt(book, here!, true),
-              { atStart: !!here?.atStart, atEnd: !!here?.atEnd },
-            );
+          if (here?.start?.cfi) report(here);
         } catch {
           /* the next page turn reports it */
         }

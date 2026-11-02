@@ -32,10 +32,27 @@ import { useAdminNotes } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { DEMO_MODE } from "@/lib/demo";
 import { setRole } from "@/lib/user";
+import { useApiUser } from "@/lib/authState";
 import { toast } from "sonner";
 import { useAudiobooks, useCollections, useEbooks, useMovies, useUsers } from "@/lib/store";
 
-export const adminUser = { name: "Sam Rivera", initials: "SR", role: "ADMIN" };
+const DEMO_ADMIN = { name: "Sam Rivera", email: "", initials: "SR", role: "ADMIN" };
+
+const initialsOf = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join("") || "A";
+
+/** Who is signed in to the admin console: the real account in live mode (the demo placeholder only in demo mode). */
+export function useAdminUser() {
+  const user = useApiUser();
+  if (DEMO_MODE || !user) return DEMO_MODE ? DEMO_ADMIN : { name: "Administrator", email: "", initials: "A", role: "ADMIN" };
+  const name = user.fullName?.trim() || user.email.split("@")[0] || "Administrator";
+  return { name, email: user.email, initials: initialsOf(name), role: user.role.toUpperCase() };
+}
 
 const nav = [
   { title: "Overview", links: [{ to: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard }] },
@@ -240,6 +257,7 @@ function AdminSearch() {
 }
 
 export function AdminTopbar({ onMenu }: { onMenu: () => void }) {
+  const admin = useAdminUser();
   const unread = useAdminNotes().filter((n) => !n.read).length;
   return (
     <header className="sticky top-0 z-20 flex h-[60px] items-center gap-4 border-b border-border bg-ink/95 px-4 backdrop-blur md:px-8">
@@ -255,10 +273,10 @@ export function AdminTopbar({ onMenu }: { onMenu: () => void }) {
         </Link>
         <span className="hidden h-6 w-px bg-border sm:block" />
         <div className="flex items-center gap-2.5">
-          <span className="grid size-8 place-items-center rounded-md bg-red-grad text-xs font-bold">{adminUser.initials}</span>
+          <span className="grid size-8 place-items-center rounded-md bg-red-grad text-xs font-bold">{admin.initials}</span>
           <span className="hidden text-left sm:block">
-            <span className="block text-xs leading-tight font-semibold">{adminUser.name}</span>
-            <span className="rounded bg-red-grad px-1.5 py-0.5 text-[10px] font-bold tracking-wider uppercase">{adminUser.role}</span>
+            <span className="block text-xs leading-tight font-semibold">{admin.name}</span>
+            <span className="rounded bg-red-grad px-1.5 py-0.5 text-[10px] font-bold tracking-wider uppercase">{admin.role}</span>
           </span>
         </div>
       </div>

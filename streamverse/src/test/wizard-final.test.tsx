@@ -185,7 +185,7 @@ describe("audiobook duration", () => {
     await screen.findByLabelText("Narrator");
     setVal("Narrator", "Daniel Brooks");
     next();
-    await screen.findByRole("radio", { name: /Single audiobook file/ });
+    await screen.findByLabelText("Primary Audiobook Master File file");
   }
 
   it("when the length cannot be read it says so and offers a manual entry, never 8h 0m", async () => {

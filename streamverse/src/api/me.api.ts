@@ -209,8 +209,8 @@ export const meApi = {
     return api.get<ApiResponse<ApiBookmark[]>>(`/me/ebooks/${ebookId}/bookmarks`);
   },
 
-  addBookmark(ebookId: string, page: number, note?: string) {
-    return api.post<ApiResponse<ApiBookmark>>(`/me/ebooks/${ebookId}/bookmarks`, { page, note });
+  addBookmark(ebookId: string, data: { location: string; page?: number; label?: string }) {
+    return api.post<ApiResponse<ApiBookmark>>(`/me/ebooks/${ebookId}/bookmarks`, data);
   },
 
   removeBookmark(ebookId: string, bookmarkId: string) {
