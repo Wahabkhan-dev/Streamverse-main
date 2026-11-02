@@ -317,9 +317,7 @@ function validateMovie(s: Snapshot<MovieDraft>): Record<string, string>[] {
   r(d.shortDesc.trim(), "shortDesc", s1);
   r(d.fullDesc.trim(), "fullDesc", s1);
   r(d.releaseDate, "releaseDate", s1);
-  // the runtime is filled in from the movie file; it only has to be typed when the file's length could not be read
-  const main = media["main"];
-  r(d.runtime.trim() || !main || main.duration, "runtime", s1, "Enter the runtime. It could not be read from the movie file.");
+  // no runtime check: it is never typed, the server reads it from the movie file once that is processed
   r(d.genre, "genre", s1);
   const s2: Record<string, string> = {};
   r(d.primaryLanguage, "primaryLanguage", s2);
@@ -916,13 +914,14 @@ function BasicStep({
           <TextBox
             id="runtime"
             label="Runtime"
-            value={d.runtime}
-            onChange={(v) => set((x) => ({ ...x, runtime: v }))}
-            placeholder="Filled in from the movie file"
+            readOnly
+            value={runtimeShown}
+            onChange={() => undefined}
+            placeholder="Read from the movie file"
             hint={
               runtimeShown
-                ? `Shown to customers as ${runtimeShown}`
-                : "Leave empty: it is read from the movie file when you upload it."
+                ? "Read from the movie file. Upload a different file to change it."
+                : "Filled in automatically from the movie file when you upload it."
             }
           />
           <SelectBox2
@@ -1178,14 +1177,14 @@ function LanguageStep() {
 function VideoStep() {
   const { d, set, media } = useWiz<MovieDraft>();
   const main = media["main"];
-  // the movie's length comes from the file itself, so the admin does not have to type it; a value they typed is kept
+  // the movie's length always comes from the file itself (the field is read-only); a new file replaces it
   const fileMinutes = main?.duration ? Math.max(1, Math.round(main.duration / 60)) : undefined;
-  const runtimeEmpty = !d.runtime.trim();
   useEffect(() => {
-    if (fileMinutes && runtimeEmpty) set((x) => ({ ...x, runtime: String(fileMinutes) }));
-    // `set` is a new function on every render; only the file length and the empty field decide this
+    if (fileMinutes && d.runtime !== String(fileMinutes))
+      set((x) => ({ ...x, runtime: String(fileMinutes) }));
+    // `set` is a new function on every render; only the file length decides this
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fileMinutes, runtimeEmpty]);
+  }, [fileMinutes, d.runtime]);
   const tracks = d.audioLangs.filter((l) => l.audio && l.language);
   let pendingShown = false;
   return (

@@ -9,6 +9,13 @@ import { recordAudit } from "./auditLog.service";
 import { assertAssetRef, changedSlot, scheduleReplacementCleanup } from "./mediaAsset.service";
 import type { CreateMovieInput, UpdateMovieInput } from "../validators/movie.validator";
 import { createContentIn, runInTransaction, updateContentBaseIn } from "./content.service";
+import { syncRuntimeFromMaster } from "./movieRuntime.service";
+
+/** The runtime comes from the movie file (movieRuntime.service), so a value sent by a client is ignored. */
+const withoutRuntime = <T extends { runtimeMinutes?: unknown }>(movie: T): Omit<T, "runtimeMinutes"> => {
+  const { runtimeMinutes: _ignored, ...rest } = movie;
+  return rest;
+};
 
 type MovieAssetSlots = { posterAssetId?: string | undefined; backdropAssetId?: string | undefined; thumbnailAssetId?: string | undefined; masterAssetId?: string | undefined; trailerAssetId?: string | undefined; teaserAssetId?: string | undefined };
 
@@ -35,7 +42,7 @@ export async function createMovie(input: CreateMovieInput, ctx: AuditContext = N
   await assertMovieAssetRefs(input.movie);
   const { content, movie } = await runInTransaction(async (tx) => {
     const content = await createContentIn(tx, "MOVIE", input, ctx.userId);
-    const movie = await movieRepository.create(tx, content.id, input.movie);
+    const movie = await movieRepository.create(tx, content.id, withoutRuntime(input.movie));
     await Promise.all([
       contentRepository.addGenres(tx, content.id, input.genreIds),
       contentRepository.addTags(tx, content.id, input.tagIds),
@@ -50,7 +57,8 @@ export async function createMovie(input: CreateMovieInput, ctx: AuditContext = N
     return { content, movie };
   });
   await recordAudit(ctx, { action: "content.created", entityType: "MOVIE", entityId: content.id, metadata: { contentCode: content.contentCode, title: content.title } });
-  return { content, movie };
+  await syncRuntimeFromMaster(content.id);
+  return { content, movie: (await movieRepository.findByContentId(content.id)) ?? movie };
 }
 
 /** Section 5/48: every relation array present REPLACES the current selection; one omitted is left untouched. */
@@ -69,7 +77,8 @@ export async function updateMovie(contentId: string, input: UpdateMovieInput, ct
 
   await runInTransaction(async (tx) => {
     await updateContentBaseIn(tx, contentId, input);
-    if (Object.keys(input.movie ?? {}).length) await movieRepository.update(tx, contentId, input.movie!);
+    const movieFields = input.movie ? withoutRuntime(input.movie) : {};
+    if (Object.keys(movieFields).length) await movieRepository.update(tx, contentId, movieFields);
     if (input.genreIds !== undefined) await contentRepository.replaceGenres(tx, contentId, input.genreIds);
     if (input.tagIds !== undefined) await contentRepository.replaceTags(tx, contentId, input.tagIds);
     if (input.warningTypeIds !== undefined) await contentRepository.replaceWarnings(tx, contentId, input.warningTypeIds);
@@ -85,6 +94,7 @@ export async function updateMovie(contentId: string, input: UpdateMovieInput, ct
   }
 
   await recordAudit(ctx, { action: "content.updated", entityType: "MOVIE", entityId: contentId, metadata: { fields: Object.keys(input).filter((k) => k !== "expectedUpdatedAt") } });
+  await syncRuntimeFromMaster(contentId);
   return getFullMovie(contentId);
 }
 

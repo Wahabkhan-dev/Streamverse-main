@@ -34,7 +34,7 @@ async function validateMovie(contentId: string): Promise<FieldError[]> {
   return [
     ...sharedChecks(full.content, full.content.genres.length, primaryLanguages),
     req(full.content.releaseDate !== null, "releaseDate", "Release date is required."),
-    req(full.runtimeMinutes !== null, "movie.runtimeMinutes", "Runtime is required."),
+    req(full.runtimeMinutes !== null, "movie.runtimeMinutes", "Runtime is read from the main movie file once it has finished processing."),
     req(!!full.masterAssetId, "movie.masterAssetId", "The main movie file is required."),
     req(isReady(full.masterAsset), "movie.masterAssetId", "The main movie file has not finished processing yet."),
     req(!!full.posterAssetId, "movie.posterAssetId", "Poster is required."),

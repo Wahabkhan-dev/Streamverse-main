@@ -5,6 +5,7 @@ import { getMediaProcessor } from ".";
 import { selectRenditions, type RenditionSpec } from "./mediaProcessor.provider";
 import { masterPlaylistKey, renditionPlaylistKey, renditionSegmentKey } from "./storageKey.service";
 import { getStorageProvider } from "../storage";
+import { syncRuntimeFromMaster } from "../movieRuntime.service";
 
 const PROCESSING_URL_TTL_SECONDS = 60 * 60; // long enough for ffmpeg to read the whole source once
 
@@ -119,6 +120,10 @@ export async function processVideoAsset(assetId: string): Promise<void> {
       processingError: null,
     });
     logger.info({ assetId, renditions: specs.map((s) => s.name) }, "media: video processing complete");
+    // the movie's runtime is the length of its main file (no-op until the file is linked to a movie)
+    if (asset.type === "MOVIE_MASTER" && asset.contentId) {
+      await syncRuntimeFromMaster(asset.contentId).catch((err: unknown) => logger.error({ err, assetId }, "media: could not set the movie runtime"));
+    }
   } catch (err) {
     await progress.settle();
     await mediaAssetRepository.update(assetId, { status: "FAILED", processingError: sanitizeError(err) });

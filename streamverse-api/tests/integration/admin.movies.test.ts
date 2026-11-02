@@ -22,7 +22,7 @@ const app = createApp();
 
 beforeEach(() => db.__reset());
 
-const asset = (type: string) => db.mediaAsset.create({ data: { type, status: "READY" } });
+const asset = (type: string, durationSeconds?: number) => db.mediaAsset.create({ data: { type, status: "READY", durationSeconds } });
 
 describe("admin movie routes: protection", () => {
   it("401s with no token, 403s a USER, and lets an ADMIN through", async () => {
@@ -54,7 +54,13 @@ describe("admin movie CRUD", () => {
     const patch1 = await request(app).patch(`/api/v1/admin/movies/${id}`).set("Authorization", `Bearer ${accessToken}`).send({ genreIds: [genre.id], movie: { runtimeMinutes: 100 } });
     expect(patch1.status).toBe(200);
     expect(patch1.body.data.genres).toHaveLength(1);
-    expect(patch1.body.data.movie.runtimeMinutes).toBe(100);
+    // the runtime is read from the movie file, never typed: a sent value is ignored
+    expect(patch1.body.data.movie.runtimeMinutes).toBeFalsy();
+
+    const master = await asset("MOVIE_MASTER", 5430);
+    const withFile = await request(app).patch(`/api/v1/admin/movies/${id}`).set("Authorization", `Bearer ${accessToken}`).send({ movie: { masterAssetId: master.id } });
+    expect(withFile.status).toBe(200);
+    expect(withFile.body.data.movie.runtimeMinutes).toBe(91); // 5430 s = 90.5 min, rounded
 
     // same genreIds sent again: still exactly one, not two
     const patch2 = await request(app).patch(`/api/v1/admin/movies/${id}`).set("Authorization", `Bearer ${accessToken}`).send({ genreIds: [genre.id] });
@@ -132,7 +138,7 @@ describe("admin movie publish validation and status transitions", () => {
     const poster = await asset("POSTER");
     const backdrop = await asset("BACKDROP");
     const thumbnail = await asset("THUMBNAIL");
-    const master = await asset("MOVIE_MASTER");
+    const master = await asset("MOVIE_MASTER", 6000);
     const created = await request(app)
       .post("/api/v1/admin/movies")
       .set("Authorization", `Bearer ${accessToken}`)
@@ -144,7 +150,7 @@ describe("admin movie publish validation and status transitions", () => {
         age: { ageRating: "PG-13", ageRestricted: false },
         genreIds: [genre.id],
         languages: [{ languageId: language.id, role: "PRIMARY" }],
-        movie: { runtimeMinutes: 100, posterAssetId: poster.id, backdropAssetId: backdrop.id, thumbnailAssetId: thumbnail.id, masterAssetId: master.id },
+        movie: { posterAssetId: poster.id, backdropAssetId: backdrop.id, thumbnailAssetId: thumbnail.id, masterAssetId: master.id },
       });
     return created.body.data.id as string;
   }

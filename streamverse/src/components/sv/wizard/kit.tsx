@@ -573,6 +573,7 @@ export function TextBox({
   maxLength,
   className,
   count,
+  readOnly,
 }: {
   id: string;
   label: string;
@@ -586,6 +587,8 @@ export function TextBox({
   maxLength?: number | undefined;
   className?: string | undefined;
   count?: ReactNode;
+  /** Shown but not editable (a value the system fills in). */
+  readOnly?: boolean | undefined;
 }) {
   return (
     <FieldBox
@@ -604,8 +607,9 @@ export function TextBox({
         value={value}
         maxLength={maxLength}
         placeholder={placeholder}
+        readOnly={readOnly}
         onChange={(e) => onChange(e.target.value)}
-        className={inputCls}
+        className={cn(inputCls, readOnly && "cursor-default bg-surface-3/40 text-muted-foreground")}
       />
     </FieldBox>
   );
