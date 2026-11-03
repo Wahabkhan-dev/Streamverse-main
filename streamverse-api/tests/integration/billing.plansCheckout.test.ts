@@ -50,6 +50,21 @@ describe("Admin plan management (Section 10/11)", () => {
     expect(dupSlug.status).toBe(409);
   });
 
+  it("creates the Stripe product and price from the amount Admin sets, and a new price when the amount changes", async () => {
+    const headers = await admin();
+    const create = await request(app).post("/api/v1/admin/plans").set(headers).send({ name: "Basic", slug: "basic", priceAmount: 799, currency: "usd", billingInterval: "MONTHLY" });
+    expect(create.status).toBe(201);
+    const first = create.body.data;
+    expect(first.stripePriceId).toMatch(/^price_/);
+    expect(first.stripePriceId).not.toMatch(/^price_(pending|offline|demo)_/);
+    expect(first.stripeProductId).toMatch(/^prod_/);
+
+    const repriced = await request(app).put(`/api/v1/admin/plans/${first.id}`).set(headers).send({ priceAmount: 999 });
+    expect(repriced.body.data.priceAmount).toBe(999);
+    expect(repriced.body.data.stripePriceId).not.toBe(first.stripePriceId);
+    expect(repriced.body.data.stripeProductId).toBe(first.stripeProductId);
+  });
+
   it("USER cannot create or edit plans", async () => {
     const { headers } = await user();
     const res = await request(app).post("/api/v1/admin/plans").set(headers).send({ name: "X", slug: "x", stripePriceId: "price_x", priceAmount: 100, currency: "usd", billingInterval: "MONTHLY" });

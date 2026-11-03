@@ -5,13 +5,45 @@ import type { AuditContext } from "../auditLog.service";
 import { recordAudit } from "../auditLog.service";
 import type { CreatePlanInput, UpdatePlanInput } from "../../validators/plan.validator";
 import { analyticsCache, publicCacheWindow } from "../../utils/analyticsCache";
+import { stripeConfig } from "../../config/stripe.config";
+import * as stripeService from "../stripe/stripe.service";
 
 const NO_ACTOR: AuditContext = { userId: undefined, ip: undefined, userAgent: undefined, requestId: undefined };
 
+/** Ids that stand in for "no real Stripe Price yet" (offline/demo seeds, or a plan repriced while Stripe was unreachable). */
+const isPlaceholderPrice = (id: string) => /^price_(offline|demo|pending)_/.test(id);
+const placeholderFor = (slug: string) => `price_pending_${slug}_${Date.now().toString(36)}`;
+const stripeConfigured = () => Boolean(stripeConfig.secretKey);
+
+type PlanRow = NonNullable<Awaited<ReturnType<typeof planRepository.findById>>>;
+
+/**
+ * Makes Stripe charge exactly what Admin set: creates the plan's Product once, then a Price for its current
+ * amount/currency/interval, and stores both ids. Prices are immutable in Stripe, so a price change is a new Price here.
+ * The idempotency key covers the exact amount, so a retry never creates a duplicate.
+ */
+async function syncStripePrice(plan: PlanRow): Promise<PlanRow> {
+  let productId = plan.stripeProductId;
+  if (!productId) {
+    productId = (await stripeService.createProduct({ name: plan.name, description: plan.description, planId: plan.id, idempotencyKey: `plan-product-${plan.id}` })).id;
+  }
+  const price = await stripeService.createRecurringPrice({
+    productId,
+    amount: plan.priceAmount,
+    currency: plan.currency,
+    interval: plan.billingInterval === "YEARLY" ? "year" : "month",
+    planId: plan.id,
+    idempotencyKey: `plan-price-${plan.id}-${plan.priceAmount}-${plan.currency}-${plan.billingInterval}`,
+  });
+  return planRepository.update(plan.id, { stripeProductId: productId, stripePriceId: price.id });
+}
+
 export async function createPlan(input: CreatePlanInput, ctx: AuditContext = NO_ACTOR) {
   if (await planRepository.slugExists(input.slug)) throw new ConflictError(`A plan with slug "${input.slug}" already exists.`);
-  if (await planRepository.stripePriceIdExists(input.stripePriceId)) throw new ConflictError("This Stripe Price is already linked to another plan.");
-  const plan = await planRepository.create(input);
+  if (input.stripePriceId && (await planRepository.stripePriceIdExists(input.stripePriceId))) throw new ConflictError("This Stripe Price is already linked to another plan.");
+  const linked = Boolean(input.stripePriceId);
+  let plan = await planRepository.create({ ...input, stripePriceId: input.stripePriceId ?? placeholderFor(input.slug) });
+  if (!linked && stripeConfigured()) plan = await syncStripePrice(plan);
   await recordAudit(ctx, { action: "plan.created", entityType: "PLAN", entityId: plan.id, metadata: { slug: plan.slug, stripePriceId: plan.stripePriceId } });
   return plan;
 }
@@ -29,7 +61,18 @@ export async function updatePlan(id: string, input: UpdatePlanInput, ctx: AuditC
   if (input.slug && (await planRepository.slugExists(input.slug, id))) throw new ConflictError(`A plan with slug "${input.slug}" already exists.`);
   if (input.stripePriceId && (await planRepository.stripePriceIdExists(input.stripePriceId, id))) throw new ConflictError("This Stripe Price is already linked to another plan.");
 
-  const updated = await planRepository.update(id, input);
+  let updated = await planRepository.update(id, input);
+  // The price Admin sees must be the price Stripe charges. If the amount, currency or interval changed (and Admin did not link a
+  // specific Stripe Price), mint a new Price now; if Stripe is not configured, park the plan on a placeholder so checkout refuses
+  // instead of charging the old amount, and the first checkout after Stripe is set up creates the right Price.
+  const priceChanged =
+    (input.priceAmount !== undefined && input.priceAmount !== existing.priceAmount) ||
+    (input.currency !== undefined && input.currency !== existing.currency) ||
+    (input.billingInterval !== undefined && input.billingInterval !== existing.billingInterval);
+  if (priceChanged && !input.stripePriceId) {
+    if (stripeConfigured()) updated = await syncStripePrice(updated);
+    else if (!isPlaceholderPrice(updated.stripePriceId)) updated = await planRepository.update(id, { stripePriceId: placeholderFor(updated.slug) });
+  }
   await recordAudit(ctx, { action: "plan.updated", entityType: "PLAN", entityId: id, metadata: { fields: Object.keys(input) } });
   return updated;
 }
@@ -81,7 +124,8 @@ export function toCustomerPlan(plan: { id: string; name: string; slug: string; d
 export async function resolveActivePlanOrThrow(planId: string) {
   const plan = await planRepository.findActiveById(planId);
   if (!plan) throw new ValidationError([{ path: "planId", message: "This plan does not exist or is not available." }]);
-  // plans seeded without Stripe (scripts/seed-plans.ts --offline) have a placeholder price: never send that to Stripe
-  if (plan.stripePriceId.startsWith("price_offline_")) throw new AppError("Payments are not set up for this plan yet. Please try again later.", 503, ERROR_CODES.SERVICE_UNAVAILABLE);
+  // a plan with no real Stripe Price yet (seeded offline/demo, or just repriced): create it from the amount Admin set. Never send a placeholder to Stripe.
+  if (isPlaceholderPrice(plan.stripePriceId) && stripeConfigured()) return syncStripePrice(plan);
+  if (isPlaceholderPrice(plan.stripePriceId)) throw new AppError("Payments are not set up for this plan yet. Please try again later.", 503, ERROR_CODES.SERVICE_UNAVAILABLE);
   return plan;
 }

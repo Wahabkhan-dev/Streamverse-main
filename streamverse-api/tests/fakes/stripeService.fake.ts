@@ -55,6 +55,14 @@ export function __reset() {
   refunds = new Map();
 }
 
+export async function createProduct(params: { name: string; planId: string }) {
+  return { id: `prod_${randomUUID()}`, name: params.name };
+}
+
+export async function createRecurringPrice(params: { productId: string; amount: number; currency: string; interval: "month" | "year" }) {
+  return { id: `price_${randomUUID()}`, product: params.productId, unit_amount: params.amount, currency: params.currency, recurring: { interval: params.interval } };
+}
+
 export async function createCustomer(email: string, userId: string) {
   const customer: FakeCustomer = { id: `cus_${randomUUID()}`, email, metadata: { streamVerseUserId: userId }, defaultPaymentMethodId: null };
   customers.set(customer.id, customer);

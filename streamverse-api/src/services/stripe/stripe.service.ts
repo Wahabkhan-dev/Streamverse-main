@@ -39,6 +39,22 @@ export async function detachPaymentMethod(paymentMethodId: string): Promise<Stri
   return getStripeClient().paymentMethods.detach(paymentMethodId);
 }
 
+/** A Stripe Product for a plan, so plans (and their prices) can be authored from Admin without touching the Stripe dashboard. */
+export async function createProduct(params: { name: string; description?: string | null; planId: string; idempotencyKey: string }): Promise<Stripe.Product> {
+  return getStripeClient().products.create(
+    { name: params.name, ...(params.description ? { description: params.description } : {}), metadata: { streamVersePlanId: params.planId } },
+    { idempotencyKey: params.idempotencyKey },
+  );
+}
+
+/** Stripe Prices are immutable: a price change is always a NEW Price on the same Product. `amount` is in minor units. */
+export async function createRecurringPrice(params: { productId: string; amount: number; currency: string; interval: "month" | "year"; planId: string; idempotencyKey: string }): Promise<Stripe.Price> {
+  return getStripeClient().prices.create(
+    { product: params.productId, unit_amount: params.amount, currency: params.currency, recurring: { interval: params.interval }, metadata: { streamVersePlanId: params.planId } },
+    { idempotencyKey: params.idempotencyKey },
+  );
+}
+
 export async function createCheckoutSession(params: { stripeCustomerId: string; priceId: string; userId: string; planId: string; popup?: boolean; idempotencyKey: string }): Promise<Stripe.Checkout.Session> {
   return getStripeClient().checkout.sessions.create(
     {

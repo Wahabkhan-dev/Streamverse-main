@@ -2,11 +2,10 @@ import { z } from "zod";
 import { listQuery } from "../utils/pagination";
 
 /**
- * Section 11: Admin links an EXISTING Stripe Price id rather than StreamVerse minting Product/Price
- * objects on Admin's behalf — simpler, avoids the backend needing Stripe Product-catalog write access
- * beyond what's already used for Customers/Subscriptions/Refunds, and keeps Stripe's dashboard as the
- * one place pricing is actually authored. `priceAmount`/`currency` are still stored locally (Section 9)
- * so the customer-facing list and checkout never need a live Stripe call just to show a price.
+ * Admin sets the price (amount + currency + interval) and StreamVerse creates the matching Stripe Product/Price itself
+ * (see plan.service.ts), so nothing needs authoring in the Stripe dashboard. `stripePriceId` stays optional for linking an
+ * existing Stripe Price instead. `priceAmount`/`currency` are always stored locally so the customer-facing list and
+ * checkout never need a live Stripe call just to show a price.
  */
 export const createPlanSchema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -17,7 +16,7 @@ export const createPlanSchema = z.object({
     .regex(/^[a-z0-9-]+$/, "Use lowercase letters, numbers and hyphens"),
   description: z.string().max(1000).optional(),
   stripeProductId: z.string().min(1).optional(),
-  stripePriceId: z.string().min(1),
+  stripePriceId: z.string().min(1).optional(),
   priceAmount: z.number().int().min(0),
   currency: z
     .string()
