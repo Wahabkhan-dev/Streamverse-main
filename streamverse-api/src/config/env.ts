@@ -49,6 +49,8 @@ const schema = z
     STRIPE_SUCCESS_URL: z.url("STRIPE_SUCCESS_URL must be a full URL"),
     STRIPE_CANCEL_URL: z.url("STRIPE_CANCEL_URL must be a full URL"),
     STRIPE_PORTAL_RETURN_URL: optional(z.url()),
+    /** Lets a deployed (production) server run on Stripe TEST keys while the product is being tried out. No real money moves. */
+    STRIPE_ALLOW_TEST_KEYS: bool.default(false),
 
     // Phase 6: object storage. One S3-compatible provider (AWS S3, Cloudflare R2, Backblaze B2,
     // DigitalOcean Spaces all speak the same API) behind `StorageProvider` — see storage.provider.ts.
@@ -123,8 +125,8 @@ const schema = z
     }
     const stripeKeyIsLive = env.STRIPE_SECRET_KEY?.startsWith("sk_live_") ?? false;
     const stripeKeyIsTest = env.STRIPE_SECRET_KEY?.startsWith("sk_test_") ?? false;
-    if (env.NODE_ENV === "production" && stripeKeyIsTest) {
-      ctx.addIssue({ code: "custom", path: ["STRIPE_SECRET_KEY"], message: "A sk_test_ key is set in production — use a live key." });
+    if (env.NODE_ENV === "production" && stripeKeyIsTest && !env.STRIPE_ALLOW_TEST_KEYS) {
+      ctx.addIssue({ code: "custom", path: ["STRIPE_SECRET_KEY"], message: "A sk_test_ key is set in production — use a live key (or set STRIPE_ALLOW_TEST_KEYS=true to try Stripe test mode)." });
     }
     if (env.NODE_ENV !== "production" && stripeKeyIsLive) {
       ctx.addIssue({ code: "custom", path: ["STRIPE_SECRET_KEY"], message: "A sk_live_ key is set outside production — use a test key." });
