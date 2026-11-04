@@ -649,14 +649,28 @@ export interface ApiPlanChangePreview {
 /** GET /me/subscription/credit: credit that will be used up by the next invoice. Cents. */
 export interface ApiAccountCredit {
   amount: number;
+/** GET /admin/users/:id/activity: one customer's real subscription, billing, library and history. */
+export interface ApiAdminUserActivity {
+  subscription: {
+    status: string;
+    plan: { id: string; name: string; priceAmount: number; currency: string; billingInterval: string } | null;
+    currentPeriodStart: string | null;
+    currentPeriodEnd: string | null;
+    cancelAtPeriodEnd: boolean;
+  } | null;
+  payments: { id: string; date: string; amount: number; currency: string; status: string; plan: { id: string; name: string } | null; invoiceReference: string | null; refunded: boolean }[];
+  library: { id: string; title: string; type: string; at: string }[];
+  history: { id: string; title: string; type: string; activityType: string; at: string }[];
+}
+
   currency: string;
 }
 
-}
-
-export interface ApiBillingPortal {
 export interface ApiCheckoutSession {
   checkoutUrl: string;
   sessionId: string;
   url: string;
 }
+}
+
+export interface ApiBillingPortal {

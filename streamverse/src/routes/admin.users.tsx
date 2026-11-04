@@ -11,7 +11,7 @@ import { itemTitle, useCatalog } from "@/lib/items";
 import { seeded } from "@/lib/runtime";
 import { update, usePlans, useUsers, type User } from "@/lib/store";
 import { DEMO_MODE } from "@/lib/config";
-import { useAdminUsersQuery, useAdminUserMutation } from "@/hooks/useAdminApi";
+import { useAdminUsersQuery, useAdminUserMutation, useAdminUserActivityQuery } from "@/hooks/useAdminApi";
 import type { ApiAdminUser } from "@/api/types";
 
 export const Route = createFileRoute("/admin/users")({
@@ -193,6 +193,8 @@ function UserDetails({ user, tab, setTab, onToggle }: { user: User; tab: Tab; se
   const cat = useCatalog();
   const plans = usePlans();
   const plan = plans.find((p) => p.name === user.plan);
+  const live = !DEMO_MODE;
+  const act = useAdminUserActivityQuery(user.id);
   const sample = useMemo(() => {
     const rnd = seeded(`user:${user.id}`);
     const pool = [...cat.all];
@@ -253,17 +255,16 @@ function UserDetails({ user, tab, setTab, onToggle }: { user: User; tab: Tab; se
         {tab === "overview" && (
           <dl>
             <Row k="User ID">{user.id}</Row>
-            <Row k="Account type">USER</Row>
+            {!live && <Row k="Account type">USER</Row>}
             <Row k="Account status">{user.status}</Row>
             <Row k="Country">{user.country}</Row>
             <Row k="Joined">{user.joined}</Row>
             <Row k="Last active">{user.last}</Row>
-            <Row k="Plan">
-              <PlanBadge plan={user.plan} />
-            </Row>
+            <Row k="Plan">{live ? (act.data ? (act.data.data.subscription?.plan?.name ?? "No plan") : "…") : <PlanBadge plan={user.plan} />}</Row>
           </dl>
         )}
-        {tab === "subscription" && (
+        {live && tab !== "overview" && <LiveActivityTab tab={tab} act={act} />}
+        {!live && tab === "subscription" && (
           <div className="space-y-4">
             <dl>
               <Row k="Plan">{user.plan}</Row>
@@ -288,7 +289,7 @@ function UserDetails({ user, tab, setTab, onToggle }: { user: User; tab: Tab; se
             )}
           </div>
         )}
-        {tab === "library" && (
+        {!live && tab === "library" && (
           <ul className="divide-y divide-border rounded-lg border border-border">
             {sample.library.map(({ item, pct }) => (
               <li key={`${item.type}-${item.slug}`} className="flex items-center gap-3 px-4 py-2.5 text-sm">
@@ -302,7 +303,7 @@ function UserDetails({ user, tab, setTab, onToggle }: { user: User; tab: Tab; se
             ))}
           </ul>
         )}
-        {tab === "history" && (
+        {!live && tab === "history" && (
           <ul className="divide-y divide-border rounded-lg border border-border">
             {sample.history.map(({ item, daysAgo, pct }) => (
               <li key={`${item.type}-${item.slug}`} className="flex items-center gap-3 px-4 py-2.5 text-sm">
@@ -315,7 +316,69 @@ function UserDetails({ user, tab, setTab, onToggle }: { user: User; tab: Tab; se
           </ul>
         )}
       </div>
-      <p className="text-[11px] text-muted-foreground">Library and history are sample data in this phase. They will come from each customer's real activity once the backend is connected.</p>
+      {!live && <p className="text-[11px] text-muted-foreground">Library and history are sample data in this phase. They will come from each customer's real activity once the backend is connected.</p>}
     </>
+  );
+}
+
+const PAYMENT_LABEL: Record<string, string> = { SUCCEEDED: "Succeeded", FAILED: "Failed", REFUNDED: "Refunded", PARTIALLY_REFUNDED: "Refunded", PENDING: "Pending" };
+const when = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleDateString(undefined, { dateStyle: "medium" }) : "-");
+const kindLabel = (t: string) => ({ MOVIE: "Movie", EBOOK: "eBook", AUDIOBOOK: "Audiobook" })[t] ?? t;
+const activityLabel = (a: string) => ({ WATCHED: "Watched", READ: "Read", LISTENED: "Listened" })[a] ?? "Opened";
+
+/** The customer's real subscription, billing, library and history, straight from the server. Nothing here is generated. */
+function LiveActivityTab({ tab, act }: { tab: Tab; act: ReturnType<typeof useAdminUserActivityQuery> }) {
+  if (act.isLoading) return <Skel className="h-40 w-full" />;
+  if (act.isError || !act.data) return <p role="alert" className="py-8 text-center text-sm text-muted-foreground">This customer's activity could not be loaded.</p>;
+  const d = act.data.data;
+  const row = (k: string, v: string) => (
+    <div key={k} className="grid grid-cols-[8rem_1fr] gap-3 border-b border-border py-2.5 text-sm last:border-0">
+      <dt className="text-muted-foreground">{k}</dt>
+      <dd className="min-w-0 break-words">{v}</dd>
+    </div>
+  );
+  if (tab === "subscription") {
+    const sub = d.subscription;
+    return (
+      <div className="space-y-4">
+        <dl>
+          {row("Plan", sub?.plan?.name ?? "No plan")}
+          {row("Price", sub?.plan ? `${money(sub.plan.priceAmount / 100)} / ${sub.plan.billingInterval === "YEARLY" ? "year" : "month"}` : "-")}
+          {row("Status", sub ? `${sub.status.charAt(0)}${sub.status.slice(1).toLowerCase()}${sub.cancelAtPeriodEnd ? " (cancels at period end)" : ""}` : "Never subscribed")}
+          {row(sub?.cancelAtPeriodEnd ? "Access ends" : "Next billing", when(sub?.currentPeriodEnd))}
+        </dl>
+        <div>
+          <div className="eyebrow mb-2 text-[10px] text-muted-foreground">Recent billing</div>
+          {d.payments.length === 0 ? (
+            <p className="rounded-lg border border-border px-4 py-3 text-sm text-muted-foreground">No payments yet.</p>
+          ) : (
+            <ul className="divide-y divide-border rounded-lg border border-border">
+              {d.payments.map((p) => (
+                <li key={p.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
+                  <span>{when(p.date)}</span>
+                  <span className="min-w-0 flex-1 truncate text-muted-foreground">{p.plan?.name ?? ""}</span>
+                  <span className="font-semibold">{money(p.amount / 100)}</span>
+                  <StatusBadge status={p.refunded ? "Refunded" : (PAYMENT_LABEL[p.status] ?? p.status)} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    );
+  }
+  const items = tab === "library" ? d.library.map((i) => ({ ...i, label: "Saved" })) : d.history.map((i) => ({ ...i, label: activityLabel(i.activityType) }));
+  if (items.length === 0) return <p className="rounded-lg border border-border px-4 py-6 text-center text-sm text-muted-foreground">{tab === "library" ? "Nothing in this customer's library yet." : "No viewing history yet."}</p>;
+  return (
+    <ul className="divide-y divide-border rounded-lg border border-border">
+      {items.map((i) => (
+        <li key={`${i.id}-${i.at}`} className="flex items-center gap-3 px-4 py-2.5 text-sm">
+          <span className="min-w-0 flex-1 truncate font-medium">{i.title}</span>
+          <span className="text-xs text-muted-foreground">{kindLabel(i.type)}</span>
+          <span className="text-xs text-muted-foreground">{i.label}</span>
+          <span className="w-28 text-right text-xs text-soft">{when(i.at)}</span>
+        </li>
+      ))}
+    </ul>
   );
 }

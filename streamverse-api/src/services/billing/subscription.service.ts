@@ -241,6 +241,26 @@ async function requireActiveSubscription(userId: string) {
   return sub;
 }
 
+/**
+ * "Retry payment" for a subscription whose renewal failed (PAST_DUE): charges the open invoice again to the default card.
+ * If the card is declined again nothing changes and the customer is told to update it.
+ */
+export async function retryFailedPayment(userId: string, ctx: AuditContext = NO_ACTOR) {
+  const sub = await requireActiveSubscription(userId);
+  if (sub.status !== "PAST_DUE") throw new ConflictError("There is no failed payment to retry.");
+  try {
+    await stripeService.payLatestOpenInvoice(sub.stripeSubscriptionId);
+  } catch (err) {
+    if ((err as { type?: string })?.type === "StripeCardError") {
+      throw new AppError("Your card was declined again. Please update your payment method and try again.", 402, ERROR_CODES.BAD_REQUEST);
+    }
+    throw err;
+  }
+  await applyStripeSubscriptionSnapshot(await stripeService.retrieveSubscription(sub.stripeSubscriptionId));
+  await recordAudit(ctx, { action: "subscription.payment_retried", entityType: "SUBSCRIPTION", entityId: sub.id });
+  return getMySubscription(userId);
+}
+
 /** Section 39/40: cancel-at-period-end is the only mode exposed — never immediate cancellation. */
 export async function cancelSubscription(userId: string, ctx: AuditContext = NO_ACTOR) {
   const sub = await requireActiveSubscription(userId);

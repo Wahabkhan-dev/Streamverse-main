@@ -84,6 +84,18 @@ export function useChangePlanMutation() {
   });
 }
 
+/** Pays a failed renewal again; everything that shows the subscription or its invoices is refreshed after. */
+export function useRetryPaymentMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => meApi.retryPayment(),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: SUBSCRIPTION_QUERY_KEY });
+      void qc.invalidateQueries({ queryKey: INVOICES_QUERY_KEY });
+    },
+  });
+}
+
 /** The customer's credit (used up by their next invoice): shown on the subscription page. */
 export function useAccountCreditQuery() {
   const authed = useIsAuthenticated();

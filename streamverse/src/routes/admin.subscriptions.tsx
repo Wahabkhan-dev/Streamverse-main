@@ -9,7 +9,7 @@ import { Btn, Field, PageHeader, Panel, SelectInput, Skel, StatusBadge, TextArea
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { update, usePlans, type Plan } from "@/lib/store";
 import { DEMO_MODE } from "@/lib/config";
-import { useAdminPlansQuery, useAdminPlanMutation } from "@/hooks/useAdminApi";
+import { useAdminPlansQuery, useAdminPlanMutation, useAdminSubscriptionsQuery } from "@/hooks/useAdminApi";
 import type { ApiPlan } from "@/api/types";
 
 export const Route = createFileRoute("/admin/subscriptions")({ component: Subscriptions });
@@ -43,6 +43,12 @@ function Subscriptions() {
   const demoPlans = usePlans();
   const apiQuery = useAdminPlansQuery();
   const apiMutation = useAdminPlanMutation();
+  // the real number of ended subscriptions, and of all, for the cancellation tile
+  const canceledQuery = useAdminSubscriptionsQuery({ status: "CANCELED", limit: 1 });
+  const allSubsQuery = useAdminSubscriptionsQuery({ limit: 1 });
+  const totalOf = (q: { data?: unknown }) => (q.data as { pagination?: { total?: number } } | undefined)?.pagination?.total ?? 0;
+  const canceledTotal = totalOf(canceledQuery);
+  const allSubsTotal = totalOf(allSubsQuery);
   const isLoading = !DEMO_MODE && apiQuery.isLoading;
   const isError = !DEMO_MODE && apiQuery.isError;
 
@@ -95,7 +101,9 @@ function Subscriptions() {
           { label: "Active plans", value: String(active.length), note: "Across two billing options" },
           { label: "Subscribers", value: active.reduce((n, p) => n + p.subs, 0).toLocaleString(), note: "On active plans", tone: "good" },
           { label: "Monthly revenue", value: `$${Math.round(active.reduce((n, p) => n + p.subs * (p.interval === "Yearly" ? p.price / 12 : p.price), 0)).toLocaleString()}`, note: "Estimated from active plans", tone: "good" },
-          { label: "Cancelled plans", value: "428", note: "1.3% cancellation rate", tone: "warn" },
+          DEMO_MODE
+            ? { label: "Cancelled plans", value: "428", note: "1.3% cancellation rate", tone: "warn" as const }
+            : { label: "Cancelled plans", value: canceledTotal.toLocaleString(), note: allSubsTotal ? `${Math.round((canceledTotal / allSubsTotal) * 1000) / 10}% of all subscriptions` : "No subscriptions yet", tone: "warn" as const },
         ]}
       />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

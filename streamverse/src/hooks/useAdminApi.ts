@@ -185,6 +185,10 @@ export const useAdminUserMutation = () => {
   };
 };
 
+/** One customer's real subscription, billing, library and history (Admin -> Users). */
+export const useAdminUserActivityQuery = (id: string) =>
+  useQuery({ queryKey: ["admin", "user-activity", id], queryFn: () => adminUsersApi.activity(id), enabled: E && !!id, staleTime: 30_000 });
+
 /* ─────────── Subscriptions ─────────── */
 export const useAdminSubscriptionsQuery = (p?: AdminListParams) =>
   useQuery({ queryKey: ["admin", "subscriptions", p], queryFn: () => adminSubscriptionsApi.list(p), enabled: E });

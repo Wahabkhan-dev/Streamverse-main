@@ -4,7 +4,9 @@ import { assertNotStale } from "../utils/concurrency";
 import { AppError, NotFoundError } from "../utils/errors";
 import type { AuditContext } from "./auditLog.service";
 import { recordAudit } from "./auditLog.service";
+import { logger } from "../config/logger";
 import { assertReadyToPublish } from "./contentPublishValidation.service";
+import { broadcastNewRelease } from "./notification.service";
 
 /**
  * Section 58/59: every legal status change, for every content type, goes through here — nothing else
@@ -47,6 +49,10 @@ export async function publishContent(type: ContentType, id: string, ctx: AuditCo
   await assertReadyToPublish(type, id);
   const updated = await contentRepository.update(id, { status: "PUBLISHED", publishedAt: new Date(), publishAt: null });
   await recordAudit(ctx, { action: "content.published", entityType: type, entityId: id, metadata: { from: content.status } });
+  // the very first time a title goes live (not every re-publish) customers are told, if the admin has that switched on
+  if (!content.publishedAt) {
+    void broadcastNewRelease({ id, type, title: updated.title, slug: updated.slug }).catch((err) => logger.warn({ err, contentId: id }, "notifications: new release broadcast failed"));
+  }
   return updated;
 }
 

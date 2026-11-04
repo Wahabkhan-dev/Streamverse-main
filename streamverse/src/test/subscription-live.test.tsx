@@ -7,6 +7,7 @@ vi.hoisted(() => {
 });
 
 import { setAuthUser } from "@/lib/authState";
+import { getStoreState } from "@/lib/store";
 import type { ApiUser } from "@/api/types";
 import { renderAt, resetAll } from "./utils";
 
@@ -36,7 +37,9 @@ function serve(sub: unknown, payments: unknown[] = [], plans: unknown[] = [plan]
     "fetch",
     vi.fn(async (url: string) => {
       const u = String(url);
-      const body = u.includes("/change-plan/preview")
+      const body = u.includes("/settings/public")
+        ? { data: { maintenanceMode: false, ageGateEnabled: true, autoplayNext: false, autoplayPreview: false } }
+        : u.includes("/change-plan/preview")
         ? { data: extra.preview ?? null }
         : u.includes("/subscription/credit")
           ? { data: { amount: extra.credit ?? 0, currency: "usd" } }
@@ -157,6 +160,7 @@ describe("Upgrade dialog (live)", () => {
 });
 
 describe("Subscription page in live mode", () => {
+
   it("shows the customer's credit where they see their plan", async () => {
     serve(states.active, [], [plan], { credit: 330 });
     renderAt("/subscription");

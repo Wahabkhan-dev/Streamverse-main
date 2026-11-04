@@ -22,6 +22,9 @@ export async function cancel(req: Request, res: Response) {
 export async function resume(req: Request, res: Response) {
   sendSuccess(res, await subscriptionService.resumeSubscription(req.auth!.userId, auditContext(req)), "Subscription resumed");
 }
+export async function retryPayment(req: Request, res: Response) {
+  sendSuccess(res, await subscriptionService.retryFailedPayment(req.auth!.userId, auditContext(req)), "Payment retried");
+}
 export async function previewPlanChange(req: Request, res: Response) {
   sendSuccess(res, await estimatePlanChange(req.auth!.userId, String(req.query["planId"])), "Plan change preview");
 }

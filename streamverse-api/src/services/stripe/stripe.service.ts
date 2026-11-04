@@ -128,6 +128,13 @@ export async function changeSubscriptionPrice(stripeSubscriptionId: string, subs
   );
 }
 
+/** Pays the subscription's open (failed) invoice again with the customer's default card. Null when nothing is open. */
+export async function payLatestOpenInvoice(stripeSubscriptionId: string): Promise<Stripe.Invoice | null> {
+  const open = await getStripeClient().invoices.list({ subscription: stripeSubscriptionId, status: "open", limit: 1 });
+  const invoice = open.data[0];
+  return invoice ? getStripeClient().invoices.pay(invoice.id) : null;
+}
+
 /** Charges waiting to go on the customer's next invoice (a downgrade's unused-time credit is one, with a negative amount). */
 export async function listPendingInvoiceItems(stripeCustomerId: string): Promise<Stripe.InvoiceItem[]> {
   const res = await getStripeClient().invoiceItems.list({ customer: stripeCustomerId, pending: true, limit: 100 });

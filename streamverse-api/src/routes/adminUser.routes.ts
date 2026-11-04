@@ -20,6 +20,7 @@ const updateBody = z.object({
 export const adminUserRouter = Router();
 adminUserRouter.get("/", validate({ query: listQuery }), asyncHandler(adminUserController.list));
 adminUserRouter.get("/:id", validate({ params: idParam }), asyncHandler(adminUserController.getOne));
+adminUserRouter.get("/:id/activity", validate({ params: idParam }), asyncHandler(adminUserController.activity));
 adminUserRouter.patch("/:id", validate({ params: idParam, body: updateBody }), asyncHandler(adminUserController.update));
 adminUserRouter.post("/:id/suspend", validate({ params: idParam }), asyncHandler(adminUserController.suspend));
 adminUserRouter.post("/:id/unsuspend", validate({ params: idParam }), asyncHandler(adminUserController.unsuspend));

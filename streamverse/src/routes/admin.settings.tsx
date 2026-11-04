@@ -1,9 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ShieldCheck } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
+import { authApi } from "@/api/auth.api";
 import { useAdminUser } from "@/components/sv/admin";
 import { BackendBadge, showBackendNotice } from "@/components/sv/BackendNotice";
-import { Btn, PageHeader, Panel, PanelHeader, SelectInput, Skel, Toggle } from "@/components/sv/ui";
+import { Btn, Field, PageHeader, Panel, PanelHeader, SelectInput, Skel, TextInput, Toggle } from "@/components/sv/ui";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { LANGUAGES } from "@/components/sv/wizard/kit";
 import { update, useSettings, type Settings } from "@/lib/store";
 import { DEMO_MODE } from "@/lib/config";
@@ -35,6 +38,7 @@ const rows: Row[] = [
 const groups = ["Platform", "Catalog", "Safety", "Playback defaults", "Notifications"];
 
 function SettingsPage() {
+  const [passwordOpen, setPasswordOpen] = useState(false);
   const admin = useAdminUser();
   const demoSettings = useSettings();
   const server = useServerSettings();
@@ -136,14 +140,92 @@ function SettingsPage() {
               <b>{v}</b>
             </div>
           ))}
-          <Btn className="mt-4 w-full" onClick={() => showBackendNotice("Account settings", "Changing the admin's email and password is handled by the server.")}>
-            Account settings
+          <Btn className="mt-4 w-full" onClick={() => (DEMO_MODE ? showBackendNotice("Change password", "Passwords are changed on the live site, where accounts are real.") : setPasswordOpen(true))}>
+            Change password
           </Btn>
           <Link to="/" className="mt-2 block text-center text-xs font-semibold text-muted-foreground hover:text-foreground">
             View the customer site
           </Link>
         </Panel>
+        <ChangePasswordDialog open={passwordOpen} onClose={() => setPasswordOpen(false)} />
       </div>
     </>
+  );
+}
+
+/** Changes the signed-in admin's own password (the server checks the current one). */
+function ChangePasswordDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [again, setAgain] = useState("");
+  const [problem, setProblem] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const close = () => {
+    if (busy) return;
+    setCurrent("");
+    setNext("");
+    setAgain("");
+    setProblem("");
+    onClose();
+  };
+
+  async function submit() {
+    if (!current) return setProblem("Enter your current password.");
+    if (next.length < 8) return setProblem("The new password must be at least 8 characters.");
+    if (next !== again) return setProblem("The two new passwords don't match.");
+    if (next === current) return setProblem("Choose a password different from the current one.");
+    setBusy(true);
+    setProblem("");
+    try {
+      await authApi.changePassword(current, next);
+      toast.success("Password changed");
+      setBusy(false);
+      close();
+    } catch (e) {
+      setProblem(isApiError(e) ? e.message : "The password could not be changed. Please try again.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && close()}>
+      <DialogContent className="border-border bg-surface-2 sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Change password</DialogTitle>
+          <DialogDescription>Use a password you don't use anywhere else.</DialogDescription>
+        </DialogHeader>
+        <form
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void submit();
+          }}
+        >
+          <Field label="Current password" required>
+            <TextInput type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} />
+          </Field>
+          <Field label="New password" required hint="At least 8 characters.">
+            <TextInput type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} />
+          </Field>
+          <Field label="New password again" required>
+            <TextInput type="password" autoComplete="new-password" value={again} onChange={(e) => setAgain(e.target.value)} />
+          </Field>
+          {problem && (
+            <p role="alert" className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+              {problem}
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <Btn type="button" onClick={close} disabled={busy}>
+              Cancel
+            </Btn>
+            <Btn type="submit" variant="primary" disabled={busy}>
+              {busy ? "Saving…" : "Change password"}
+            </Btn>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -25,7 +25,9 @@ beforeEach(() => {
     "fetch",
     vi.fn(async (url: string, init?: { method?: string }) => {
       const u = String(url);
-      const body = u.includes("/admin/plans") ? (init?.method === "PUT" ? { data: { ...standard } } : { data: [standard] }) : { data: null };
+      const body = u.includes("/admin/subscriptions")
+        ? { data: [], pagination: { total: u.includes("status=CANCELED") ? 3 : 12 } }
+        : u.includes("/admin/plans") ? (init?.method === "PUT" ? { data: { ...standard } } : { data: [standard] }) : { data: null };
       return new Response(JSON.stringify({ success: true, message: "ok", ...body }), { status: 200, headers: { "Content-Type": "application/json" } });
     }),
   );
@@ -44,6 +46,9 @@ describe("Admin -> Subscriptions plan editor (live)", () => {
     expect(within(chips).getByText("3 devices")).toBeTruthy();
     expect(within(chips).getByText("2 at once")).toBeTruthy();
     expect(screen.getByText("12 subscribers")).toBeTruthy();
+    // the cancellation tile is the real count (3 of 12), not an invented number
+    expect(await screen.findByText("25% of all subscriptions")).toBeTruthy();
+    expect(screen.queryByText("428")).toBeNull();
 
     fireEvent.click(screen.getAllByText("Edit plan")[0]!.closest("button") as HTMLButtonElement);
     const dialog = await waitFor(() => {

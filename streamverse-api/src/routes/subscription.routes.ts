@@ -12,6 +12,7 @@ subscriptionRouter.post("/checkout", billingWriteLimiter(), validate({ body: che
 subscriptionRouter.post("/payment-intent", billingWriteLimiter(), validate({ body: checkoutSchema }), asyncHandler(subscriptionController.paymentIntent));
 subscriptionRouter.post("/sync", billingWriteLimiter(), asyncHandler(subscriptionController.sync));
 subscriptionRouter.post("/cancel", billingWriteLimiter(), asyncHandler(subscriptionController.cancel));
+subscriptionRouter.post("/retry-payment", billingWriteLimiter(), asyncHandler(subscriptionController.retryPayment));
 subscriptionRouter.post("/resume", billingWriteLimiter(), asyncHandler(subscriptionController.resume));
 subscriptionRouter.post("/change-plan", billingWriteLimiter(), validate({ body: changePlanSchema }), asyncHandler(subscriptionController.changePlan));
 subscriptionRouter.get("/change-plan/preview", validate({ query: changePlanPreviewQuery }), asyncHandler(subscriptionController.previewPlanChange));

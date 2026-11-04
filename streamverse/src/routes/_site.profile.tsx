@@ -115,9 +115,6 @@ function ProfileForm() {
                 </Field>
                 {err("email")}
               </div>
-              <Field label="Language">
-                <SelectInput options={LANGUAGES} value={form.profile.language} onChange={(e) => setP("language", e.target.value)} />
-              </Field>
               <Field label="Country" hint="Used to show content available in your region.">
                 <SelectInput options={COUNTRIES} value={form.profile.country} onChange={(e) => setP("country", e.target.value)} />
               </Field>
@@ -134,9 +131,6 @@ function ProfileForm() {
         <Panel>
           <PanelHeader title="Preferences" />
           <div className="grid gap-5 p-5 sm:grid-cols-2">
-            <Field label="Preferred language">
-              <SelectInput options={LANGUAGES} value={form.prefs.preferredLanguage} onChange={(e) => setPref("preferredLanguage", e.target.value)} />
-            </Field>
             <Field label="Subtitle language">
               <SelectInput options={LANGUAGES} value={form.prefs.subtitleLanguage} onChange={(e) => setPref("subtitleLanguage", e.target.value)} />
             </Field>
@@ -144,13 +138,12 @@ function ProfileForm() {
             <Toggle checked={form.prefs.autoplayPreview} onChange={(v) => setPref("autoplayPreview", v)} label="Autoplay previews" />
           </div>
           <div className="border-t border-border p-5">
-            <div className="eyebrow mb-3 text-soft">Notification preferences</div>
+            <div className="eyebrow mb-1 text-soft">Notification preferences</div>
+            <p className="mb-3 text-xs text-muted-foreground">Choose which alerts appear in your notification bell on this device.</p>
             <div className="grid gap-3 sm:grid-cols-2">
               <Toggle checked={form.prefs.notifications.newRelease} onChange={(v) => setNote("newRelease", v)} label="New releases" />
               <Toggle checked={form.prefs.notifications.subscription} onChange={(v) => setNote("subscription", v)} label="Subscription and billing" />
-              <Toggle checked={form.prefs.notifications.recommendation} onChange={(v) => setNote("recommendation", v)} label="Recommendations" />
               <Toggle checked={form.prefs.notifications.account} onChange={(v) => setNote("account", v)} label="Account messages" />
-              <Toggle checked={form.prefs.notifications.email} onChange={(v) => setNote("email", v)} label="Also email me" />
             </div>
           </div>
         </Panel>

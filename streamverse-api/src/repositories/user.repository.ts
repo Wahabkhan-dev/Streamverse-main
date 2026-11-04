@@ -30,3 +30,6 @@ export const findByStripeCustomerId = (stripeCustomerId: string): Promise<User |
  */
 export const setStripeCustomerIdIfNull = (id: string, stripeCustomerId: string): Promise<{ count: number }> =>
   prisma.user.updateMany({ where: { id, stripeCustomerId: null }, data: { stripeCustomerId } });
+
+/** Everyone who should hear about new titles: active customers (not admins, not removed accounts). */
+export const listActiveCustomerIds = async () => (await prisma.user.findMany({ where: { status: "ACTIVE", role: "USER", deletedAt: null }, select: { id: true } })).map((u) => u.id);

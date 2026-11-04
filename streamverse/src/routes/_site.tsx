@@ -5,7 +5,9 @@ import { LEGAL_LINKS } from "@/lib/legal";
 import { AuthGate } from "@/components/sv/AuthGate";
 import { InstallPrompt } from "@/components/sv/InstallPrompt";
 import { MiniPlayer } from "@/components/sv/players/MiniPlayer";
-import { useSettings } from "@/lib/store";
+import { useEffect } from "react";
+import { fromServer } from "@/lib/server-settings";
+import { update, useSettings } from "@/lib/store";
 import { useRole } from "@/lib/user";
 import { useQuery } from "@tanstack/react-query";
 import { api, isApiError } from "@/api/client";
@@ -46,6 +48,14 @@ function SiteLayout() {
     refetchInterval: 60_000,
     queryFn: async () => (await api.get<{ data: Record<string, unknown> }>("/settings/public")).data,
   });
+  // The admin's age gate and autoplay switches are public settings: copy them into the browser store for every visitor, so they
+  // reach customers (before, only an admin's own browser ever loaded them).
+  useEffect(() => {
+    const d = publicSettings.data;
+    if (DEMO_MODE || !d) return;
+    const m = fromServer(d);
+    update((st) => ({ settings: { ...st.settings, ageGate: m.ageGate, autoplayNext: m.autoplayNext, autoplayPreview: m.autoplayPreview } }));
+  }, [publicSettings.data]);
   const serverMaintenance = isApiError(publicSettings.error) ? publicSettings.error.code === "MAINTENANCE_MODE" : publicSettings.data?.["maintenanceMode"] === true;
   const maintenance = DEMO_MODE ? demoMaintenance : serverMaintenance && role !== "admin";
   if (maintenance) {

@@ -71,6 +71,11 @@ export const meApi = {
     return api.post<ApiResponse<ApiSubscription>>("/me/subscription/change-plan", { planId, consent });
   },
 
+  /** POST /me/subscription/retry-payment: charges the failed renewal invoice again with the saved card. */
+  retryPayment() {
+    return api.post<ApiResponse<ApiSubscription>>("/me/subscription/retry-payment");
+  },
+
   previewPlanChange(planId: string) {
     return api.get<ApiResponse<ApiPlanChangePreview>>(`/me/subscription/change-plan/preview?planId=${encodeURIComponent(planId)}`);
   },

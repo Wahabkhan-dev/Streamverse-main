@@ -3,6 +3,8 @@ import { useMemo } from "react";
 import type { ApiHomeBanner, ApiHomeSection, ApiMixedCard } from "@/api/types";
 import { useApiHomepagePages } from "@/hooks/useApiCatalog";
 import { apiBannerToLocal } from "@/lib/banner-mapper";
+import { useSettings } from "@/lib/store";
+import { usePrefs } from "@/lib/user";
 import { mixedCardToItem } from "@/lib/api-mappers";
 import { detailTarget } from "@/lib/links";
 import { LatestReleaseBanner, NormalBanner, PromotionalBanner } from "../Banners";
@@ -106,10 +108,13 @@ function ContentRow({ s }: { s: ApiHomeSection }) {
 
 /** One section, rendered by what the server says it is (`kind`) - never by guessing from its key. */
 function Section({ s }: { s: ApiHomeSection }) {
+  // Admin -> Settings -> Autoplay previews, unless the customer turned it off in Profile
+  const settings = useSettings();
+  const prefs = usePrefs();
   switch (s.kind) {
     case "hero": {
       const slides = heroSlides((s.items ?? []) as unknown as ApiMixedCard[]);
-      return slides.length ? <HeroBanner slides={slides} /> : null;
+      return slides.length ? <HeroBanner slides={slides} autoplay={settings.autoplayPreview && prefs.autoplayPreview} /> : null;
     }
     case "continue":
       return <ContinueRow title={s.displayTitle} limit={s.itemLimit} />;

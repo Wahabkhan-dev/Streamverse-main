@@ -12,7 +12,7 @@ vi.mock("../../src/config/database", async () => {
 import { createApp } from "../../src/app";
 import { prisma } from "../../src/config/database";
 import { checkAccess } from "../../src/services/entitlement/entitlement.service";
-import { createUser } from "../helpers/adminAuth";
+import { createAdmin, createUser } from "../helpers/adminAuth";
 import { createTestPlan } from "../helpers/billing";
 import { makePublishedAudiobook, makePublishedEbook, makePublishedMovie } from "../helpers/publishedContent";
 
@@ -54,7 +54,6 @@ describe("a plan only unlocks the kinds of content it includes", () => {
 
 describe("an admin's change to a plan applies immediately", () => {
   it("removing eBooks from a plan stops access at once (no waiting for the 60 s decision cache), and the admin list shows who is affected", async () => {
-    const { createAdmin } = await import("../helpers/adminAuth");
     const userId = await subscriber({ moviesEnabled: true, ebooksEnabled: true, audiobooksEnabled: true });
     const ebook = (await makePublishedEbook({ visibility: "SUBSCRIBERS_ONLY" })).content;
     const ask = () => checkAccess({ userId, role: "USER" } as never, ebook.id, "ebook");
@@ -72,7 +71,6 @@ describe("an admin's change to a plan applies immediately", () => {
   });
 
   it("lowering the device limit on a plan applies to the next device straight away", async () => {
-    const { createAdmin } = await import("../helpers/adminAuth");
     const userId = await subscriber({ maxDevices: 3 });
     const { accessToken } = await createAdmin(app, db as never);
     const headers = { Authorization: `Bearer ${accessToken}` };

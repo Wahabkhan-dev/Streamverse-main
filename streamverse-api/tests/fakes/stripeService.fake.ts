@@ -148,6 +148,17 @@ export async function changeSubscriptionPrice(stripeSubscriptionId: string, subs
   return sub;
 }
 
+export async function payLatestOpenInvoice(stripeSubscriptionId: string) {
+  const sub = subscriptions.get(stripeSubscriptionId);
+  if (!sub) throw new Error("No such subscription");
+  if (declineNextCharge) {
+    declineNextCharge = false;
+    throw Object.assign(new Error("Your card was declined."), { type: "StripeCardError" });
+  }
+  sub.status = "active";
+  return { id: "in_retry", status: "paid" };
+}
+
 export let pendingItems: { amount: number }[] = [];
 export function __setPendingItems(items: { amount: number }[]) {
   pendingItems = items;

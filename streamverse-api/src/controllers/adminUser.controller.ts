@@ -1,5 +1,9 @@
 import type { Request, Response } from "express";
 import { prisma } from "../config/database";
+import * as subscriptionRepository from "../repositories/subscription.repository";
+import { listMyPayments } from "../services/billing/payment.service";
+import { listHistory } from "../services/history.service";
+import { listLibrary } from "../services/library.service";
 import { sendPaginated, sendSuccess } from "../utils/apiResponse";
 import { AppError, NotFoundError } from "../utils/errors";
 
@@ -53,6 +57,32 @@ export async function getOne(req: Request, res: Response) {
   const user = await prisma.user.findUnique({ where: { id: req.params["id"]! }, include: WITH_SUB });
   if (!user || user.deletedAt) throw new NotFoundError("User not found");
   sendSuccess(res, serialize(user), "User");
+}
+
+/** The admin's view of one customer: their real subscription, billing, library and viewing history (nothing generated). */
+export async function activity(req: Request, res: Response) {
+  const id = req.params["id"]!;
+  const user = await prisma.user.findUnique({ where: { id } });
+  if (!user || user.deletedAt) throw new NotFoundError("User not found");
+  const [sub, payments, library, history] = await Promise.all([subscriptionRepository.findByUserId(id), listMyPayments(id, 1, 10), listLibrary(id), listHistory(id, {}, 1, 10)]);
+  sendSuccess(
+    res,
+    {
+      subscription: sub
+        ? {
+            status: sub.status,
+            plan: sub.plan ? { id: sub.plan.id, name: sub.plan.name, priceAmount: sub.plan.priceAmount, currency: sub.plan.currency, billingInterval: sub.plan.billingInterval } : null,
+            currentPeriodStart: sub.currentPeriodStart?.toISOString() ?? null,
+            currentPeriodEnd: sub.currentPeriodEnd?.toISOString() ?? null,
+            cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
+          }
+        : null,
+      payments: payments.rows,
+      library: library.slice(0, 10).map((c) => ({ id: c.id, title: c.title, type: c.type, at: c.addedAt })),
+      history: history.rows.map((c) => ({ id: c.id, title: c.title, type: c.type, activityType: c.activityType, at: c.lastAccessedAt })),
+    },
+    "User activity",
+  );
 }
 
 export async function update(req: Request, res: Response) {

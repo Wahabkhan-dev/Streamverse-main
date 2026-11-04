@@ -1,5 +1,6 @@
 import { api } from "./client";
 import type {
+  ApiAdminUserActivity,
   ApiDashboardSummary,
   ApiPlatformStatus,
   ApiRevenueSeries,
@@ -226,6 +227,7 @@ export const adminUsersApi = {
   list: (p?: AdminListParams) =>
     api.get<ApiResponse<ApiAdminUser[]> & { meta: ApiMeta }>(`/admin/users${toQuery(p)}`),
   get: (id: string) => api.get<ApiResponse<ApiAdminUser>>(`/admin/users/${id}`),
+  activity: (id: string) => api.get<ApiResponse<ApiAdminUserActivity>>(`/admin/users/${id}/activity`),
   update: (id: string, data: Partial<ApiAdminUser>) =>
     api.patch<ApiResponse<ApiAdminUser>>(`/admin/users/${id}`, data),
   suspend: (id: string) =>

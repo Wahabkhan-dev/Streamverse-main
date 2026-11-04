@@ -25,6 +25,7 @@ import {
   useResumeSubscriptionMutation,
   useChangePlanMutation,
   useAccountCreditQuery,
+  useRetryPaymentMutation,
   useCheckoutMutation,
   SUBSCRIPTION_QUERY_KEY,
   INVOICES_QUERY_KEY,
@@ -76,13 +77,15 @@ function apiInvoiceToLocal(inv: ApiInvoice): Bill {
   return { id: inv.invoiceReference ?? inv.id, date: inv.date, plan, amount: (inv.amount ?? 0) / 100, status };
 }
 
-type LiveState = "none" | "incomplete" | "ok";
+type LiveState = "none" | "incomplete" | "ended" | "ok";
 
 /** The server's subscription status in the page's vocabulary. "none" = never subscribed, "incomplete" = started paying, never finished. */
 function liveStateOf(status: string | null | undefined): LiveState {
   const s = String(status ?? "").toLowerCase();
   if (!s) return "none";
   if (s === "incomplete" || s === "incomplete_expired") return "incomplete";
+  // the subscription has actually ended (cancelled and the paid period is over, or unpaid): the customer starts a new one
+  if (s === "canceled" || s === "cancelled" || s === "unpaid" || s === "expired") return "ended";
   return "ok";
 }
 
@@ -98,7 +101,7 @@ function pageStatus(status: string | null | undefined): SubscriptionStatus {
  * A customer with no paid plan: either never subscribed, or they started paying and the payment link or form expired
  * before they finished. Every click here makes a brand-new Stripe checkout link, so an old/expired link never blocks them.
  */
-function GetPlanPanel({ state, plans, currentPlanId }: { state: "none" | "incomplete"; plans: ApiPlan[]; currentPlanId?: string }) {
+function GetPlanPanel({ state, plans, currentPlanId }: { state: "none" | "incomplete" | "ended"; plans: ApiPlan[]; currentPlanId?: string }) {
   const checkout = useCheckoutMutation();
   const [pending, setPending] = useState<string | null>(null);
   const go = (planId: string) => {
@@ -110,19 +113,21 @@ function GetPlanPanel({ state, plans, currentPlanId }: { state: "none" | "incomp
       },
     });
   };
-  const resume = state === "incomplete" ? plans.find((p) => p.id === currentPlanId) : undefined;
+  const resume = state !== "none" ? plans.find((p) => p.id === currentPlanId) : undefined;
   return (
     <Panel className="mt-6">
-      <PanelHeader title={state === "incomplete" ? "Finish your payment" : "Choose a plan"} />
+      <PanelHeader title={state === "incomplete" ? "Finish your payment" : state === "ended" ? "Renew your plan" : "Choose a plan"} />
       <div className="space-y-4 p-5">
         <p className="text-sm text-soft">
           {state === "incomplete"
             ? "Your payment wasn't completed, or the payment link expired. Get a fresh link and pay to start your membership."
-            : "You don't have a plan yet. Pick one to start watching, reading and listening."}
+            : state === "ended"
+              ? "Your plan has ended. Pick a plan to start again; you'll pay on Stripe's secure page."
+              : "You don't have a plan yet. Pick one to start watching, reading and listening."}
         </p>
         {resume && (
           <Btn variant="primary" disabled={checkout.isPending} onClick={() => go(resume.id)}>
-            {pending === resume.id && checkout.isPending ? "Opening payment…" : `Get a new payment link for ${resume.name}`}
+            {pending === resume.id && checkout.isPending ? "Opening payment…" : state === "ended" ? `Renew ${resume.name}` : `Get a new payment link for ${resume.name}`}
           </Btn>
         )}
         <div className="grid gap-3 sm:grid-cols-3">
@@ -133,7 +138,7 @@ function GetPlanPanel({ state, plans, currentPlanId }: { state: "none" | "incomp
                 {money(planPriceDollars(p))} / {perLabel(planInterval(p))}
               </div>
               <Btn className="mt-3 w-full" disabled={checkout.isPending} onClick={() => go(p.id)}>
-                {pending === p.id && checkout.isPending ? "Opening payment…" : state === "incomplete" && p.id === currentPlanId ? "Pay now" : "Subscribe"}
+                {pending === p.id && checkout.isPending ? "Opening payment…" : state === "incomplete" && p.id === currentPlanId ? "Pay now" : state === "ended" ? "Choose" : "Subscribe"}
               </Btn>
             </div>
           ))}
@@ -158,6 +163,7 @@ function SubscriptionPage() {
   const apiInvoicesQuery = useApiInvoicesQuery();
   const apiPlansQuery = useApiPlansQuery();
   const creditQuery = useAccountCreditQuery();
+  const retryPayment = useRetryPaymentMutation();
   const cancelMutation = useCancelSubscriptionMutation();
   const resumeMutation = useResumeSubscriptionMutation();
   const changePlanMutation = useChangePlanMutation();
@@ -193,7 +199,7 @@ function SubscriptionPage() {
       plan: s.plan?.name ?? "No plan",
       price: s.plan ? planPriceDollars(s.plan) : 0,
       interval: (s.plan ? planInterval(s.plan) : "Monthly") as "Monthly" | "Yearly",
-      status: pageStatus(s.status),
+      status: s.cancelAtPeriodEnd && pageStatus(s.status) === "active" ? "canceled" : pageStatus(s.status),
       startedOn: s.currentPeriodStart ?? "",
       renewsOn: s.currentPeriodEnd ?? "",
       pendingChange: s.pendingPlanChange
@@ -308,7 +314,13 @@ function SubscriptionPage() {
       {sub.status === "past_due" && (
         <div className="mt-6 rounded-xl border border-primary/40 bg-primary/5">
           <PaymentFailed onUpdate={() => navigate({ to: "/payment-methods" })} onRetry={() => {
-            if (!DEMO_MODE) { toast.info("Retry is handled via Stripe. Please update your payment method."); return; }
+            if (!DEMO_MODE) {
+              retryPayment.mutate(undefined, {
+                onSuccess: () => toast.success("Payment received. Your plan is active again."),
+                onError: (err) => toast.error(isApiError(err) ? err.message : "We couldn't retry the payment. Please update your payment method."),
+              });
+              return;
+            }
             setStatus("active"); toast.success("Payment retried (demo)");
           }} />
         </div>
