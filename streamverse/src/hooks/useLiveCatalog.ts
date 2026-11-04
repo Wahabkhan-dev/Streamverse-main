@@ -12,11 +12,12 @@ const ALL = { page: 1, limit: 100 } as const;
  * live mode. Anything that links to a title (up next, search suggestions, pickers) must use this rather than
  * `useCatalog()`, which only ever holds the demo titles, so a link built from it opens a page that 404s in live mode.
  */
-export function useLiveCatalog() {
+export function useLiveCatalog(enabled = true) {
   const demo = useCatalog();
-  const movies = useApiMoviesQuery(ALL);
-  const ebooks = useApiEbooksQuery(ALL);
-  const audiobooks = useApiAudiobooksQuery(ALL);
+  // `enabled: false` waits until it is needed (the header search box is on every page, but only used when opened)
+  const movies = useApiMoviesQuery(ALL, enabled);
+  const ebooks = useApiEbooksQuery(ALL, enabled);
+  const audiobooks = useApiAudiobooksQuery(ALL, enabled);
   const live = useMemo(
     () =>
       buildCatalog(

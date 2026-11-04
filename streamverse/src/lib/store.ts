@@ -121,6 +121,8 @@ export interface Collection {
   description: string;
   cover: string;
   items: ItemRef[];
+  /** live list cards: the number of titles, when the items themselves were not sent */
+  itemCount?: number;
   status: "Published" | "Draft";
 }
 

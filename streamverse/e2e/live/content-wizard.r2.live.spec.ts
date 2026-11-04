@@ -50,7 +50,7 @@ test("MOVIE: the original stepper creates, uploads MP4 + trailer + artwork to R2
   await page.locator("#shortDesc").fill("A short description.");
   await page.locator("#fullDesc").fill("A longer synopsis for the wizard test.");
   await page.locator("#releaseDate").fill("2025-02-02");
-  await page.locator("#runtime").fill("1");
+  // runtime is read from the movie file, never typed
   await page.locator("#genre").selectOption({ index: 1 });
   await next(page);
 

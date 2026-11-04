@@ -67,7 +67,8 @@ test("Media Library lists every existing asset, filters, searches, sorts, pages 
   await page.getByTestId("clear-filters").click();
   await page.getByTestId("filter-attached").selectOption("unattached");
   await expect(page).toHaveURL(/attached=unattached/);
-  await expect(page.getByTestId("media-item")).toHaveCount(before.unattached);
+  // one page holds 24 files; files left by earlier runs can push the unused count past a page
+  await expect(page.getByTestId("media-item")).toHaveCount(Math.min(before.unattached, 24));
   await page.getByTestId("clear-filters").click();
 
   // search by content title (resolved on the server through the title that uses the file)

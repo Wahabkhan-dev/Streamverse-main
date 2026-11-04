@@ -43,7 +43,7 @@ function CollectionsAdmin() {
       description: c.description ?? "",
       cover: c.cover ?? PLACEHOLDER_IMAGE,
       status: c.status,
-      items: c.items.map((it) => ({ type: it.contentType === "movie" ? "Movie" : it.contentType === "ebook" ? "eBook" : "Audiobook", slug: it.movie?.slug ?? it.ebook?.slug ?? it.audiobook?.slug ?? "" } as ItemRef)),
+      items: (c.items ?? []).map((it) => ({ type: it.contentType === "movie" ? "Movie" : it.contentType === "ebook" ? "eBook" : "Audiobook", slug: it.movie?.slug ?? it.ebook?.slug ?? it.audiobook?.slug ?? "" } as ItemRef)),
     }));
   }, [apiQuery.data]);
 

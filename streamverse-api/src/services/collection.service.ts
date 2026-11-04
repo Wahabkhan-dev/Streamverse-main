@@ -10,6 +10,9 @@ import { recordAudit } from "./auditLog.service";
 import { toMixedCards } from "./mixedContent.service";
 import { assertAssetRef } from "./mediaAsset.service";
 import { isCustomerVisible } from "./contentAccess.service";
+import { signAssetsById } from "./assetUrl.service";
+import { analyticsCache, publicCacheWindow } from "../utils/analyticsCache";
+import { HOMEPAGE_CACHE_PREFIX } from "./homepage.service";
 
 const NO_ACTOR: AuditContext = { userId: undefined, ip: undefined, userAgent: undefined, requestId: undefined };
 
@@ -91,10 +94,26 @@ export async function reorderItems(collectionId: string, items: ReorderCollectio
 
 /* ---------------------------------------------------------------- customer reads (Section 17/18) */
 
-export async function listPublishedCollections(page: number, limit: number) {
+/** Public and identical for every visitor, so cached briefly like the catalog lists; any admin write drops it (see admin.routes.ts). */
+export function listPublishedCollections(page: number, limit: number) {
+  const { ttl, stale } = publicCacheWindow();
+  return analyticsCache.getOrSet(`${HOMEPAGE_CACHE_PREFIX}collections:${page}:${limit}`, () => computePublishedCollections(page, limit), ttl, stale);
+}
+
+async function computePublishedCollections(page: number, limit: number) {
   const { skip, take } = toSkipTake(page, limit);
   const { rows, total } = await collectionRepository.listPublished(skip, take);
-  return { rows, pagination: buildPagination(total, page, limit) };
+  // each card shows how many titles a customer can open and a picture: the banner, else the first title's artwork
+  const banners = await signAssetsById(rows.map((r) => r.bannerAssetId));
+  const cards = await Promise.all(
+    rows.map(async (r) => {
+      const visible = (await collectionRepository.itemsWithContent(r.id)).map((i) => i.content).filter((c) => isCustomerVisible(c));
+      const banner = r.bannerAssetId ? (banners.get(r.bannerAssetId) ?? null) : null;
+      const image = banner ?? (visible.length ? ((await toMixedCards(visible.slice(0, 1)))[0]?.image ?? null) : null);
+      return { ...r, itemCount: visible.length, image };
+    }),
+  );
+  return { rows: cards, pagination: buildPagination(total, page, limit) };
 }
 
 /**

@@ -101,7 +101,7 @@ function apiCollectionToLocal(c: ApiCollection): Collection {
     description: c.description,
     cover: c.cover ?? "",
     status: c.status,
-    items: c.items.map((item) => ({
+    items: (c.items ?? []).map((item) => ({
       type: item.contentType === "movie" ? "Movie" : item.contentType === "ebook" ? "eBook" : "Audiobook",
       slug: item.movie?.slug ?? item.ebook?.slug ?? item.audiobook?.slug ?? "",
       id: item.contentId,

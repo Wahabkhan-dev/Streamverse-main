@@ -5,6 +5,8 @@ import * as searchRepository from "../repositories/search.repository";
 import { buildPagination, toSkipTake } from "../utils/pagination";
 import { toMixedCards } from "./mixedContent.service";
 import type { SearchQuery } from "../validators/search.validator";
+import { analyticsCache, publicCacheWindow } from "../utils/analyticsCache";
+import { HOMEPAGE_CACHE_PREFIX } from "./homepage.service";
 
 const TYPE_MAP: Record<string, ContentType | undefined> = { ALL: undefined, MOVIES: "MOVIE", EBOOKS: "EBOOK", AUDIOBOOKS: "AUDIOBOOK" };
 
@@ -24,8 +26,16 @@ function groupPeople(matches: searchRepository.PersonMatch[]) {
   return [...byKey.values()].sort((a, b) => b.titles.length - a.titles.length || a.name.localeCompare(b.name));
 }
 
-/** Section 20/21: the one search endpoint — content types + people, over the same customer-visible data every other read uses. */
-export async function search(query: SearchQuery) {
+/**
+ * Section 20/21: the one search endpoint — content types + people, over the same customer-visible data every other read uses.
+ * Results are the same for everyone, so a popular search is cached like the lists (admin writes clear it).
+ */
+export function search(query: SearchQuery) {
+  const { ttl, stale } = publicCacheWindow();
+  return analyticsCache.getOrSet(`${HOMEPAGE_CACHE_PREFIX}search:${JSON.stringify(query)}`, () => computeSearch(query), ttl, stale);
+}
+
+async function computeSearch(query: SearchQuery) {
   const { skip, take } = toSkipTake(query.page, query.limit);
 
   if (query.type === "PEOPLE") {

@@ -14,16 +14,18 @@ const settle = async (page: Page) => {
 
 test.describe("customer pages: no failing API calls, no duplicates, bounded request counts", () => {
   test.use({ storageState: USER_STATE });
+  // every signed-in page also loads who is signed in, their subscription, genres and the public site settings (4 calls);
+  // browse pages add their page banner. The header search box loads titles only when it is opened.
   const pages: Array<{ name: string; path: string; maxCalls: number }> = [
     { name: "Homepage", path: "/", maxCalls: 8 },
-    { name: "Movies", path: "/movies", maxCalls: 3 },
-    { name: "eBooks", path: "/ebooks", maxCalls: 3 },
-    { name: "Audiobooks", path: "/audiobooks", maxCalls: 3 },
+    { name: "Movies", path: "/movies", maxCalls: 6 },
+    { name: "eBooks", path: "/ebooks", maxCalls: 6 },
+    { name: "Audiobooks", path: "/audiobooks", maxCalls: 6 },
     { name: "Movie detail", path: `/movies/${seed.movie.slug}`, maxCalls: 6 },
-    { name: "Search", path: "/search", maxCalls: 5 },
-    { name: "My List", path: "/my-list", maxCalls: 4 },
-    { name: "My Library", path: "/my-library", maxCalls: 4 },
-    { name: "History", path: "/history", maxCalls: 4 },
+    { name: "Search", path: "/search", maxCalls: 7 },
+    { name: "My List", path: "/my-list", maxCalls: 5 },
+    { name: "My Library", path: "/my-library", maxCalls: 5 },
+    { name: "History", path: "/history", maxCalls: 5 },
   ];
   for (const p of pages) {
     test(`${p.name}`, async ({ page }) => {
@@ -41,12 +43,14 @@ test.describe("customer pages: no failing API calls, no duplicates, bounded requ
 
 test.describe("admin pages: no failing API calls, no duplicates", () => {
   test.use({ storageState: ADMIN_STATE });
+  // admin pages also load the signed-in admin, their subscription and the admin settings; the Homepage CMS loads the
+  // published titles its section pickers choose from
   const pages: Array<{ name: string; path: string; maxCalls: number }> = [
-    { name: "Dashboard", path: "/admin/dashboard", maxCalls: 8 },
-    { name: "Movies", path: "/admin/movies", maxCalls: 3 },
-    { name: "eBooks", path: "/admin/ebooks", maxCalls: 3 },
-    { name: "Audiobooks", path: "/admin/audiobooks", maxCalls: 3 },
-    { name: "Homepage CMS", path: "/admin/homepage", maxCalls: 4 },
+    { name: "Dashboard", path: "/admin/dashboard", maxCalls: 11 },
+    { name: "Movies", path: "/admin/movies", maxCalls: 5 },
+    { name: "eBooks", path: "/admin/ebooks", maxCalls: 5 },
+    { name: "Audiobooks", path: "/admin/audiobooks", maxCalls: 5 },
+    { name: "Homepage CMS", path: "/admin/homepage", maxCalls: 9 },
     { name: "Users", path: "/admin/users", maxCalls: 4 },
     { name: "Settings", path: "/admin/settings", maxCalls: 5 },
   ];

@@ -272,7 +272,8 @@ export const EpubReader = forwardRef<EpubReaderHandle, EpubReaderProps>(function
     book.ready
       .then(() => {
         setLoading(false);
-        return book.locations.generate(1024);
+        // ~1600 characters per position: about one printed page, so a page turn usually moves the page number by one
+        return book.locations.generate(1600);
       })
       .then(() => {
         locationsReadyRef.current = true;

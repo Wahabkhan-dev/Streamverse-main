@@ -155,7 +155,7 @@ export function apiBookToLocal(b: ApiBook): Book {
 
 /** Convert an ApiCollection to the local Collection shape expected by UI components. */
 export function apiCollectionToLocal(c: ApiCollection): Collection {
-  const items: ItemRef[] = c.items
+  const items: ItemRef[] = [...(c.items ?? [])]
     .sort((a, b) => a.position - b.position)
     .map((item) => {
       const slug =
@@ -171,15 +171,16 @@ export function apiCollectionToLocal(c: ApiCollection): Collection {
     slug: c.slug,
     name: c.name,
     description: c.description,
-    cover: c.cover ?? "",
+    cover: c.cover ?? c.image ?? placeholder,
     status: c.status,
     items,
+    ...(c.itemCount !== undefined ? { itemCount: c.itemCount } : {}),
   };
 }
 
 /** Convert an ApiCollection's items to Item[] directly from embedded objects (avoids catalog lookup). */
 export function apiCollectionToItems(c: ApiCollection): Item[] {
-  return c.items
+  return [...(c.items ?? [])]
     .sort((a, b) => a.position - b.position)
     .flatMap((item) => {
       if (item.contentType === "movie" && item.movie) {

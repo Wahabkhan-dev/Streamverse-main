@@ -323,7 +323,7 @@ export function CollectionCard({ c, fixed = true }: { c: Collection; fixed?: boo
       <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/40 to-transparent" />
       <div className="absolute inset-x-0 bottom-0 border-l-2 border-primary p-3">
         <div className="font-bold">{c.name}</div>
-        <div className="text-xs text-soft">{c.items.length} titles</div>
+        <div className="text-xs text-soft">{c.itemCount ?? c.items.length} titles</div>
       </div>
     </Link>
   );

@@ -7,7 +7,7 @@ export async function list(req: Request, res: Response) {
   const { rows, pagination } = await collectionService.listPublishedCollections(page, limit);
   sendPaginated(
     res,
-    rows.map((c) => ({ id: c.id, name: c.name, slug: c.slug, description: c.description, bannerAssetId: c.bannerAssetId })),
+    rows.map((c) => ({ id: c.id, name: c.name, slug: c.slug, description: c.description, bannerAssetId: c.bannerAssetId, itemCount: c.itemCount, image: c.image })),
     pagination,
   );
 }

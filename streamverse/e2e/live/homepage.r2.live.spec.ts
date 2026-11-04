@@ -6,14 +6,14 @@ import { ADMIN_STATE, FIXTURES, USER_STATE } from "./lib/env";
 import { track } from "./lib/net";
 
 /**
- * Homepage loading (shell first, two priority sections, the rest lazily) and the Banner -> Homepage section flow, in a real
+ * Homepage loading (shell first, then every section in one request) and the Banner -> Homepage section flow, in a real
  * browser against the real API, MySQL and R2. Runs in the no-CORS project because the banner picture is uploaded from the
  * browser-side helper straight to the R2 bucket (bucket CORS is BLOCKED EXTERNAL; see cors.live.spec.ts).
  */
 const admin = () => asAdmin();
 const stamp = Date.now().toString(36);
 
-test("the homepage paints its shell at once, loads the first two sections with priority and the rest after", async ({
+test("the homepage paints its shell at once, then loads every section in one request", async ({
   browser,
 }) => {
   const ctx = await browser.newContext({ storageState: USER_STATE });
@@ -36,12 +36,10 @@ test("the homepage paints its shell at once, loads the first two sections with p
   await expect(page.locator("footer")).toBeAttached();
 
   await expect(page.locator("[aria-busy=true]")).toBeHidden({ timeout: 15_000 });
-  await expect.poll(() => homepageCalls.length, { timeout: 15_000 }).toBeGreaterThanOrEqual(2);
-  expect(homepageCalls[0], "first request is the two priority sections").toContain(
-    "offset=0&limit=2",
-  );
-  expect(homepageCalls[1], "the rest is a separate, later request").toContain("offset=2");
-  expect(homepageCalls.length, "each slice is requested exactly once").toBe(2);
+  // all sections arrive together (one request), so the page never fills in piece by piece
+  await expect.poll(() => homepageCalls.length, { timeout: 15_000 }).toBeGreaterThanOrEqual(1);
+  expect(homepageCalls[0], "one request starting at the first section").toContain("offset=0");
+  expect(homepageCalls.length, "the homepage is requested exactly once").toBe(1);
   // the page does not re-download whole catalogs to build itself
   expect(net.calls.filter((c) => /^\/(movies|ebooks|audiobooks)$/.test(c.path)).length).toBe(0);
   expect(net.bad()).toEqual([]);
@@ -122,8 +120,7 @@ test("a Banner is created once, then placed on the homepage by a section, and it
     const userCtx = await browser.newContext({ storageState: USER_STATE });
     const home = await userCtx.newPage();
     await home.goto("/");
-    // it is the last section, so it is lazy: it only appears once the reader scrolls toward it
-    await expect(home.getByText(title)).toHaveCount(0);
+    // every section arrives in the one homepage request; it is the last one, so scroll down to it
     await expect(async () => {
       await home.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
       await expect(home.getByText(title)).toBeVisible({ timeout: 1500 });

@@ -1,6 +1,7 @@
 import type { Request, RequestHandler } from "express";
-import { rateLimit } from "express-rate-limit";
+import { ipKeyGenerator, rateLimit } from "express-rate-limit";
 import { env } from "../config/env";
+import { verifyAccessToken } from "../services/token.service";
 import { normalizeEmail } from "../utils/email";
 import { ERROR_CODES } from "../constants/errors";
 import { sendError } from "../utils/apiResponse";
@@ -41,7 +42,24 @@ export function createRateLimiter(policy: Policy, keyBy?: (req: Request) => stri
   });
 }
 
-export const generalLimiter = () => createRateLimiter(RATE_POLICIES.general);
+/**
+ * Signed-in visitors get a bucket each: thousands of real people can share one address (mobile networks, offices, the host's
+ * own proxies), and one shared bucket would lock them all out together. Anyone else is keyed by address. Only the token's
+ * signature is checked here (no database work); a bad or expired token falls back to the address.
+ */
+const visitorKey = (req: Request) => {
+  const match = /^Bearer (.+)$/.exec(req.get("authorization") ?? "");
+  if (match) {
+    try {
+      return `user:${verifyAccessToken(match[1]!).sub}`;
+    } catch {
+      /* keyed by address */
+    }
+  }
+  return ipKeyGenerator(req.ip ?? "");
+};
+
+export const generalLimiter = () => createRateLimiter(RATE_POLICIES.general, visitorKey);
 // Keyed by email+IP, not IP alone: one person mistyping a password repeatedly doesn't lock out everyone
 // on the same NAT/office network, but still can't be brute-forced against a single account from many IPs.
 /** IP + normalized email, so case/whitespace variants of one address share a bucket. */
@@ -53,7 +71,7 @@ export const forgotPasswordLimiter = () => createRateLimiter(RATE_POLICIES.passw
 // one token is limited without one shared bucket collapsing every unrelated reset in the same window.
 export const resetPasswordLimiter = () => createRateLimiter(RATE_POLICIES.passwordReset, (req) => `${req.ip}:${String((req.body as { token?: string })?.token ?? "")}`);
 export const refreshLimiter = () => createRateLimiter(RATE_POLICIES.refresh);
-export const searchLimiter = () => createRateLimiter(RATE_POLICIES.search);
+export const searchLimiter = () => createRateLimiter(RATE_POLICIES.search, visitorKey);
 export const uploadAuthorizationLimiter = () => createRateLimiter(RATE_POLICIES.uploadAuthorization);
 export const billingWriteLimiter = () => createRateLimiter(RATE_POLICIES.billingWrite);
 export const registerLimiter = () => createRateLimiter(RATE_POLICIES.register);

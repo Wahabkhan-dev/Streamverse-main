@@ -77,10 +77,10 @@ export function evaluateAccess(content: AccessibleContent, user: AccessUser | un
 /** `req.auth?.userId` -> the fields evaluateAccess needs, or undefined for an anonymous visitor. */
 export async function loadAccessUser(userId: string | undefined): Promise<AccessUser | undefined> {
   if (!userId) return undefined;
-  const user = await userRepository.findById(userId);
+  // asked together: each one is a round trip to the database, so in a row they add up on every title page
+  const [user, ageVerif, hasActiveSubscription] = await Promise.all([userRepository.findById(userId), ageVerificationRepository.findByUserId(userId), hasActiveAccess(userId)]);
   if (!user) return undefined;
-  const ageVerif = await ageVerificationRepository.findByUserId(userId);
-  return { country: user.country, hasActiveSubscription: await hasActiveAccess(userId), ageVerified: ageVerif !== null && ageVerif !== undefined };
+  return { country: user.country, hasActiveSubscription, ageVerified: ageVerif !== null && ageVerif !== undefined };
 }
 
 /** Section 59: a reliable country needs a signed-in user with one set — no geolocation is invented here. */

@@ -20,6 +20,8 @@ const BEARER = /^Bearer (.+)$/;
  */
 export const requireAuth: RequestHandler = (req: Request, _res: Response, next: NextFunction) => {
   void (async () => {
+    // optionalAuth already ran this same check on this same request's token (the app mounts it ahead of every route)
+    if (req.auth) return;
     const header = req.get("authorization");
     const match = header ? BEARER.exec(header) : null;
     if (!match) throw new UnauthorizedError("Authentication required");

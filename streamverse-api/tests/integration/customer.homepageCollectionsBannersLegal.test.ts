@@ -70,6 +70,8 @@ describe("Collections (Section 17/18)", () => {
     const names = list.body.data.map((c: { name: string }) => c.name);
     expect(names).toContain("Staff Picks");
     expect(names).not.toContain("Still Drafting");
+    // list cards count only the titles a customer can open
+    expect(list.body.data.find((c: { name: string }) => c.name === "Staff Picks").itemCount).toBe(1);
 
     const detail = await request(app).get(`/api/v1/collections/${published.slug}`);
     expect(detail.status).toBe(200);

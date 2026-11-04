@@ -16,7 +16,7 @@ test("the trailer and teaser pickers offer only their own videos and say so", as
   await page.locator("#shortDesc").fill("A short description.");
   await page.locator("#fullDesc").fill("A longer synopsis for the picker test.");
   await page.locator("#releaseDate").fill("2025-02-02");
-  await page.locator("#runtime").fill("1");
+  // runtime is read from the movie file, never typed
   await page.locator("#genre").selectOption({ index: 1 });
   await next(page);
   await chooseLanguage(page, "English");

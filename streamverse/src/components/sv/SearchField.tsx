@@ -20,10 +20,13 @@ const TypeGlyph = ({ item }: { item: Item }) => {
  */
 export function SearchField({ value, onChange, onSubmit, className, inputClassName, autoFocus, id = "global-search", label = "Search movies, books, audiobooks" }: { value: string; onChange: (v: string) => void; onSubmit?: (q: string) => void; className?: string; inputClassName?: string; autoFocus?: boolean; id?: string; label?: string }) {
   const navigate = useNavigate();
-  const cat = useLiveCatalog();
+  const [open, setOpen] = useState(false);
+  // the title lists load the first time the box is opened, not on every page that shows the header
+  const [wanted, setWanted] = useState(false);
+  if (open && !wanted) setWanted(true);
+  const cat = useLiveCatalog(wanted || !!value);
   const genres = useGenreCatalog();
   const recent = useRecentSearches();
-  const [open, setOpen] = useState(false);
   const closeTimer = useRef<number>(undefined);
   const people = useMemo(() => peopleOf(cat.listed), [cat.listed]);
   const sug = useMemo(() => suggest(cat.listed, people, genres.map((g) => g.name), value), [cat.listed, people, genres, value]);

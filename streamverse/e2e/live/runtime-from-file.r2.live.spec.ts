@@ -21,6 +21,7 @@ test("the runtime is filled in from the movie file", async ({ page }) => {
   await page.getByLabel("Main Movie File file").setInputFiles(join(FIXTURES, "movie.mp4")); // a 4-second clip
   await ready(page, "Main Movie File");
   await page.getByRole("button", { name: /basic/i }).first().click();
-  await expect(page.locator("#runtime")).toHaveValue("1");
-  await expect(page.getByText("Shown to customers as")).toBeVisible();
+  // read-only, shown as customers see it
+  await expect(page.locator("#runtime")).toHaveValue("1m");
+  await expect(page.getByText("Read from the movie file. Upload a different file to change it.")).toBeVisible();
 });

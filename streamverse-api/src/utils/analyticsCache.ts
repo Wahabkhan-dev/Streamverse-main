@@ -19,6 +19,9 @@ interface CacheEntry<T> {
  *  - an expired-but-recent entry is served immediately while one background refresh replaces it
  *    (stale-while-revalidate), so visitors never wait for a rebuild once the cache has been filled.
  */
+/** Keeps memory bounded when many distinct keys arrive (every search typed is one): past this, the oldest entry goes. */
+const MAX_ENTRIES = 5000;
+
 class AnalyticsCache {
   private readonly store = new Map<string, CacheEntry<unknown>>();
   private readonly inflight = new Map<string, Promise<unknown>>();
@@ -36,6 +39,10 @@ class AnalyticsCache {
     if (ttlSeconds <= 0) return; // caching disabled
     const now = Date.now();
     const previous = this.store.get(key);
+    if (!previous && this.store.size >= MAX_ENTRIES) {
+      const oldest = this.store.keys().next().value;
+      if (oldest !== undefined) this.store.delete(oldest);
+    }
     this.store.set(key, {
       value,
       expiresAt: now + ttlSeconds * 1000,

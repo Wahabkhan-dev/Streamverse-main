@@ -143,47 +143,72 @@ type Visible = Parameters<typeof isCustomerVisible>[0] & { status: string };
 const visible = (content: Visible, adminPreview: boolean) => (adminPreview ? !content.deletedAt : isCustomerVisible(content));
 const previewOf = (content: Visible) => (isCustomerVisible(content) ? {} : { previewStatus: content.status });
 
-export async function getMovieBySlug(slug: string, userId: string | undefined, adminPreview = false) {
+/**
+ * The part of a detail page every visitor shares (the title, related titles, signed images), cached like the lists so a busy
+ * title page costs no database work; only the visitor's own access is worked out per request. Admin writes clear it. An admin
+ * preview (which may show a draft) is never cached.
+ */
+function sharedDetail<T>(key: string, adminPreview: boolean, compute: () => Promise<T>): Promise<T> {
+  if (adminPreview) return compute();
+  const { ttl, stale } = publicCacheWindow();
+  return analyticsCache.getOrSet(`${HOMEPAGE_CACHE_PREFIX}detail:${key}`, compute, ttl, stale);
+}
+
+async function movieShared(slug: string, adminPreview: boolean) {
   const row = await catalogRepository.findMovieBySlug(slug);
   if (!row || !visible(row.content, adminPreview)) throw new NotFoundError("Movie not found");
-  const [access, related, urls] = await Promise.all([
-    accessFor(row.content, userId),
+  const [related, urls] = await Promise.all([
     getRelatedContent("MOVIE", row.content.id),
     signAssetsById([row.posterAssetId, row.backdropAssetId, row.thumbnailAssetId]),
   ]);
+  return { row, related, urls };
+}
+
+export async function getMovieBySlug(slug: string, userId: string | undefined, adminPreview = false) {
+  const [{ row, related, urls }, user] = await Promise.all([sharedDetail(`movie:${slug}`, adminPreview, () => movieShared(slug, adminPreview)), loadAccessUser(userId)]);
+  const access = accessForUser(row.content, user);
   const image = (row.posterAssetId && urls.get(row.posterAssetId)) || null;
   const backdropImage = (row.backdropAssetId && urls.get(row.backdropAssetId)) || null;
   return { ...toMovieDetail(row, access), image, backdropImage, related, ...previewOf(row.content) };
 }
 
-export async function getEbookBySlug(slug: string, userId: string | undefined, adminPreview = false) {
+async function ebookShared(slug: string, adminPreview: boolean) {
   const row = await catalogRepository.findEbookBySlug(slug);
   if (!row || !visible(row.content, adminPreview)) throw new NotFoundError("eBook not found");
-  const [access, related, urls] = await Promise.all([
-    accessFor(row.content, userId),
-    getRelatedContent("EBOOK", row.content.id),
-    signAssetsById([row.frontCoverAssetId]),
-  ]);
+  const [related, urls] = await Promise.all([getRelatedContent("EBOOK", row.content.id), signAssetsById([row.frontCoverAssetId])]);
+  return { row, related, urls };
+}
+
+export async function getEbookBySlug(slug: string, userId: string | undefined, adminPreview = false) {
+  const [{ row, related, urls }, user] = await Promise.all([sharedDetail(`ebook:${slug}`, adminPreview, () => ebookShared(slug, adminPreview)), loadAccessUser(userId)]);
+  const access = accessForUser(row.content, user);
   const image = (row.frontCoverAssetId && urls.get(row.frontCoverAssetId)) || null;
   return { ...toEbookDetail(row, access), image, related, ...previewOf(row.content) };
 }
 
-export async function getAudiobookBySlug(slug: string, userId: string | undefined, adminPreview = false) {
+async function audiobookShared(slug: string, adminPreview: boolean) {
   const row = await catalogRepository.findAudiobookBySlug(slug);
   if (!row || !visible(row.content, adminPreview)) throw new NotFoundError("Audiobook not found");
-  const [access, related, urls] = await Promise.all([
-    accessFor(row.content, userId),
-    getRelatedContent("AUDIOBOOK", row.content.id),
-    signAssetsById([row.coverAssetId]),
-  ]);
+  const [related, urls] = await Promise.all([getRelatedContent("AUDIOBOOK", row.content.id), signAssetsById([row.coverAssetId])]);
+  return { row, related, urls };
+}
+
+export async function getAudiobookBySlug(slug: string, userId: string | undefined, adminPreview = false) {
+  const [{ row, related, urls }, user] = await Promise.all([sharedDetail(`audiobook:${slug}`, adminPreview, () => audiobookShared(slug, adminPreview)), loadAccessUser(userId)]);
+  const access = accessForUser(row.content, user);
   const image = (row.coverAssetId && urls.get(row.coverAssetId)) || null;
   return { ...toAudiobookDetail(row, access), image, related, ...previewOf(row.content) };
 }
 
-export async function accessFor(content: Parameters<typeof evaluateAccess>[0] & { territories?: { countryCode: string }[] }, userId: string | undefined) {
-  const user: AccessUser | undefined = await loadAccessUser(userId);
+type AccessContent = Parameters<typeof evaluateAccess>[0] & { territories?: { countryCode: string }[] };
+
+function accessForUser(content: AccessContent, user: AccessUser | undefined) {
   const countryCodes = content.territories?.map((t) => t.countryCode) ?? [];
   return evaluateAccess(content, user, countryCodes);
+}
+
+export async function accessFor(content: AccessContent, userId: string | undefined) {
+  return accessForUser(content, await loadAccessUser(userId));
 }
 
 export { signAssetsById };

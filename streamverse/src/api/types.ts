@@ -322,7 +322,10 @@ export interface ApiCollection {
   description: string;
   cover?: string;
   status: "Published" | "Draft";
-  items: ApiCollectionItem[];
+  /** only on a collection's own page; the list sends `itemCount` and `image` instead */
+  items?: ApiCollectionItem[];
+  itemCount?: number;
+  image?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -532,10 +535,10 @@ export interface ApiAdminUser {
   active: boolean;
 }
 
+/** One row of GET /admin/payments, as the server sends it (amounts in cents, status in capitals). */
 export interface ApiAdminPayment {
   id: string;
   userId: string;
-/** One row of GET /admin/payments, as the server sends it (amounts in cents, status in capitals). */
   /** minor units (cents) */
   amount: number;
   currency: string;
@@ -655,12 +658,12 @@ export interface ApiPlanChangePreview {
   /** credit already on the account, and how much of it an upgrade uses */
   accountCredit: number;
   creditApplied: number;
-
-/** GET /admin/users/:id/activity: one customer's real subscription, billing, library and history. */
-export interface ApiAdminUserActivity {
   nextRenewal: { date: string; amount: number } | null;
   paymentMethod: { brand: string; last4: string } | null;
 }
+
+/** GET /admin/users/:id/activity: one customer's real subscription, billing, library and history. */
+export interface ApiAdminUserActivity {
   subscription: {
     status: string;
     plan: { id: string; name: string; priceAmount: number; currency: string; billingInterval: string } | null;
@@ -676,12 +679,12 @@ export interface ApiAdminUserActivity {
 /** GET /me/subscription/credit: credit that will be used up by the next invoice. Cents. */
 export interface ApiAccountCredit {
   amount: number;
-export interface ApiCheckoutSession {
-  checkoutUrl: string;
-  sessionId: string;
   currency: string;
 }
 
+export interface ApiCheckoutSession {
+  checkoutUrl: string;
+  sessionId: string;
 }
 
 export interface ApiBillingPortal {

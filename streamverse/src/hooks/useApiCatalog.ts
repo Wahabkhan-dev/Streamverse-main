@@ -9,14 +9,14 @@ export const HOMEPAGE_QUERY_KEY = ["catalog", "homepage"] as const;
 export const BANNERS_QUERY_KEY = ["catalog", "banners"] as const;
 export const COLLECTIONS_QUERY_KEY = ["catalog", "collections"] as const;
 
-export function useApiMoviesQuery(params?: CatalogListParams) {
+export function useApiMoviesQuery(params?: CatalogListParams, enabled = true) {
   return useQuery({
     queryKey: MOVIES_QUERY_KEY(params),
     queryFn: async () => {
       const res = await catalogApi.listMovies(params);
       return res;
     },
-    enabled: !DEMO_MODE,
+    enabled: !DEMO_MODE && enabled,
     staleTime: 5 * 60 * 1000,
   });
 }
@@ -33,14 +33,14 @@ export function useApiMovieQuery(idOrSlug: string) {
   });
 }
 
-export function useApiEbooksQuery(params?: CatalogListParams) {
+export function useApiEbooksQuery(params?: CatalogListParams, enabled = true) {
   return useQuery({
     queryKey: EBOOKS_QUERY_KEY(params),
     queryFn: async () => {
       const res = await catalogApi.listEbooks(params);
       return res;
     },
-    enabled: !DEMO_MODE,
+    enabled: !DEMO_MODE && enabled,
     staleTime: 5 * 60 * 1000,
   });
 }
@@ -57,14 +57,14 @@ export function useApiEbookQuery(idOrSlug: string) {
   });
 }
 
-export function useApiAudiobooksQuery(params?: CatalogListParams) {
+export function useApiAudiobooksQuery(params?: CatalogListParams, enabled = true) {
   return useQuery({
     queryKey: AUDIOBOOKS_QUERY_KEY(params),
     queryFn: async () => {
       const res = await catalogApi.listAudiobooks(params);
       return res;
     },
-    enabled: !DEMO_MODE,
+    enabled: !DEMO_MODE && enabled,
     staleTime: 5 * 60 * 1000,
   });
 }

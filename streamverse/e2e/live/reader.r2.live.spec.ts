@@ -42,7 +42,11 @@ test("EPUB: the uploaded file renders, navigation works, the CFI location is sav
       ).match(/(\d+)% read/)?.[1] ?? 0,
     );
   const next = page.getByRole("button", { name: "Next page" });
-  for (let i = 0; i < 4; i++) await next.click();
+  // the fixture is only two short chapters: page until the end (Next is disabled on the last page), at most 4 times
+  for (let i = 0; i < 4 && (await next.isEnabled()); i++) {
+    await next.click();
+    await page.waitForTimeout(300);
+  }
   await expect.poll(pct, { message: "reading progress advanced after paging" }).toBeGreaterThan(0);
   const pctBefore = await pct();
 
@@ -57,13 +61,15 @@ test("EPUB: the uploaded file renders, navigation works, the CFI location is sav
     )
     .toBe(true);
 
-  const saved = (
-    await asUser().get<{ location: string | null; percentage: number }>(
-      `/me/progress/ebook/${seed.ebookEpub.id}`,
-    )
-  ).data;
-  expect(saved.location, "an EPUB CFI is stored in MySQL").toBeTruthy();
-  expect(saved.percentage).toBeGreaterThan(0);
+  // the save made when the book opened (0%) can be the PUT seen above; wait for the one made on closing
+  const savedNow = async () =>
+    (
+      await asUser().get<{ location: string | null; percentage: number }>(
+        `/me/progress/ebook/${seed.ebookEpub.id}`,
+      )
+    ).data;
+  await expect.poll(async () => (await savedNow()).percentage, { timeout: 20_000 }).toBeGreaterThan(0);
+  expect((await savedNow()).location, "an EPUB CFI is stored in MySQL").toBeTruthy();
 
   await page.goto(`/read/${seed.ebookEpub.slug}`);
   await expect(body()).toContainText("E2E fixture paragraph", { timeout: 30_000 });
@@ -100,10 +106,13 @@ test("PDF: the uploaded file renders, page navigation works, the page is saved a
     )
     .toBe(true);
 
-  const saved = (
-    await asUser().get<{ page: number | null }>(`/me/progress/ebook/${seed.ebookPdf.id}`)
-  ).data;
-  expect(saved.page, "page number stored in MySQL").toBe(2);
+  // the save made when the book opened (page 1) can be the PUT seen above; wait for the one made on closing
+  await expect
+    .poll(
+      async () => (await asUser().get<{ page: number | null }>(`/me/progress/ebook/${seed.ebookPdf.id}`)).data.page,
+      { message: "page number stored in MySQL", timeout: 20_000 },
+    )
+    .toBe(2);
 
   await page.goto(`/read/${seed.ebookPdf.slug}`);
   await expect(page.locator("canvas").first()).toBeVisible({ timeout: 30_000 });
