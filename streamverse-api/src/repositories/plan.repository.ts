@@ -14,6 +14,8 @@ export const countSubscribers = (planId: string) => prisma.subscription.count({ 
 export const listAll = () => prisma.plan.findMany({ orderBy: { displayOrder: "asc" } });
 export const listActive = () => prisma.plan.findMany({ where: { active: true }, orderBy: { displayOrder: "asc" } });
 
+export const findByStripePriceId = (stripePriceId: string) => prisma.plan.findUnique({ where: { stripePriceId } });
+
 export const slugExists = async (slug: string, excludeId?: string) => (await prisma.plan.count({ where: { slug, ...(excludeId ? { id: { not: excludeId } } : {}) } })) > 0;
 export const stripePriceIdExists = async (stripePriceId: string, excludeId?: string) => (await prisma.plan.count({ where: { stripePriceId, ...(excludeId ? { id: { not: excludeId } } : {}) } })) > 0;
 

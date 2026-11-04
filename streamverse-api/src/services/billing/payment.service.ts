@@ -1,3 +1,4 @@
+import * as planRepository from "../../repositories/plan.repository";
 import type Stripe from "stripe";
 import * as paymentRepository from "../../repositories/payment.repository";
 import * as subscriptionRepository from "../../repositories/subscription.repository";
@@ -5,6 +6,23 @@ import * as userRepository from "../../repositories/user.repository";
 import { NotFoundError } from "../../utils/errors";
 import { buildPagination, toSkipTake } from "../../utils/pagination";
 import { createNotification } from "../notification.service";
+
+/**
+ * The plan an invoice was for: the plan whose price is on a charged line. (An upgrade invoice also has a negative "unused time" line
+ * for the old plan, so only positive lines count.) Stored with the payment so billing history keeps saying "Basic" for the Basic
+ * payment after the customer moves to Premium, instead of relabelling every past payment with their current plan.
+ */
+async function planNameOfInvoice(invoice: Stripe.Invoice): Promise<string | undefined> {
+  type Line = { amount?: number; price?: { id?: string } | null; pricing?: { price_details?: { price?: string } | null } | null };
+  const lines = (invoice as unknown as { lines?: { data?: Line[] } }).lines?.data ?? [];
+  for (const l of lines.filter((x) => (x.amount ?? 0) > 0)) {
+    const priceId = l.price?.id ?? l.pricing?.price_details?.price;
+    if (!priceId) continue;
+    const plan = await planRepository.findByStripePriceId(priceId);
+    if (plan) return plan.name;
+  }
+  return undefined;
+}
 
 /** Section 24/25/65: Payment rows are created ONLY from verified Stripe webhook data — never a frontend "it worked" claim. */
 export async function recordPaymentFromInvoice(invoice: Stripe.Invoice): Promise<void> {
@@ -26,7 +44,7 @@ export async function recordPaymentFromInvoice(invoice: Stripe.Invoice): Promise
     amount: invoice.amount_paid,
     currency: invoice.currency,
     status: "SUCCEEDED" as const,
-    description: invoice.description ?? undefined,
+    description: (await planNameOfInvoice(invoice)) ?? invoice.description ?? undefined,
     paidAt: (invoice as any).status_transitions?.paid_at
       ? new Date((invoice as any).status_transitions.paid_at * 1000)
       : new Date(),
@@ -60,7 +78,7 @@ export async function recordPaymentFailureFromInvoice(invoice: Stripe.Invoice): 
     amount: invoice.amount_due,
     currency: invoice.currency,
     status: "FAILED" as const,
-    description: invoice.description ?? undefined,
+    description: (await planNameOfInvoice(invoice)) ?? invoice.description ?? undefined,
   };
 
   if (existing) {
@@ -102,7 +120,8 @@ export async function listMyPayments(userId: string, page: number, limit: number
       amount: p.amount,
       currency: p.currency,
       status: p.status,
-      plan: p.subscription?.plan ? { id: p.subscription.plan.id, name: p.subscription.plan.name } : null,
+      // the plan this payment was for (kept when it was recorded), not whatever plan the customer is on now
+      plan: p.subscription?.plan || p.description ? { id: p.subscription?.plan?.id ?? "", name: p.description ?? p.subscription!.plan.name } : null,
       invoiceReference: p.stripeInvoiceId,
       refunded: p.refunds.length > 0,
     })),

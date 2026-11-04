@@ -12,6 +12,7 @@ import { prisma } from "../../src/config/database";
 import { createUser } from "../helpers/adminAuth";
 import { createTestPlan } from "../helpers/billing";
 import * as fakeStripe from "../fakes/stripeService.fake";
+import { recordPaymentFromInvoice } from "../../src/services/billing/payment.service";
 import { applyStripeSubscriptionSnapshot } from "../../src/services/billing/subscription.service.js";
 
 const db = prisma as unknown as { __reset: () => void };
@@ -224,6 +225,26 @@ describe("Change plan / upgrade-downgrade (Section 42/43/44/94/102)", () => {
     const { headers } = await userWithActiveSubscription(plan);
     const res = await request(app).post("/api/v1/me/subscription/change-plan").set(headers).send({ planId: plan.id, consent: true });
     expect(res.status).toBe(409);
+  });
+});
+
+describe("Billing history names the plan each payment was for", () => {
+  it("a Basic payment stays 'Basic' after the customer moves to Premium", async () => {
+    const basic = await createTestPlan({ name: "Basic", priceAmount: 499 });
+    const premium = await createTestPlan({ name: "Premium", priceAmount: 1499 });
+    const { headers, stripeSub } = await userWithActiveSubscription(basic);
+    const customer = stripeSub.customer as string;
+    const base = { customer, currency: "usd", parent: { subscription_details: { subscription: stripeSub.id } } };
+
+    await recordPaymentFromInvoice({ ...base, id: "in_first", amount_paid: 499, lines: { data: [{ amount: 499, price: { id: basic.stripePriceId } }] } } as never);
+    // the upgrade invoice: credit for the unused Basic time (negative) and the rest of Premium (positive)
+    await recordPaymentFromInvoice({ ...base, id: "in_upgrade", amount_paid: 1000, lines: { data: [{ amount: -499, price: { id: basic.stripePriceId } }, { amount: 1499, pricing: { price_details: { price: premium.stripePriceId } } }] } } as never);
+    await request(app).post("/api/v1/me/subscription/change-plan").set(headers).send({ planId: premium.id, consent: true }); // now on Premium
+
+    const rows = (await request(app).get("/api/v1/me/payments").set(headers)).body.data as { invoiceReference: string; plan: { name: string } }[];
+    const byInvoice = Object.fromEntries(rows.map((r) => [r.invoiceReference, r.plan.name]));
+    expect(byInvoice["in_first"]).toBe("Basic");
+    expect(byInvoice["in_upgrade"]).toBe("Premium");
   });
 });
 
