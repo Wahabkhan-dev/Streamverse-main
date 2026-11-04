@@ -71,15 +71,18 @@ export async function estimatePlanChange(userId: string, planId: string, now = n
 }
 
 /**
- * The customer's credit: Stripe's customer balance (what a past credit note or adjustment left) plus any credit still waiting on
- * the next invoice (a downgrade's unused-time credit). Both reduce what they pay next. Never negative.
+ * The customer's credit: Stripe's customer balance plus anything still waiting on the next invoice (a downgrade's unused-time
+ * credit, and the charges that go with quick back-and-forth plan changes), all netted together the way Stripe nets them on the
+ * next invoice. Never negative.
  */
 export async function getAccountCredit(userId: string) {
   const sub = await subscriptionRepository.findByUserId(userId);
   if (!sub) return { amount: 0, currency: "usd" };
   const customerId = await getOrCreateStripeCustomer(userId);
-  const [customer, pending] = await Promise.all([stripeService.retrieveCustomer(customerId), stripeService.listPendingInvoiceItems(customerId)]);
-  const balance = "balance" in customer && typeof customer.balance === "number" ? Math.max(0, -customer.balance) : 0;
-  const pendingCredit = pending.reduce((sum, item) => sum + (item.amount < 0 ? -item.amount : 0), 0);
-  return { amount: balance + pendingCredit, currency: sub.plan?.currency ?? "usd" };
+  const [customer, pendingItems] = await Promise.all([stripeService.retrieveCustomer(customerId), stripeService.listPendingInvoiceItems(customerId)]);
+  // Stripe's balance is negative when the customer is owed money, and pending invoice items are negative when they are credits
+  const balance = "balance" in customer && typeof customer.balance === "number" ? customer.balance : 0;
+  const pending = pendingItems.reduce((sum, item) => sum + item.amount, 0);
+  const net = Math.max(0, -(balance + pending));
+  return { amount: net, currency: sub.plan?.currency ?? "usd" };
 }

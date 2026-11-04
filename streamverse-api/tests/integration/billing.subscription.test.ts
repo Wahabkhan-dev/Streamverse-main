@@ -197,13 +197,15 @@ describe("Change plan / upgrade-downgrade (Section 42/43/44/94/102)", () => {
     expect(res.body.data.creditAdded).toBeGreaterThan(0);
   });
 
-  it("shows the customer's credit: pending credit on the next invoice plus any balance", async () => {
+  it("shows the customer's credit: pending items and balance netted together, never negative", async () => {
     const plan = await createTestPlan();
     const { headers } = await userWithActiveSubscription(plan);
     expect((await request(app).get("/api/v1/me/subscription/credit").set(headers)).body.data.amount).toBe(0);
-    fakeStripe.__setPendingItems([{ amount: -350 }, { amount: 100 }]);
+    fakeStripe.__setPendingItems([{ amount: -350 }, { amount: 100 }]); // a credit and a charge that Stripe nets on the next invoice
     const res = await request(app).get("/api/v1/me/subscription/credit").set(headers);
-    expect(res.body.data).toMatchObject({ amount: 350, currency: "usd" });
+    expect(res.body.data).toMatchObject({ amount: 250, currency: "usd" });
+    fakeStripe.__setPendingItems([{ amount: 500 }]); // only a charge waiting: no credit
+    expect((await request(app).get("/api/v1/me/subscription/credit").set(headers)).body.data.amount).toBe(0);
   });
 
   it("records the customer's consent and the figures they were shown in the audit log", async () => {
