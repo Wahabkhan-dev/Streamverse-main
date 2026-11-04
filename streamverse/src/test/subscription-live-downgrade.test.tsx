@@ -27,7 +27,7 @@ const paid = [{ id: "pay1", date: "2026-11-04T00:28:45.000Z", amount: 499, curre
 /** What the live API returns for a plan-change preview (cents). */
 const previews = {
   upgrade: { direction: "upgrade", estimate: true, currency: "usd", fromPlan: { id: "p2", name: "Standard", priceAmount: 999, currency: "usd", billingInterval: "MONTHLY" }, toPlan: { id: "p3", name: "Premium", priceAmount: 1499, currency: "usd", billingInterval: "MONTHLY" }, periodEnd: "2026-12-04T00:00:00.000Z", daysLeft: 20, creditForUnused: 660, newPlanForRest: 990, chargeToday: 330, creditAdded: 0, nextRenewal: { date: "2026-12-04T00:00:00.000Z", amount: 1499 }, paymentMethod: { brand: "visa", last4: "4242" } },
-  downgrade: { direction: "downgrade", estimate: true, currency: "usd", fromPlan: { id: "p2", name: "Standard", priceAmount: 999, currency: "usd", billingInterval: "MONTHLY" }, toPlan: { id: "p1", name: "Basic", priceAmount: 499, currency: "usd", billingInterval: "MONTHLY" }, periodEnd: "2026-12-04T00:00:00.000Z", daysLeft: 20, creditForUnused: 660, newPlanForRest: 330, chargeToday: 0, creditAdded: 330, nextRenewal: { date: "2026-12-04T00:00:00.000Z", amount: 499 }, paymentMethod: { brand: "visa", last4: "4242" } },
+  downgrade: { direction: "downgrade", estimate: true, currency: "usd", fromPlan: { id: "p2", name: "Standard", priceAmount: 999, currency: "usd", billingInterval: "MONTHLY" }, toPlan: { id: "p1", name: "Basic", priceAmount: 499, currency: "usd", billingInterval: "MONTHLY" }, periodEnd: "2026-12-04T00:00:00.000Z", daysLeft: 20, creditForUnused: 660, newPlanForRest: 330, chargeToday: 0, creditAdded: 330, accountCredit: 200, creditApplied: 0, nextRenewal: { date: "2026-12-04T00:00:00.000Z", amount: 499 }, paymentMethod: { brand: "visa", last4: "4242" } },
 };
 const card = { id: "pm1", brand: "visa", last4: "4242", expMonth: 12, expYear: 2030, isDefault: true };
 
@@ -103,6 +103,9 @@ describe("Downgrade dialog (live)", () => {
     expect(await within(down).findByText("Credit added to your account", {}, { timeout: 5000 })).toBeTruthy();
     expect(within(down).getAllByText("$3.30").length).toBeGreaterThan(0);
     expect(within(down).getByText(/Unused time is not refunded to your card/)).toBeTruthy();
+    // the credit they already had is added to the new one, so they see the total they will carry to the next invoice
+    expect(within(down).getByText("Your total credit after this")).toBeTruthy();
+    expect(within(down).getByText("$5.30")).toBeTruthy();
     expect(down.querySelector('input[name="card"]')).toBeNull(); // a downgrade charges nothing, so no card is asked for
 
     const confirm = within(down).getByText("Confirm downgrade").closest("button") as HTMLButtonElement;

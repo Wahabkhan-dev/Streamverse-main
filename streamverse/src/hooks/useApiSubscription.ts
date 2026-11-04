@@ -71,15 +71,20 @@ export function useResumeSubscriptionMutation() {
   });
 }
 
-/** Changing plan moves money and credit around, so everything that shows them is refreshed afterwards. */
+/**
+ * Changing plan moves money and credit around, so everything that shows them is refreshed afterwards, and the mutation only
+ * finishes once that is done: the screen never offers the next change from out-of-date data.
+ */
 export function useChangePlanMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (v: { planId: string; consent: true }) => meApi.changePlan(v.planId, v.consent),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: SUBSCRIPTION_QUERY_KEY });
-      void qc.invalidateQueries({ queryKey: INVOICES_QUERY_KEY });
-      void qc.invalidateQueries({ queryKey: CREDIT_QUERY_KEY });
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: SUBSCRIPTION_QUERY_KEY }),
+        qc.invalidateQueries({ queryKey: INVOICES_QUERY_KEY }),
+        qc.invalidateQueries({ queryKey: CREDIT_QUERY_KEY }),
+      ]);
     },
   });
 }
@@ -89,9 +94,8 @@ export function useRetryPaymentMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => meApi.retryPayment(),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: SUBSCRIPTION_QUERY_KEY });
-      void qc.invalidateQueries({ queryKey: INVOICES_QUERY_KEY });
+    onSuccess: async () => {
+      await Promise.all([qc.invalidateQueries({ queryKey: SUBSCRIPTION_QUERY_KEY }), qc.invalidateQueries({ queryKey: INVOICES_QUERY_KEY })]);
     },
   });
 }

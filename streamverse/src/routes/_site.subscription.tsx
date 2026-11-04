@@ -101,7 +101,7 @@ function pageStatus(status: string | null | undefined): SubscriptionStatus {
  * A customer with no paid plan: either never subscribed, or they started paying and the payment link or form expired
  * before they finished. Every click here makes a brand-new Stripe checkout link, so an old/expired link never blocks them.
  */
-function GetPlanPanel({ state, plans, currentPlanId }: { state: "none" | "incomplete" | "ended"; plans: ApiPlan[]; currentPlanId?: string }) {
+function GetPlanPanel({ state, plans, currentPlanId, credit = 0 }: { state: "none" | "incomplete" | "ended"; plans: ApiPlan[]; currentPlanId?: string; credit?: number }) {
   const checkout = useCheckoutMutation();
   const [pending, setPending] = useState<string | null>(null);
   const go = (planId: string) => {
@@ -125,6 +125,11 @@ function GetPlanPanel({ state, plans, currentPlanId }: { state: "none" | "incomp
               ? "Your plan has ended. Pick a plan to start again; you'll pay on Stripe's secure page."
               : "You don't have a plan yet. Pick one to start watching, reading and listening."}
         </p>
+        {credit > 0 && (
+          <p role="status" className="rounded-md border border-success/30 bg-success/10 px-3 py-2 text-sm">
+            <b>{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(credit / 100)} account credit.</b> <span className="text-soft">It's used automatically on your next payment, so you pay that much less.</span>
+          </p>
+        )}
         {resume && (
           <Btn variant="primary" disabled={checkout.isPending} onClick={() => go(resume.id)}>
             {pending === resume.id && checkout.isPending ? "Opening payment…" : state === "ended" ? `Renew ${resume.name}` : `Get a new payment link for ${resume.name}`}
@@ -257,7 +262,7 @@ function SubscriptionPage() {
       <div className="mx-auto max-w-[1100px] px-4 pt-8 md:px-8">
         <h1 className="text-3xl font-bold tracking-tight">Subscription</h1>
         <p className="mt-1 text-sm text-muted-foreground">Your plan and billing.</p>
-        <GetPlanPanel state={liveState} plans={apiPlansQuery.data ?? []} {...(apiSubQuery.data?.plan?.id ? { currentPlanId: apiSubQuery.data.plan.id } : {})} />
+        <GetPlanPanel state={liveState} plans={apiPlansQuery.data ?? []} credit={creditQuery.data?.amount ?? 0} {...(apiSubQuery.data?.plan?.id ? { currentPlanId: apiSubQuery.data.plan.id } : {})} />
       </div>
     );
   }
@@ -519,10 +524,11 @@ function SubscriptionPage() {
       </Dialog>
 
       {/* upgrade / downgrade */}
-      {!DEMO_MODE && (
+      {!DEMO_MODE && (dialog === "upgrade" || dialog === "downgrade") && (
         <ChangePlanDialog
+          key={`${planKind}-${apiSubQuery.data?.plan?.id ?? ""}`}
           kind={planKind}
-          open={dialog === "upgrade" || dialog === "downgrade"}
+          open
           onClose={() => setDialog(null)}
           plans={apiPlansQuery.data ?? []}
           current={apiSubQuery.data?.plan ? { id: apiSubQuery.data.plan.id, name: apiSubQuery.data.plan.name, priceAmount: apiSubQuery.data.plan.priceAmount, currency: apiSubQuery.data.plan.currency, billingInterval: apiSubQuery.data.plan.billingInterval } : null}

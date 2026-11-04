@@ -645,10 +645,10 @@ export interface ApiPlanChangePreview {
   nextRenewal: { date: string; amount: number } | null;
   paymentMethod: { brand: string; last4: string } | null;
 }
+  /** credit already on the account, and how much of it an upgrade uses */
+  accountCredit: number;
+  creditApplied: number;
 
-/** GET /me/subscription/credit: credit that will be used up by the next invoice. Cents. */
-export interface ApiAccountCredit {
-  amount: number;
 /** GET /admin/users/:id/activity: one customer's real subscription, billing, library and history. */
 export interface ApiAdminUserActivity {
   subscription: {
@@ -666,11 +666,14 @@ export interface ApiAdminUserActivity {
   currency: string;
 }
 
+/** GET /me/subscription/credit: credit that will be used up by the next invoice. Cents. */
+export interface ApiAccountCredit {
+  amount: number;
 export interface ApiCheckoutSession {
   checkoutUrl: string;
   sessionId: string;
-  url: string;
-}
 }
 
 export interface ApiBillingPortal {
+  url: string;
+}

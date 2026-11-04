@@ -166,6 +166,27 @@ describe("Change plan / upgrade-downgrade (Section 42/43/44/94/102)", () => {
     expect(p.toPlan.name).toBe("Premium");
   });
 
+  it("an upgrade uses credit the customer already has before charging the card", async () => {
+    const basic = await createTestPlan({ name: "Basic", priceAmount: 1000 });
+    const premium = await createTestPlan({ name: "Premium", priceAmount: 2000 });
+    const { headers } = await userWithActiveSubscription(basic);
+    const url = `/api/v1/me/subscription/change-plan/preview?planId=${premium.id}`;
+    const without = (await request(app).get(url).set(headers)).body.data;
+    expect(without.accountCredit).toBe(0);
+    expect(without.creditApplied).toBe(0);
+
+    fakeStripe.__setPendingItems([{ amount: -100 }]);
+    const withCredit = (await request(app).get(url).set(headers)).body.data;
+    expect(withCredit.accountCredit).toBe(100);
+    expect(withCredit.creditApplied).toBe(100);
+    expect(withCredit.chargeToday).toBe(without.chargeToday - 100);
+
+    fakeStripe.__setPendingItems([{ amount: -999999 }]); // more credit than the upgrade costs: nothing is charged, and no more credit is used than is owed
+    const covered = (await request(app).get(url).set(headers)).body.data;
+    expect(covered.chargeToday).toBe(0);
+    expect(covered.creditApplied).toBe(without.chargeToday);
+  });
+
   it("previews a downgrade: nothing charged, a credit added", async () => {
     const basic = await createTestPlan({ name: "Basic", priceAmount: 1000 });
     const premium = await createTestPlan({ name: "Premium", priceAmount: 2000 });

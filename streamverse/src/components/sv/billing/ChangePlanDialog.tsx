@@ -78,14 +78,14 @@ export function ChangePlanDialog({ kind, open, onClose, plans, current, cards }:
   const preview = useQuery({
     queryKey: ["me", "plan-preview", planId],
     queryFn: async () => (await meApi.previewPlanChange(planId!)).data,
-    enabled: open && !!planId,
+    enabled: open && !!planId && planId !== current?.id,
     staleTime: 0,
     gcTime: 0,
     retry: false,
   });
   const p = preview.data;
   const chosen = candidates.find((c) => c.id === planId);
-  const needsCard = kind === "upgrade";
+  const needsCard = kind === "upgrade" && (p?.chargeToday ?? 1) > 0;
   const cardReady = !needsCard || (cardId !== NEW_CARD && cards.some((c) => c.id === cardId));
   const canConfirm = !!p && consent && cardReady && !busy;
 
@@ -95,10 +95,16 @@ export function ChangePlanDialog({ kind, open, onClose, plans, current, cards }:
     setError("");
     try {
       // an upgrade is charged to the customer's default card: make the one they picked the default first
-      if (needsCard && cardId !== defaultCard?.id) await setDefault.mutateAsync(cardId);
+      if (needsCard && cardId !== defaultCard?.id && cardId !== NEW_CARD) await setDefault.mutateAsync(cardId);
       await change.mutateAsync({ planId, consent: true });
       void qc.invalidateQueries({ queryKey: PAYMENT_METHODS_QUERY_KEY });
-      toast.success(kind === "upgrade" ? `You're now on ${p.toPlan.name}. ${usd(p.chargeToday, p.currency)} was charged to your card.` : `You're now on ${p.toPlan.name}. ${usd(p.creditAdded, p.currency)} credit will be applied to your next invoice.`);
+      toast.success(
+        kind === "upgrade"
+          ? p.chargeToday > 0
+            ? `You're now on ${p.toPlan.name}. ${usd(p.chargeToday, p.currency)} was charged to your card${p.creditApplied > 0 ? ` after using ${usd(p.creditApplied, p.currency)} of your credit` : ""}.`
+            : `You're now on ${p.toPlan.name}. Your credit covered it, so nothing was charged.`
+          : `You're now on ${p.toPlan.name}. ${usd(p.creditAdded, p.currency)} credit will be applied to your next invoice.`,
+      );
       onClose();
     } catch (err) {
       setError(isApiError(err) ? err.message : "We couldn't change your plan. Please try again.");
@@ -171,13 +177,17 @@ export function ChangePlanDialog({ kind, open, onClose, plans, current, cards }:
               <>
                 <Row label={`${p.toPlan.name} for the rest of this period (${p.daysLeft} days)`} value={usd(p.newPlanForRest, p.currency)} />
                 <Row label={`Credit for unused ${p.fromPlan.name}`} value={`-${usd(p.creditForUnused, p.currency)}`} tone="good" />
+                {p.creditApplied > 0 && <Row label="Your account credit used" value={`-${usd(p.creditApplied, p.currency)}`} tone="good" />}
                 <Row label="Charged to your card today" value={usd(p.chargeToday, p.currency)} strong />
+                {p.chargeToday === 0 && <p className="text-xs text-muted-foreground">Your credit covers this upgrade, so your card isn't charged today.</p>}
+                {p.accountCredit > p.creditApplied && <p className="text-xs text-muted-foreground">{usd(p.accountCredit - p.creditApplied, p.currency)} of credit is left for your next invoice.</p>}
               </>
             ) : (
               <>
                 <Row label={`Unused part of ${p.fromPlan.name}`} value={usd(p.creditForUnused, p.currency)} />
                 <Row label={`${p.toPlan.name} for the rest of this period`} value={`-${usd(p.newPlanForRest, p.currency)}`} />
                 <Row label="Credit added to your account" value={usd(p.creditAdded, p.currency)} tone="good" strong />
+                {p.accountCredit > 0 && <Row label="Your total credit after this" value={usd(p.accountCredit + p.creditAdded, p.currency)} tone="good" />}
                 <p className="text-xs text-muted-foreground">It's taken off your next invoice automatically. Unused time is not refunded to your card.</p>
               </>
             )}
@@ -222,7 +232,9 @@ export function ChangePlanDialog({ kind, open, onClose, plans, current, cards }:
             <input type="checkbox" className="mt-0.5 shrink-0 accent-[var(--primary)]" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
             <span>
               {kind === "upgrade"
-                ? `I agree to be charged about ${usd(p.chargeToday, p.currency)} today on the card selected above, and ${usd(p.toPlan.priceAmount, p.currency)} each ${per(p.toPlan.billingInterval)} from my next renewal until I cancel.`
+                ? p.chargeToday > 0
+                  ? `I agree to be charged about ${usd(p.chargeToday, p.currency)} today on the card selected above, and ${usd(p.toPlan.priceAmount, p.currency)} each ${per(p.toPlan.billingInterval)} from my next renewal until I cancel.`
+                  : `I agree to upgrade now. My credit covers today's cost, and ${usd(p.toPlan.priceAmount, p.currency)} will be charged each ${per(p.toPlan.billingInterval)} from my next renewal until I cancel.`
                 : `I understand my plan changes now, that about ${usd(p.creditAdded, p.currency)} is kept as credit toward my next invoice, and that unused time is not refunded to my card.`}{" "}
               I accept the Terms &amp; Conditions and the Refund Policy.
             </span>
@@ -240,7 +252,7 @@ export function ChangePlanDialog({ kind, open, onClose, plans, current, cards }:
             Cancel
           </Btn>
           <Btn variant="primary" disabled={!canConfirm || !chosen} onClick={() => void confirm()}>
-            {busy ? "Working…" : kind === "upgrade" ? (p ? `Pay ${usd(p.chargeToday, p.currency)} and upgrade` : "Confirm upgrade") : "Confirm downgrade"}
+            {busy ? "Working…" : kind === "upgrade" ? (p ? (p.chargeToday > 0 ? `Pay ${usd(p.chargeToday, p.currency)} and upgrade` : "Upgrade now") : "Confirm upgrade") : "Confirm downgrade"}
           </Btn>
         </div>
       </DialogContent>

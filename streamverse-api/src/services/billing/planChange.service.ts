@@ -41,6 +41,11 @@ export async function estimatePlanChange(userId: string, planId: string, now = n
   const newPlanForRest = sameInterval ? Math.round(toPlan.priceAmount * fraction) : toPlan.priceAmount;
   const net = newPlanForRest - creditForUnused;
   const direction = isUpgradeBetween(fromPlan, toPlan) ? ("upgrade" as const) : ("downgrade" as const);
+  // Stripe uses a customer's credit up on their next invoice, and an upgrade's invoice is that invoice: so credit already on the
+  // account pays for (part of) the upgrade before the card is charged.
+  const accountCredit = (await getAccountCredit(userId).catch(() => ({ amount: 0 }))).amount;
+  const owed = Math.max(0, net);
+  const creditApplied = direction === "upgrade" ? Math.min(accountCredit, owed) : 0;
   const nextRenewal = sameInterval ? (sub.currentPeriodEnd ?? null) : new Date(now.getTime() + (toPlan.billingInterval === "YEARLY" ? 365 : 30) * 86_400_000);
 
   return {
@@ -53,8 +58,11 @@ export async function estimatePlanChange(userId: string, planId: string, now = n
     daysLeft: Math.ceil(left / 86_400_000),
     creditForUnused,
     newPlanForRest,
-    /** charged to the saved card right now (upgrades only) */
-    chargeToday: direction === "upgrade" ? Math.max(0, net) : 0,
+    /** credit the customer already had, which an upgrade uses before the card is charged */
+    accountCredit,
+    creditApplied,
+    /** charged to the saved card right now (upgrades only), after the credit */
+    chargeToday: direction === "upgrade" ? owed - creditApplied : 0,
     /** added to the customer's credit, used up by the next invoice (downgrades only) */
     creditAdded: direction === "downgrade" ? Math.max(0, -net) : 0,
     nextRenewal: nextRenewal ? { date: nextRenewal, amount: toPlan.priceAmount } : null,
