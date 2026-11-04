@@ -3,6 +3,8 @@ import { CreditCard, Pencil, Plus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { MetricStrip } from "@/components/sv/admin";
+import { PlanEditor } from "@/components/sv/admin/PlanEditor";
+import { isApiError } from "@/api/client";
 import { Btn, Field, PageHeader, Panel, SelectInput, Skel, StatusBadge, TextArea, TextInput, Toggle } from "@/components/sv/ui";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { update, usePlans, type Plan } from "@/lib/store";
@@ -11,6 +13,17 @@ import { useAdminPlansQuery, useAdminPlanMutation } from "@/hooks/useAdminApi";
 import type { ApiPlan } from "@/api/types";
 
 export const Route = createFileRoute("/admin/subscriptions")({ component: Subscriptions });
+
+/** Short chips for a plan card: what it unlocks and its limits. */
+function offerChips(p: ApiPlan): string[] {
+  const content = [p.moviesEnabled !== false && "Movies", p.ebooksEnabled && "eBooks", p.audiobooksEnabled && "Audiobooks"].filter(Boolean) as string[];
+  return [
+    content.length ? content.join(" · ") : "No content",
+    p.maxVideoQuality ? `Up to ${p.maxVideoQuality}` : "Best quality",
+    p.maxDevices ? `${p.maxDevices} device${p.maxDevices === 1 ? "" : "s"}` : "Unlimited devices",
+    p.maxConcurrentStreams ? `${p.maxConcurrentStreams} at once` : "Unlimited streams",
+  ];
+}
 
 const blank: Plan = { name: "", price: 0, interval: "Monthly", features: "", active: true, subs: 0 };
 
@@ -22,7 +35,7 @@ function apiPlanToPlan(p: ApiPlan): Plan & { apiId: string } {
     interval: p.billingInterval === "MONTHLY" ? "Monthly" : "Yearly",
     features: p.features.join(", "),
     active: p.active,
-    subs: 0,
+    subs: p.subscriberCount ?? 0,
   };
 }
 
@@ -33,6 +46,7 @@ function Subscriptions() {
   const isLoading = !DEMO_MODE && apiQuery.isLoading;
   const isError = !DEMO_MODE && apiQuery.isError;
 
+  const apiPlans: ApiPlan[] = apiQuery.data?.data ?? [];
   const plans: (Plan & { apiId?: string })[] = useMemo(() => {
     if (DEMO_MODE) return demoPlans;
     return (apiQuery.data?.data ?? []).map(apiPlanToPlan);
@@ -99,6 +113,15 @@ function Subscriptions() {
               <span className="text-xs font-normal text-muted-foreground"> / {p.interval.toLowerCase()}</span>
             </div>
             <p className="mt-2 flex-1 text-sm text-muted-foreground">{p.features}</p>
+            {!DEMO_MODE && apiPlans[n] && (
+              <ul aria-label={`${p.name} limits`} className="mt-3 flex flex-wrap gap-1.5 text-[11px] text-soft">
+                {offerChips(apiPlans[n]!).map((c) => (
+                  <li key={c} className="rounded-full border border-border bg-surface px-2 py-0.5">
+                    {c}
+                  </li>
+                ))}
+              </ul>
+            )}
             <div className="mt-4 flex items-center gap-1.5 text-xs text-soft">
               <Users className="size-3.5" /> {p.subs.toLocaleString()} subscribers
             </div>
@@ -123,7 +146,21 @@ function Subscriptions() {
           </Panel>
         ))}
       </div>
-      <Dialog open={edit !== null} onOpenChange={(o) => !o && setEdit(null)}>
+      {!DEMO_MODE && (
+        <PlanEditor
+          open={edit !== null}
+          plan={edit !== null && edit !== -1 ? (apiPlans[edit] ?? null) : null}
+          saving={apiMutation.create.isPending || apiMutation.update.isPending}
+          onClose={() => setEdit(null)}
+          onSave={(data) => {
+            const existing = edit !== null && edit !== -1 ? apiPlans[edit] : undefined;
+            const done = { onSuccess: () => { setEdit(null); toast.success(existing ? "Plan saved. The change is live for customers now." : "Plan created"); }, onError: (err: unknown) => toast.error(isApiError(err) ? err.message : "The plan couldn't be saved. Please try again.") };
+            if (existing) apiMutation.update.mutate({ id: existing.id, data }, done);
+            else apiMutation.create.mutate(data, done);
+          }}
+        />
+      )}
+      <Dialog open={DEMO_MODE && edit !== null} onOpenChange={(o) => !o && setEdit(null)}>
         <DialogContent className="border-border bg-surface-2">
           <DialogHeader>
             <DialogTitle>{edit === -1 ? "Create plan" : "Edit plan"}</DialogTitle>

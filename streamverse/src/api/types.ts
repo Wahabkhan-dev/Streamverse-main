@@ -58,6 +58,16 @@ export interface ApiPlan {
   features: string[];
   active: boolean;
   displayOrder: number;
+  description?: string | null;
+  /** what the plan unlocks and how far a customer can go with it; null = no limit */
+  moviesEnabled?: boolean;
+  ebooksEnabled?: boolean;
+  audiobooksEnabled?: boolean;
+  maxVideoQuality?: string | null;
+  maxDevices?: number | null;
+  maxConcurrentStreams?: number | null;
+  /** admin list only: customers currently on this plan */
+  subscriberCount?: number;
 }
 
 /* ─────────────────────────────── Subscription ───────────────────────────── */
@@ -619,9 +629,6 @@ export interface ApiSyncedSubscription {
   currentPeriodEnd: string | null;
 }
 
-export interface ApiCheckoutSession {
-  checkoutUrl: string;
-  sessionId: string;
 /** GET /me/subscription/change-plan/preview: what a plan change will do to the bill (an estimate; Stripe's invoice has the final figures). Amounts are in cents. */
 export interface ApiPlanChangePreview {
   direction: "upgrade" | "downgrade";
@@ -648,5 +655,8 @@ export interface ApiAccountCredit {
 }
 
 export interface ApiBillingPortal {
+export interface ApiCheckoutSession {
+  checkoutUrl: string;
+  sessionId: string;
   url: string;
 }
