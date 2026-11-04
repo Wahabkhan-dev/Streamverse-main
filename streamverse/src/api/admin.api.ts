@@ -240,6 +240,12 @@ export const adminUsersApi = {
 
 /* ─────────────────────────────── Subscriptions ──────────────────────────── */
 
+export const adminNotificationsApi = {
+  /** POST /admin/notifications/announce: delivered to every active customer's notification bell */
+  announce: (data: { kind: "NEW_RELEASE" | "SUBSCRIPTION" | "RECOMMENDATION" | "ACCOUNT"; title: string; message?: string }) =>
+    api.post<ApiResponse<{ sent: number }>>("/admin/notifications/announce", data),
+};
+
 export const adminSubscriptionsApi = {
   list: (p?: AdminListParams) =>
     api.get<ApiResponse<ApiSubscription[]> & { meta: ApiMeta }>(

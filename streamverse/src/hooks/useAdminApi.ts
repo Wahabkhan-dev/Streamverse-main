@@ -17,6 +17,7 @@ import {
   adminSettingsApi,
   adminPlansApi,
   adminUsersApi,
+  adminNotificationsApi,
   adminSubscriptionsApi,
   adminPaymentsApi,
   adminAnalyticsApi,
@@ -171,8 +172,8 @@ export const useAdminPlanMutation = () => {
 };
 
 /* ─────────── Users ─────────── */
-export const useAdminUsersQuery = (p?: AdminListParams) =>
-  useQuery({ queryKey: ["admin", "users", p], queryFn: () => adminUsersApi.list(p), enabled: E });
+export const useAdminUsersQuery = (p?: AdminListParams, opts?: { enabled?: boolean }) =>
+  useQuery({ queryKey: ["admin", "users", p], queryFn: () => adminUsersApi.list(p), enabled: E && (opts?.enabled ?? true) });
 
 export const useAdminUserMutation = () => {
   const qc = useQueryClient();
@@ -227,3 +228,6 @@ export const useAdminReportQuery = <T,>(kind: string, params: Record<string, str
 
 export const useAdminAuditLogsQuery = (p?: AdminListParams) =>
   useQuery({ queryKey: ["admin", "audit-logs", p], queryFn: () => adminAnalyticsApi.getAuditLogs(p), enabled: E });
+
+/** Admin -> Notifications -> Send announcement. */
+export const useAnnounceMutation = () => useMutation({ mutationFn: adminNotificationsApi.announce });

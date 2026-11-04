@@ -3,11 +3,16 @@ import { Bell, Check, CreditCard, Eye, Film, Send, Server, Trash2, UserPlus } fr
 import { useState } from "react";
 import { toast } from "sonner";
 import { Btn, EmptyState, Field, PageHeader, Panel, PanelHeader, SelectInput, TabBar, TextArea, TextInput } from "@/components/sv/ui";
+import { Link } from "@tanstack/react-router";
+import { isApiError } from "@/api/client";
+import { useAdminAlerts } from "@/hooks/useAdminAlerts";
+import { useAnnounceMutation } from "@/hooks/useAdminApi";
+import { DEMO_MODE } from "@/lib/config";
 import { update, useAdminNotes, type AdminNote, type AdminNoteKind } from "@/lib/store";
 import type { CustomerNoteKind } from "@/lib/user";
 import { cn } from "@/lib/utils";
 
-export const Route = createFileRoute("/admin/notifications")({ component: Notifications });
+export const Route = createFileRoute("/admin/notifications")({ component: () => (DEMO_MODE ? <Notifications /> : <LiveNotifications />) });
 
 type Tab = "all" | AdminNoteKind;
 const TABS: { id: Tab; label: string }[] = [
@@ -120,6 +125,107 @@ function Notifications() {
             </Field>
             <Btn variant="primary" onClick={send}>
               <Send /> Send
+            </Btn>
+          </div>
+        </Panel>
+      </div>
+    </>
+  );
+}
+
+const ANNOUNCE_KIND = { "New Release": "NEW_RELEASE", Subscription: "SUBSCRIPTION", Recommendation: "RECOMMENDATION", Account: "ACCOUNT" } as const;
+
+const ago = (iso: string) => {
+  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000));
+  if (!Number.isFinite(mins)) return "";
+  if (mins < 60) return `${mins}m ago`;
+  if (mins < 60 * 24) return `${Math.round(mins / 60)}h ago`;
+  return `${Math.round(mins / (60 * 24))}d ago`;
+};
+
+/** Live mode: real billing problems that need attention, and an announcement form that really reaches customers. */
+function LiveNotifications() {
+  const alerts = useAdminAlerts();
+  const announce = useAnnounceMutation();
+  const [kind, setKind] = useState<CustomerNoteKind>("New Release");
+  const [title, setTitle] = useState("");
+  const [message, setMessage] = useState("");
+  const [titleError, setTitleError] = useState("");
+
+  const send = () => {
+    if (!title.trim()) {
+      setTitleError("Add a title for the announcement.");
+      return;
+    }
+    setTitleError("");
+    announce.mutate(
+      { kind: ANNOUNCE_KIND[kind as keyof typeof ANNOUNCE_KIND], title: title.trim(), ...(message.trim() ? { message: message.trim() } : {}) },
+      {
+        onSuccess: (res) => {
+          toast.success(`Announcement sent to ${res.data.sent} customer${res.data.sent === 1 ? "" : "s"}`);
+          setTitle("");
+          setMessage("");
+        },
+        onError: (err) => toast.error(isApiError(err) ? err.message : "The announcement could not be sent. Please try again."),
+      },
+    );
+  };
+
+  return (
+    <>
+      <PageHeader title="Notifications" sub="Billing problems that need your attention, and announcements to your customers." />
+      <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
+        <Panel>
+          <PanelHeader title="Needs attention" sub="Failed renewals and payments, straight from billing." />
+          {alerts.loading ? (
+            <div className="p-5 text-sm text-muted-foreground">Loading…</div>
+          ) : alerts.error ? (
+            <div role="alert" className="p-5 text-sm text-muted-foreground">
+              The alerts could not be loaded.
+            </div>
+          ) : alerts.items.length === 0 ? (
+            <div className="p-5">
+              <EmptyState icon={Bell} title="You're all caught up" sub="No failed renewals or payments right now." />
+            </div>
+          ) : (
+            alerts.items.map((n) => (
+              <div key={n.id} className="flex items-start gap-3 border-b border-border bg-surface-2 px-5 py-4 last:border-0">
+                <span className="grid size-9 shrink-0 place-items-center rounded-md bg-surface-3 text-soft">
+                  <CreditCard className="size-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold">{n.title}</div>
+                  <p className="text-xs text-muted-foreground">{n.detail}</p>
+                  <small className="text-[11px] text-muted-foreground">{ago(n.at)}</small>
+                </div>
+                <Link to="/admin/payments" className="text-xs font-semibold text-primary-text hover:underline">
+                  Open Payments
+                </Link>
+              </div>
+            ))
+          )}
+        </Panel>
+        <Panel className="h-fit">
+          <PanelHeader title="Send announcement" sub="Delivered to every active customer's notification bell." />
+          <div className="space-y-4 p-5">
+            <Field label="Type">
+              <SelectInput options={KINDS} value={kind} onChange={(e) => setKind(e.target.value as CustomerNoteKind)} />
+            </Field>
+            <div>
+              <Field label="Title" required>
+                <TextInput value={title} onChange={(e) => setTitle(e.target.value)} aria-invalid={!!titleError} />
+              </Field>
+              {titleError && (
+                <p role="alert" className="mt-1 text-[11px] font-medium text-primary-text">
+                  {titleError}
+                </p>
+              )}
+            </div>
+            <Field label="Message">
+              <TextArea rows={3} value={message} onChange={(e) => setMessage(e.target.value)} />
+            </Field>
+            <Btn variant="primary" disabled={announce.isPending} onClick={send}>
+              <Send /> {announce.isPending ? "Sending…" : "Send"}
             </Btn>
           </div>
         </Panel>

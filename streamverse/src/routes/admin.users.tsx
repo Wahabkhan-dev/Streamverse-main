@@ -11,7 +11,7 @@ import { itemTitle, useCatalog } from "@/lib/items";
 import { seeded } from "@/lib/runtime";
 import { update, usePlans, useUsers, type User } from "@/lib/store";
 import { DEMO_MODE } from "@/lib/config";
-import { useAdminUsersQuery, useAdminUserMutation, useAdminUserActivityQuery } from "@/hooks/useAdminApi";
+import { useAdminUsersQuery, useAdminUserMutation, useAdminUserActivityQuery, useAdminSubscriptionsQuery } from "@/hooks/useAdminApi";
 import type { ApiAdminUser } from "@/api/types";
 
 export const Route = createFileRoute("/admin/users")({
@@ -41,6 +41,10 @@ function Users() {
   const demoUsers = useUsers();
   const apiQuery = useAdminUsersQuery();
   const apiMutation = useAdminUserMutation();
+  // real counts for the tiles (the demo figures below only make sense for the sample accounts)
+  const activeSubs = useAdminSubscriptionsQuery({ status: "ACTIVE", limit: 1 });
+  const pastDueSubs = useAdminSubscriptionsQuery({ status: "PAST_DUE", limit: 1 });
+  const totalOf = (q: { data?: unknown }) => (q.data as { pagination?: { total?: number } } | undefined)?.pagination?.total ?? 0;
   const isLoading = !DEMO_MODE && apiQuery.isLoading;
   const isError = !DEMO_MODE && apiQuery.isError;
 
@@ -98,12 +102,25 @@ function Users() {
         }
       />
       <MetricStrip
-        items={[
-          { label: "Registered users", value: PLATFORM_USERS.toLocaleString(), note: `Showing ${users.length} sample accounts`, tone: "good" },
-          { label: "Premium members", value: premiumMembers.toLocaleString(), note: `${Math.round((premiumMembers / PLATFORM_USERS) * 100)}% of members` },
-          { label: "Paying subscribers", value: totals.subs.toLocaleString(), note: `${Math.round((totals.subs / PLATFORM_USERS) * 100)}% of members` },
-          { label: "Suspended (in this list)", value: String(users.filter((u) => u.status === "Suspended").length), note: "Needs review", tone: "warn" },
-        ]}
+        items={
+          DEMO_MODE
+            ? [
+                { label: "Registered users", value: PLATFORM_USERS.toLocaleString(), note: `Showing ${users.length} sample accounts`, tone: "good" as const },
+                { label: "Premium members", value: premiumMembers.toLocaleString(), note: `${Math.round((premiumMembers / PLATFORM_USERS) * 100)}% of members` },
+                { label: "Paying subscribers", value: totals.subs.toLocaleString(), note: `${Math.round((totals.subs / PLATFORM_USERS) * 100)}% of members` },
+                { label: "Suspended (in this list)", value: String(users.filter((u) => u.status === "Suspended").length), note: "Needs review", tone: "warn" as const },
+              ]
+            : (() => {
+                const all = totalOf(apiQuery) || users.length;
+                const paying = totalOf(activeSubs);
+                return [
+                  { label: "Registered users", value: all.toLocaleString(), note: "All accounts", tone: "good" as const },
+                  { label: "Paying subscribers", value: paying.toLocaleString(), note: all ? `${Math.round((paying / all) * 100)}% of accounts` : "None yet" },
+                  { label: "Payment problems", value: totalOf(pastDueSubs).toLocaleString(), note: "Renewals that failed", tone: "warn" as const },
+                  { label: "Suspended (in this list)", value: String(users.filter((u) => u.status === "Suspended").length), note: "Needs review", tone: "warn" as const },
+                ];
+              })()
+        }
       />
       <Panel>
         <Toolbar>

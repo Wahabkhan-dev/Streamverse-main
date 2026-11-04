@@ -26,6 +26,7 @@ import { uploadRouter } from "./upload.routes";
 import { adminDashboardRouter } from "./adminDashboard.routes";
 import { adminAnalyticsRouter } from "./adminAnalytics.routes";
 import { adminAuditLogRouter } from "./adminAuditLog.routes";
+import { adminNotificationRouter } from "./adminNotification.routes";
 import { adminUserRouter } from "./adminUser.routes";
 import * as publicSettingsController from "../controllers/publicSettings.controller";
 import * as adminAnalyticsController from "../controllers/adminAnalytics.controller";
@@ -80,6 +81,7 @@ adminRouter.use("/billing", adminBillingRouter);
 
 // Phase 9: analytics, dashboard, audit logs, settings API.
 adminRouter.use("/users", adminUserRouter);
+adminRouter.use("/notifications", adminNotificationRouter);
 adminRouter.use("/dashboard", adminDashboardRouter);
 adminRouter.use("/analytics", adminAnalyticsRouter);
 adminRouter.use("/audit-logs", adminAuditLogRouter);

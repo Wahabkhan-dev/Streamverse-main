@@ -25,10 +25,12 @@ import {
   X,
   Scale,
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useDeferredValue, useState, type ReactNode } from "react";
 import { Logo } from "./Logo";
 import { Panel } from "./ui";
 import { useAdminNotes } from "@/lib/store";
+import { useAdminAlerts } from "@/hooks/useAdminAlerts";
+import { useAdminEbooksQuery, useAdminAudiobooksQuery, useAdminMoviesQuery, useAdminUsersQuery } from "@/hooks/useAdminApi";
 import { cn } from "@/lib/utils";
 import { DEMO_MODE } from "@/lib/demo";
 import { setRole } from "@/lib/user";
@@ -88,10 +90,17 @@ const nav = [
   },
 ] as const;
 
+/** The number on the admin bell: real problems to look at (failed renewals and payments) on the live site; the sample notes in demo mode. */
+function useAdminUnread() {
+  const notes = useAdminNotes();
+  const alerts = useAdminAlerts();
+  return DEMO_MODE ? notes.filter((n) => !n.read).length : alerts.items.length;
+}
+
 export function AdminSidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [collapsed, setCollapsed] = useState(false);
   const navigate = useNavigate();
-  const unread = useAdminNotes().filter((n) => !n.read).length;
+  const unread = useAdminUnread();
   return (
     <>
       {open && <div className="fixed inset-0 z-40 bg-ink/70 lg:hidden" onClick={onClose} />}
@@ -200,7 +209,25 @@ function AdminSearch() {
   const collections = useCollections();
   const users = useUsers();
   const term = q.trim().toLowerCase();
-  const hits: Hit[] = !term
+  // live mode searches the real catalog and customers on the server (the demo store holds only sample titles and people)
+  const dq = useDeferredValue(q.trim());
+  const on = !DEMO_MODE && dq.length >= 2;
+  const lm = useAdminMoviesQuery(on ? { search: dq, limit: 3 } : undefined, { enabled: on });
+  const le = useAdminEbooksQuery(on ? { search: dq, limit: 3 } : undefined, { enabled: on });
+  const la = useAdminAudiobooksQuery(on ? { search: dq, limit: 3 } : undefined, { enabled: on });
+  const lu = useAdminUsersQuery({ search: dq, limit: 3 }, { enabled: on });
+  const rows = <T,>(r: { data?: unknown }) => (((r.data as { data?: T[] } | undefined)?.data ?? []) as T[]).slice(0, 3);
+  const liveHits: Hit[] = !on
+    ? []
+    : [
+        ...rows<{ slug: string; title: string }>(lm).map((m) => ({ key: `m-${m.slug}`, label: m.title, sub: "Movie", go: () => navigate({ to: "/admin/movies/$slug/edit", params: { slug: m.slug } }) })),
+        ...rows<{ slug: string; title: string; author?: string | null }>(le).map((b) => ({ key: `e-${b.slug}`, label: b.title, sub: `eBook${b.author ? ` · ${b.author}` : ""}`, go: () => navigate({ to: "/admin/ebooks/$slug/edit", params: { slug: b.slug } }) })),
+        ...rows<{ slug: string; title: string; author?: string | null }>(la).map((b) => ({ key: `a-${b.slug}`, label: b.title, sub: `Audiobook${b.author ? ` · ${b.author}` : ""}`, go: () => navigate({ to: "/admin/audiobooks/$slug/edit", params: { slug: b.slug } }) })),
+        ...rows<{ id: string; name: string; email: string }>(lu).map((u) => ({ key: `u-${u.id}`, label: u.name, sub: `User · ${u.email}`, go: () => navigate({ to: "/admin/users", search: { u: u.id } }) })),
+      ];
+  const hits: Hit[] = !DEMO_MODE
+    ? liveHits
+    : !term
     ? []
     : [
         ...movies.filter((m) => m.title.toLowerCase().includes(term)).slice(0, 3).map((m) => ({ key: `m-${m.slug}`, label: m.title, sub: "Movie", go: () => navigate({ to: "/admin/movies/$slug/edit", params: { slug: m.slug } }) })),
@@ -238,7 +265,7 @@ function AdminSearch() {
           </button>
         )}
       </form>
-      {open && term && (
+      {open && term && (DEMO_MODE || on) && (
         <div role="listbox" aria-label="Search results" className="absolute top-full right-0 left-0 z-40 mt-1 max-h-80 overflow-auto rounded-lg border border-border bg-surface-2 py-1 shadow-card">
           {hits.length === 0 ? (
             <div className="px-3 py-4 text-center text-sm text-muted-foreground">No matches for “{q.trim()}”.</div>
@@ -258,7 +285,7 @@ function AdminSearch() {
 
 export function AdminTopbar({ onMenu }: { onMenu: () => void }) {
   const admin = useAdminUser();
-  const unread = useAdminNotes().filter((n) => !n.read).length;
+  const unread = useAdminUnread();
   return (
     <header className="sticky top-0 z-20 flex h-[60px] items-center gap-4 border-b border-border bg-ink/95 px-4 backdrop-blur md:px-8">
       <button className="grid size-9 place-items-center rounded-md hover:bg-surface-3 lg:hidden" onClick={onMenu} aria-label="Open menu">

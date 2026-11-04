@@ -142,3 +142,24 @@ describe("Admin -> Users -> one customer's real activity", () => {
     expect((await request(app).get(`/api/v1/admin/users/${userId}/activity`).set({ Authorization: `Bearer ${normal.accessToken}` })).status).toBe(403);
   });
 });
+
+describe("Admin -> Notifications -> Send announcement", () => {
+  it("reaches every active customer's bell (not admins), is admin-only, and validates the title", async () => {
+    const a = await createUser(app);
+    const b = await createUser(app);
+    const { accessToken, userId: adminId } = await createAdmin(app, db as never);
+    const headers = { Authorization: `Bearer ${accessToken}` };
+
+    const res = await request(app).post("/api/v1/admin/notifications/announce").set(headers).send({ kind: "ACCOUNT", title: "Scheduled maintenance", message: "Sunday 2am" });
+    expect(res.status).toBe(201);
+    expect(res.body.data.sent).toBe(2);
+    const got = (await db.notification.findMany()).filter((n) => n.title === "Scheduled maintenance");
+    expect(got.map((n) => n.userId).sort()).toEqual([a.userId, b.userId].sort());
+    expect(got.some((n) => n.userId === adminId)).toBe(false);
+    expect(got[0]).toMatchObject({ type: "ACCOUNT", message: "Sunday 2am" });
+
+    expect((await request(app).post("/api/v1/admin/notifications/announce").set(headers).send({ kind: "ACCOUNT", title: "  " })).status).toBe(400);
+    expect((await request(app).post("/api/v1/admin/notifications/announce").set(headers).send({ kind: "HACK", title: "x" })).status).toBe(400);
+    expect((await request(app).post("/api/v1/admin/notifications/announce").set({ Authorization: `Bearer ${a.accessToken}` }).send({ kind: "ACCOUNT", title: "x" })).status).toBe(403);
+  });
+});
