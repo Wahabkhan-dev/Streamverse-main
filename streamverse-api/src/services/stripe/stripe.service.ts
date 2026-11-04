@@ -110,10 +110,20 @@ export async function setSubscriptionCancelAtPeriodEnd(stripeSubscriptionId: str
 }
 
 /** Section 42/43: proration policy is explicit here (`create_prorations`), never left to Stripe's default-by-accident. */
-export async function changeSubscriptionPrice(stripeSubscriptionId: string, subscriptionItemId: string, newPriceId: string, idempotencyKey: string): Promise<Stripe.Subscription> {
+/**
+ * Swaps the price on a live subscription. Stripe works out the proration either way (credit for the unused time on the old
+ * price, a charge for the rest of the period on the new one):
+ *  - `chargeNow` (an upgrade): the difference is invoiced and charged to the saved card immediately, and if that payment
+ *    fails Stripe refuses the change, so nobody is on the higher plan without having paid for it;
+ *  - otherwise (a downgrade): the credit is kept as a credit on the next invoice (no refund to the card).
+ */
+export async function changeSubscriptionPrice(stripeSubscriptionId: string, subscriptionItemId: string, newPriceId: string, idempotencyKey: string, opts: { chargeNow?: boolean } = {}): Promise<Stripe.Subscription> {
   return getStripeClient().subscriptions.update(
     stripeSubscriptionId,
-    { items: [{ id: subscriptionItemId, price: newPriceId }], proration_behavior: "create_prorations" },
+    {
+      items: [{ id: subscriptionItemId, price: newPriceId }],
+      ...(opts.chargeNow ? { proration_behavior: "always_invoice" as const, payment_behavior: "error_if_incomplete" as const } : { proration_behavior: "create_prorations" as const }),
+    },
     { idempotencyKey },
   );
 }

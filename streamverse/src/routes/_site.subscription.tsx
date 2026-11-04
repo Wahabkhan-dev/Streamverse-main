@@ -529,7 +529,7 @@ function SubscriptionPage() {
               {DEMO_MODE && planKind === "downgrade"
                 ? `Takes effect on ${day(sub.renewsOn)}, when your current period ends.`
                 : planKind === "upgrade"
-                  ? "Your new plan starts right away. You only pay the difference for the rest of this billing period."
+                  ? "Your new plan starts right away. We charge your saved card now for the difference, after crediting what you already paid for this period."
                   : "Your new plan starts right away. The unused part of your current plan is credited toward your next invoice."}
             </DialogDescription>
           </DialogHeader>
@@ -572,7 +572,7 @@ function SubscriptionPage() {
           {choice && (
             <p className="break-words rounded-md border border-info/30 bg-info/10 px-3 py-2 text-xs text-soft">
               {planKind === "upgrade"
-                ? `You'll move to ${choice.name} now. Your next renewal is ${money(choice.price)}/${perLabel(choice.interval)}.`
+                ? `You'll move to ${choice.name} now and your saved card is charged the remaining difference today. Your next renewal is ${money(choice.price)}/${perLabel(choice.interval)}.`
                 : DEMO_MODE
                   ? `You'll stay on ${sub.plan} until ${day(sub.renewsOn)}, then move to ${choice.name} at ${money(choice.price)}/${perLabel(choice.interval)}.`
                   : `You'll move to ${choice.name} now. Your next renewal is ${money(choice.price)}/${perLabel(choice.interval)}, less your credit.`}

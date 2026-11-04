@@ -5,7 +5,8 @@ import { logger } from "../../config/logger";
 import * as planRepository from "../../repositories/plan.repository";
 import * as subscriptionRepository from "../../repositories/subscription.repository";
 import * as userRepository from "../../repositories/user.repository";
-import { ConflictError, NotFoundError, ValidationError } from "../../utils/errors";
+import { ERROR_CODES } from "../../constants/errors";
+import { AppError, ConflictError, NotFoundError, ValidationError } from "../../utils/errors";
 import { buildPagination, toSkipTake } from "../../utils/pagination";
 import type { AuditContext } from "../auditLog.service";
 import { recordAudit } from "../auditLog.service";
@@ -276,7 +277,22 @@ export async function changePlan(userId: string, planId: string, ctx: AuditConte
   const itemId = current.items.data[0]?.id;
   if (!itemId) throw new ValidationError([{ path: "planId", message: "This subscription has no billable item to change." }]);
 
-  const updated = await stripeService.changeSubscriptionPrice(sub.stripeSubscriptionId, itemId, newPlan.stripePriceId, `change-plan-${sub.id}-${randomUUID()}`);
+  // An upgrade is charged now (the difference for the rest of this period, after crediting what was already paid for the old plan);
+  // a downgrade just credits the unused part to the next invoice. Compared per month so a yearly plan can be judged against a monthly one.
+  const currentPlan = await planRepository.findById(sub.planId);
+  const perMonth = (p: { priceAmount: number; billingInterval: string }) => (p.billingInterval === "YEARLY" ? p.priceAmount / 12 : p.priceAmount);
+  const isUpgrade = currentPlan ? perMonth(newPlan) > perMonth(currentPlan) : false;
+
+  let updated;
+  try {
+    updated = await stripeService.changeSubscriptionPrice(sub.stripeSubscriptionId, itemId, newPlan.stripePriceId, `change-plan-${sub.id}-${randomUUID()}`, { chargeNow: isUpgrade });
+  } catch (err) {
+    // the card was declined on the immediate charge: Stripe left the subscription on the old plan
+    if ((err as { type?: string })?.type === "StripeCardError") {
+      throw new AppError("We couldn't charge your card for the upgrade, so your plan was not changed. Please update your payment method and try again.", 402, ERROR_CODES.BAD_REQUEST);
+    }
+    throw err;
+  }
   await applyStripeSubscriptionSnapshot(updated);
   await createNotification(userId, "SUBSCRIPTION", "Plan changed", `Your subscription is now on the ${newPlan.name} plan.`);
   await recordAudit(ctx, { action: "subscription.plan_changed", entityType: "SUBSCRIPTION", entityId: sub.id, metadata: { fromPlanId: sub.planId, toPlanId: newPlan.id } });

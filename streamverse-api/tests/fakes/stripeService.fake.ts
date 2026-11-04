@@ -127,7 +127,19 @@ export async function setSubscriptionCancelAtPeriodEnd(stripeSubscriptionId: str
   return sub;
 }
 
-export async function changeSubscriptionPrice(stripeSubscriptionId: string, subscriptionItemId: string, newPriceId: string) {
+export const priceChanges: { subscriptionId: string; newPriceId: string; chargeNow: boolean }[] = [];
+/** Set to make the next immediate charge fail like a declined card. */
+export let declineNextCharge = false;
+export function __declineNextCharge(v = true) {
+  declineNextCharge = v;
+}
+
+export async function changeSubscriptionPrice(stripeSubscriptionId: string, subscriptionItemId: string, newPriceId: string, _key?: string, opts: { chargeNow?: boolean } = {}) {
+  priceChanges.push({ subscriptionId: stripeSubscriptionId, newPriceId, chargeNow: Boolean(opts.chargeNow) });
+  if (opts.chargeNow && declineNextCharge) {
+    declineNextCharge = false;
+    throw Object.assign(new Error("Your card was declined."), { type: "StripeCardError" });
+  }
   const sub = subscriptions.get(stripeSubscriptionId);
   if (!sub) throw new Error("No such subscription");
   const item = sub.items.data.find((i) => i.id === subscriptionItemId);

@@ -101,6 +101,41 @@ describe("Change plan / upgrade-downgrade (Section 42/43/44/94/102)", () => {
     expect(res.body.data.plan.id).toBe(planB.id);
   });
 
+  it("an upgrade is charged immediately; a downgrade is only credited to the next invoice", async () => {
+    const basic = await createTestPlan({ name: "Basic", priceAmount: 499 });
+    const premium = await createTestPlan({ name: "Premium", priceAmount: 1499 });
+    const { headers, stripeSub } = await userWithActiveSubscription(basic);
+    fakeStripe.priceChanges.length = 0;
+
+    await request(app).post("/api/v1/me/subscription/change-plan").set(headers).send({ planId: premium.id });
+    expect(fakeStripe.priceChanges.at(-1)).toMatchObject({ subscriptionId: stripeSub.id, chargeNow: true });
+
+    await request(app).post("/api/v1/me/subscription/change-plan").set(headers).send({ planId: basic.id });
+    expect(fakeStripe.priceChanges.at(-1)).toMatchObject({ subscriptionId: stripeSub.id, chargeNow: false });
+  });
+
+  it("a yearly plan is compared per month: Basic monthly to a cheaper-per-month yearly plan is a downgrade", async () => {
+    const monthly = await createTestPlan({ name: "Monthly", priceAmount: 1000 });
+    const yearly = await createTestPlan({ name: "Yearly", priceAmount: 9000, billingInterval: "YEARLY" }); // 750 / month
+    const { headers } = await userWithActiveSubscription(monthly);
+    fakeStripe.priceChanges.length = 0;
+    await request(app).post("/api/v1/me/subscription/change-plan").set(headers).send({ planId: yearly.id });
+    expect(fakeStripe.priceChanges.at(-1)?.chargeNow).toBe(false);
+  });
+
+  it("a declined card on an upgrade leaves the customer on the old plan with a clear message", async () => {
+    const basic = await createTestPlan({ name: "Basic", priceAmount: 499 });
+    const premium = await createTestPlan({ name: "Premium", priceAmount: 1499 });
+    const { headers } = await userWithActiveSubscription(basic);
+    fakeStripe.__declineNextCharge();
+
+    const res = await request(app).post("/api/v1/me/subscription/change-plan").set(headers).send({ planId: premium.id });
+    expect(res.status).toBe(402);
+    expect(res.body.message).toMatch(/plan was not changed/);
+    const now = await request(app).get("/api/v1/me/subscription").set(headers);
+    expect(now.body.data.plan.id).toBe(basic.id);
+  });
+
   it("refuses changing to the same plan", async () => {
     const plan = await createTestPlan();
     const { headers } = await userWithActiveSubscription(plan);
