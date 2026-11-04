@@ -1,4 +1,4 @@
-import { cleanup, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // The live site runs with VITE_DEMO_MODE=false: the page reads the real API, never the browser's demo store.
@@ -24,12 +24,12 @@ const states = {
 /** What GET /me/payments really returns once a customer has paid: the plan is an object and the status is in capitals. */
 const paid = [{ id: "pay1", date: "2026-11-04T00:28:45.000Z", amount: 499, currency: "usd", status: "SUCCEEDED", plan: { id: "p1", name: "Basic" }, invoiceReference: "in_123", refunded: false }];
 
-function serve(sub: unknown, payments: unknown[] = []) {
+function serve(sub: unknown, payments: unknown[] = [], plans: unknown[] = [plan]) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
       const u = String(url);
-      const body = u.includes("/me/subscription") ? { data: sub } : u.includes("/me/payments") ? { data: payments, pagination: {} } : u.includes("/me/payment-methods") ? { data: [] } : u.includes("/plans") ? { data: [plan] } : { data: null };
+      const body = u.includes("/me/subscription") ? { data: sub } : u.includes("/me/payments") ? { data: payments, pagination: {} } : u.includes("/me/payment-methods") ? { data: [] } : u.includes("/plans") ? { data: plans } : { data: null };
       return new Response(JSON.stringify({ success: true, message: "ok", ...body }), { status: 200, headers: { "Content-Type": "application/json" } });
     }),
   );
@@ -69,6 +69,49 @@ describe("Stripe return pages", () => {
     serve(states.none);
     renderAt("/billing/cancel");
     expect(await screen.findByRole("link", { name: "Get a new payment link" })).toBeTruthy();
+  });
+});
+
+const standard = { ...plan, id: "p2", name: "Standard", slug: "standard", price: 999, priceAmount: 999 };
+
+/** Text/DOM queries only: role queries are very slow on this page in jsdom once a dialog has been open. */
+async function openPlanDialog(label: "Upgrade" | "Downgrade") {
+  const btn = await waitFor(
+    () => {
+      const el = screen.getAllByText(label).map((n) => n.closest("button")).find((b): b is HTMLButtonElement => !!b && !b.disabled);
+      if (!el) throw new Error(`no enabled ${label} button`);
+      return el;
+    },
+    { timeout: 5000 },
+  );
+  fireEvent.click(btn);
+  return waitFor(
+    () => {
+      const d = document.querySelector<HTMLElement>('[role="dialog"]');
+      if (!d) throw new Error("no dialog");
+      return d;
+    },
+    { timeout: 5000 },
+  );
+}
+
+const callsTo = (part: string) => (fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.filter((c) => String(c[0]).includes(part));
+
+describe("Upgrade dialog (live)", () => {
+  it("lists higher plans with the price difference and confirms through the API", async () => {
+    const premium = { ...plan, id: "p3", name: "Premium", slug: "premium", price: 1499, priceAmount: 1499 };
+    serve({ ...states.active, plan: standard }, [], [plan, standard, premium]);
+    renderAt("/subscription");
+    const up = await openPlanDialog("Upgrade");
+    expect(within(up).getByText("Your plan now")).toBeTruthy();
+    expect(within(up).getByText("+$5.00/mo")).toBeTruthy();
+    expect(within(up).getByText(/starts right away/)).toBeTruthy();
+    const confirm = within(up).getByText("Confirm upgrade").closest("button") as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+    fireEvent.click(up.querySelector('input[type="radio"]') as HTMLInputElement);
+    expect(confirm.disabled).toBe(false);
+    fireEvent.click(confirm);
+    await waitFor(() => expect(callsTo("/me/subscription/change-plan")).toHaveLength(1));
   });
 });
 

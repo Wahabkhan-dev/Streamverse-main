@@ -8,6 +8,7 @@ import { LegalLinks } from "@/components/sv/LegalLinks";
 import { PaymentFailed, SubscriptionExpired } from "@/components/sv/states";
 import { Btn, ConfirmDialog, Panel, PanelHeader, Skel, StatusBadge } from "@/components/sv/ui";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { isApiError } from "@/api/client";
 import { downloadCsv } from "@/lib/csv";
 import { DEMO_MODE } from "@/lib/demo";
 import { pushOwnNote } from "@/lib/notifications";
@@ -176,6 +177,7 @@ function SubscriptionPage() {
   const [cancelOpen, setCancelOpen] = useState(false);
   const [choice, setChoice] = useState<Plan | null>(null);
   const [planKind, setPlanKind] = useState<"upgrade" | "downgrade">("upgrade");
+  const [changeError, setChangeError] = useState("");
 
   // ── Unified data (computed before early returns because of useMemo) ──────
   type SubView = typeof demoSub;
@@ -255,7 +257,7 @@ function SubscriptionPage() {
   const card = defaultCardOf(cards);
   const notify = (t: string, s: string) => DEMO_MODE && settings.notifyBilling && pushOwnNote("Subscription", t, s);
   const current = plans.find((p) => p.name === sub.plan);
-  const openPlan = (k: "upgrade" | "downgrade") => { setPlanKind(k); setDialog(k); };
+  const openPlan = (k: "upgrade" | "downgrade") => { setPlanKind(k); setChoice(null); setChangeError(""); setDialog(k); };
 
   const ordered = [...plans].sort((a, b) => monthly(a) - monthly(b));
   const here = monthly({ price: sub.price, interval: sub.interval });
@@ -267,13 +269,15 @@ function SubscriptionPage() {
     if (!DEMO_MODE) {
       const planId = apiPlanIdByName.get(p.name);
       if (!planId) { toast.error("Plan not found"); return; }
+      setChangeError("");
       changePlanMutation.mutate(planId, {
         onSuccess: () => {
-          toast.success(kind === "upgrade" ? `You're now on ${p.name}` : `Switching to ${p.name} on ${day(sub.renewsOn)}`);
+          toast.success(`You're now on ${p.name}`);
+          void qc.invalidateQueries({ queryKey: INVOICES_QUERY_KEY });
           setDialog(null);
           setChoice(null);
         },
-        onError: () => toast.error("Failed to change plan. Please try again."),
+        onError: (err) => setChangeError(isApiError(err) ? err.message : "We couldn't change your plan. Please try again."),
       });
       return;
     }
@@ -514,32 +518,74 @@ function SubscriptionPage() {
           if (!o) {
             setDialog(null);
             setChoice(null);
+            setChangeError("");
           }
         }}
       >
-        <DialogContent className="border-border bg-surface-2 sm:max-w-lg">
+        <DialogContent className="grid-cols-[minmax(0,1fr)] overflow-x-hidden border-border bg-surface-2 sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{planKind === "upgrade" ? "Upgrade your plan" : "Downgrade your plan"}</DialogTitle>
-            <DialogDescription>{planKind === "upgrade" ? "Takes effect immediately." : `Takes effect on ${day(sub.renewsOn)}, when your current period ends.`}</DialogDescription>
+            <DialogDescription>
+              {DEMO_MODE && planKind === "downgrade"
+                ? `Takes effect on ${day(sub.renewsOn)}, when your current period ends.`
+                : planKind === "upgrade"
+                  ? "Your new plan starts right away. You only pay the difference for the rest of this billing period."
+                  : "Your new plan starts right away. The unused part of your current plan is credited toward your next invoice."}
+            </DialogDescription>
           </DialogHeader>
-          <div role="radiogroup" aria-label="Plans" className="grid gap-2">
-            {(planKind === "upgrade" ? higher : lower).map((p) => (
-              <label key={p.name} className={cn("flex cursor-pointer items-center gap-3 rounded-md border p-3", choice?.name === p.name ? "border-primary bg-primary/10" : "border-border bg-surface")}>
-                <input type="radio" name="plan" className="accent-[var(--primary)]" checked={choice?.name === p.name} onChange={() => setChoice(p)} />
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-semibold">{p.name}</span>
-                  <span className="block truncate text-xs text-muted-foreground">{p.features}</span>
-                </span>
-                <span className="text-sm font-bold">
-                  {money(p.price)}
-                  <span className="text-xs font-normal text-muted-foreground">/{perLabel(p.interval)}</span>
-                </span>
-              </label>
-            ))}
+          <div className="flex min-w-0 items-center justify-between gap-3 rounded-md border border-border bg-surface px-3 py-2 text-sm">
+            <span className="shrink-0 text-muted-foreground">Your plan now</span>
+            <span className="min-w-0 truncate text-right font-semibold">
+              {sub.plan} · {money(sub.price)}/{perLabel(sub.interval)}
+            </span>
           </div>
+          {(planKind === "upgrade" ? higher : lower).length === 0 ? (
+            <p className="rounded-md border border-border bg-surface px-3 py-4 text-center text-sm text-muted-foreground">
+              {planKind === "upgrade" ? "You're on our highest plan." : "You're on our lowest plan."}
+            </p>
+          ) : (
+            <div role="radiogroup" aria-label="Plans" className="grid gap-2">
+              {(planKind === "upgrade" ? higher : lower).map((p) => {
+                const diff = monthly(p) - here;
+                return (
+                  <label key={p.name} className={cn("flex min-w-0 cursor-pointer items-center gap-3 rounded-md border p-3", choice?.name === p.name ? "border-primary bg-primary/10" : "border-border bg-surface")}>
+                    <input type="radio" name="plan" className="shrink-0 accent-[var(--primary)]" checked={choice?.name === p.name} onChange={() => { setChoice(p); setChangeError(""); }} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold">{p.name}</span>
+                      <span className="line-clamp-2 break-words text-xs text-muted-foreground">{p.features}</span>
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <span className="block text-sm font-bold">
+                        {money(p.price)}
+                        <span className="text-xs font-normal text-muted-foreground">/{perLabel(p.interval)}</span>
+                      </span>
+                      <span className={cn("block text-xs font-semibold", diff > 0 ? "text-warning" : "text-success")}>
+                        {diff > 0 ? "+" : "-"}
+                        {money(Math.abs(diff))}/mo
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+          {choice && (
+            <p className="break-words rounded-md border border-info/30 bg-info/10 px-3 py-2 text-xs text-soft">
+              {planKind === "upgrade"
+                ? `You'll move to ${choice.name} now. Your next renewal is ${money(choice.price)}/${perLabel(choice.interval)}.`
+                : DEMO_MODE
+                  ? `You'll stay on ${sub.plan} until ${day(sub.renewsOn)}, then move to ${choice.name} at ${money(choice.price)}/${perLabel(choice.interval)}.`
+                  : `You'll move to ${choice.name} now. Your next renewal is ${money(choice.price)}/${perLabel(choice.interval)}, less your credit.`}
+            </p>
+          )}
+          {changeError && (
+            <p role="alert" className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+              {changeError}
+            </p>
+          )}
           <LegalLinks lead="By changing your plan you agree to our" />
           <div className="flex justify-end gap-2">
-            <Btn onClick={() => { setDialog(null); setChoice(null); }}>Cancel</Btn>
+            <Btn onClick={() => { setDialog(null); setChoice(null); setChangeError(""); }}>Cancel</Btn>
             <Btn variant="primary" disabled={!choice || changePlanMutation.isPending} onClick={() => choice && apply(planKind, choice)}>
               {changePlanMutation.isPending ? "Applying…" : `Confirm ${planKind}`}
             </Btn>
