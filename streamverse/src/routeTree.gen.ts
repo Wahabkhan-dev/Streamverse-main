@@ -46,6 +46,8 @@ import { Route as AdminPaymentsRouteImport } from './routes/admin.payments'
 import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
 import { Route as AdminSubscriptionsRouteImport } from './routes/admin.subscriptions'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
+import { Route as BillingCancelRouteImport } from './routes/billing.cancel'
+import { Route as BillingSuccessRouteImport } from './routes/billing.success'
 import { Route as FlipbookSlugRouteImport } from './routes/flipbook.$slug'
 import { Route as ListenSlugRouteImport } from './routes/listen.$slug'
 import { Route as ReadSlugRouteImport } from './routes/read.$slug'
@@ -260,6 +262,16 @@ const AdminUsersRoute = AdminUsersRouteImport.update({
   path: '/users',
   getParentRoute: () => AdminRoute,
 } as any)
+const BillingCancelRoute = BillingCancelRouteImport.update({
+  id: '/billing/cancel',
+  path: '/billing/cancel',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BillingSuccessRoute = BillingSuccessRouteImport.update({
+  id: '/billing/success',
+  path: '/billing/success',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FlipbookSlugRoute = FlipbookSlugRouteImport.update({
   id: '/flipbook/$slug',
   path: '/flipbook/$slug',
@@ -443,6 +455,8 @@ export interface FileRoutesByFullPath {
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/subscriptions': typeof AdminSubscriptionsRoute
   '/admin/users': typeof AdminUsersRoute
+  '/billing/cancel': typeof BillingCancelRoute
+  '/billing/success': typeof BillingSuccessRoute
   '/flipbook/$slug': typeof FlipbookSlugRoute
   '/listen/$slug': typeof ListenSlugRoute
   '/read/$slug': typeof ReadSlugRoute
@@ -507,6 +521,8 @@ export interface FileRoutesByTo {
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/subscriptions': typeof AdminSubscriptionsRoute
   '/admin/users': typeof AdminUsersRoute
+  '/billing/cancel': typeof BillingCancelRoute
+  '/billing/success': typeof BillingSuccessRoute
   '/flipbook/$slug': typeof FlipbookSlugRoute
   '/listen/$slug': typeof ListenSlugRoute
   '/read/$slug': typeof ReadSlugRoute
@@ -576,6 +592,8 @@ export interface FileRoutesById {
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/subscriptions': typeof AdminSubscriptionsRoute
   '/admin/users': typeof AdminUsersRoute
+  '/billing/cancel': typeof BillingCancelRoute
+  '/billing/success': typeof BillingSuccessRoute
   '/flipbook/$slug': typeof FlipbookSlugRoute
   '/listen/$slug': typeof ListenSlugRoute
   '/read/$slug': typeof ReadSlugRoute
@@ -646,6 +664,8 @@ export interface FileRouteTypes {
     | '/admin/settings'
     | '/admin/subscriptions'
     | '/admin/users'
+    | '/billing/cancel'
+    | '/billing/success'
     | '/flipbook/$slug'
     | '/listen/$slug'
     | '/read/$slug'
@@ -710,6 +730,8 @@ export interface FileRouteTypes {
     | '/admin/settings'
     | '/admin/subscriptions'
     | '/admin/users'
+    | '/billing/cancel'
+    | '/billing/success'
     | '/flipbook/$slug'
     | '/listen/$slug'
     | '/read/$slug'
@@ -778,6 +800,8 @@ export interface FileRouteTypes {
     | '/admin/settings'
     | '/admin/subscriptions'
     | '/admin/users'
+    | '/billing/cancel'
+    | '/billing/success'
     | '/flipbook/$slug'
     | '/listen/$slug'
     | '/read/$slug'
@@ -819,6 +843,8 @@ export interface RootRouteChildren {
   SignInRoute: typeof SignInRoute
   SignUpRoute: typeof SignUpRoute
   SignupRoute: typeof SignupRouteWithChildren
+  BillingCancelRoute: typeof BillingCancelRoute
+  BillingSuccessRoute: typeof BillingSuccessRoute
   FlipbookSlugRoute: typeof FlipbookSlugRoute
   ListenSlugRoute: typeof ListenSlugRoute
   ReadSlugRoute: typeof ReadSlugRoute
@@ -1085,6 +1111,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/users'
       preLoaderRoute: typeof AdminUsersRouteImport
       parentRoute: typeof AdminRoute
+    }
+    '/billing/cancel': {
+      id: '/billing/cancel'
+      path: '/billing/cancel'
+      fullPath: '/billing/cancel'
+      preLoaderRoute: typeof BillingCancelRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/billing/success': {
+      id: '/billing/success'
+      path: '/billing/success'
+      fullPath: '/billing/success'
+      preLoaderRoute: typeof BillingSuccessRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/flipbook/$slug': {
       id: '/flipbook/$slug'
@@ -1435,6 +1475,8 @@ const rootRouteChildren: RootRouteChildren = {
   SignInRoute: SignInRoute,
   SignUpRoute: SignUpRoute,
   SignupRoute: SignupRouteWithChildren,
+  BillingCancelRoute: BillingCancelRoute,
+  BillingSuccessRoute: BillingSuccessRoute,
   FlipbookSlugRoute: FlipbookSlugRoute,
   ListenSlugRoute: ListenSlugRoute,
   ReadSlugRoute: ReadSlugRoute,

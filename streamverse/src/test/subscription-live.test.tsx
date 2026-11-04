@@ -44,6 +44,34 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe("Stripe return pages", () => {
+  it("/billing/success confirms the payment, tells the opener window and closes the popup", async () => {
+    serve(states.active);
+    const close = vi.spyOn(window, "close").mockImplementation(() => undefined);
+    const heard: unknown[] = [];
+    const listener = new BroadcastChannel("sv-billing");
+    listener.onmessage = (e) => heard.push(e.data);
+    renderAt("/billing/success?session_id=cs_test_1&popup=1");
+    expect(await screen.findByText("Payment received", {}, { timeout: 8000 })).toBeTruthy();
+    expect(close).toHaveBeenCalled();
+    await waitFor(() => expect(heard).toContainEqual({ type: "paid" }));
+    listener.close();
+    close.mockRestore();
+  });
+
+  it("/billing/success without a popup shows a Continue button", async () => {
+    serve(states.active);
+    renderAt("/billing/success?session_id=cs_test_1");
+    expect(await screen.findByRole("link", { name: "Continue" }, { timeout: 8000 })).toBeTruthy();
+  });
+
+  it("/billing/cancel offers a new payment link", async () => {
+    serve(states.none);
+    renderAt("/billing/cancel");
+    expect(await screen.findByRole("link", { name: "Get a new payment link" })).toBeTruthy();
+  });
+});
+
 describe("Subscription page in live mode", () => {
   it("shows a paid customer's billing history (plan arrives as an object) instead of crashing", async () => {
     serve(states.active, paid);
