@@ -59,24 +59,57 @@ function PayForm({ label, onPaid, onProblem }: { label: string; onPaid: () => vo
 
 /** The card box on our own page (Stripe Elements): the card details go straight to Stripe, never through StreamVerse. */
 export function StripePayBox({ planId, label, onPaid, onProblem }: { planId: string; label: string; onPaid: () => void; onProblem: (msg: string) => void }) {
+  // Bumping `attempt` makes a brand-new payment (the old one may have expired or been abandoned); the server cancels the stale one.
+  const [attempt, setAttempt] = useState(0);
+  const [opening, setOpening] = useState(false);
   const intent = useQuery({
-    queryKey: ["billing", "payment-intent", planId],
+    queryKey: ["billing", "payment-intent", planId, attempt],
     queryFn: async () => (await meApi.createPaymentIntent(planId)).data.clientSecret,
     staleTime: Infinity,
     gcTime: 0,
     retry: false,
     refetchOnWindowFocus: false,
   });
+  /** A fresh link to Stripe's own payment page, for when the box above is expired or won't load. */
+  async function openSecurePage() {
+    setOpening(true);
+    onProblem("");
+    try {
+      const res = await meApi.checkout(planId);
+      if (res.data.checkoutUrl) window.location.href = res.data.checkoutUrl;
+      else throw new Error("no link");
+    } catch {
+      onProblem("We couldn't open the payment page. Please try again.");
+      setOpening(false);
+    }
+  }
+  const refresh = (
+    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+      <span>Payment expired or not working?</span>
+      <button type="button" className="font-semibold text-primary-text underline" onClick={() => { onProblem(""); setAttempt((n) => n + 1); }}>
+        Get a new payment form
+      </button>
+      <button type="button" className="font-semibold text-primary-text underline disabled:opacity-60" disabled={opening} onClick={() => void openSecurePage()}>
+        {opening ? "Opening…" : "Pay on Stripe's secure page"}
+      </button>
+    </div>
+  );
   if (intent.isLoading) return <div className="h-40 animate-pulse rounded-lg bg-surface-3" aria-busy="true" />;
   if (intent.isError || !intent.data)
     return (
-      <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400" role="alert">
-        {isApiError(intent.error) ? intent.error.message : "The payment box could not be loaded. Please try again."}
-      </p>
+      <div>
+        <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400" role="alert">
+          {isApiError(intent.error) ? intent.error.message : "The payment box could not be loaded. Please try again."}
+        </p>
+        {refresh}
+      </div>
     );
   return (
-    <Elements stripe={getStripe()} options={{ clientSecret: intent.data, appearance: STRIPE_APPEARANCE }}>
-      <PayForm label={label} onPaid={onPaid} onProblem={onProblem} />
-    </Elements>
+    <div>
+      <Elements key={intent.data} stripe={getStripe()} options={{ clientSecret: intent.data, appearance: STRIPE_APPEARANCE }}>
+        <PayForm label={label} onPaid={onPaid} onProblem={onProblem} />
+      </Elements>
+      {refresh}
+    </div>
   );
 }

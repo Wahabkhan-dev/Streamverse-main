@@ -173,6 +173,10 @@ export async function createCheckoutSession(userId: string, planId: string, ctx:
   }
 
   const stripeCustomerId = await getOrCreateStripeCustomer(userId);
+  // an earlier unpaid attempt (its payment form or link expired) must not linger as a second billable subscription
+  if (existing && existing.status === "INCOMPLETE" && existing.stripeSubscriptionId) {
+    await stripeService.cancelSubscriptionNow(existing.stripeSubscriptionId).catch(() => undefined);
+  }
   // Deterministic key: same user+plan within a short window produces the same Stripe session
   // instead of spawning two billable subscriptions on a double-click.
   const windowMinute = Math.floor(Date.now() / 60_000);

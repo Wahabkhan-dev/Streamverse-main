@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowDown, ArrowUp, Check, CreditCard, Download, Settings2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { showBackendNotice } from "@/components/sv/BackendNotice";
 import { LegalLinks } from "@/components/sv/LegalLinks";
@@ -21,10 +22,14 @@ import {
   useCancelSubscriptionMutation,
   useResumeSubscriptionMutation,
   useChangePlanMutation,
+  useCheckoutMutation,
+  SUBSCRIPTION_QUERY_KEY,
+  INVOICES_QUERY_KEY,
 } from "@/hooks/useApiSubscription";
 import { useApiPlansQuery, planPriceDollars, planInterval } from "@/hooks/useApiPlans";
 import type { ApiPlan, ApiPaymentMethod, ApiInvoice } from "@/api/types";
 import type { Bill } from "@/lib/user";
+import { syncSubscription } from "@/lib/billingSync";
 
 export const Route = createFileRoute("/_site/subscription")({
   head: () => ({ meta: [{ title: "Subscription — StreamVerse" }, { name: "description", content: "Your plan, renewal date and billing history." }] }),
@@ -32,7 +37,10 @@ export const Route = createFileRoute("/_site/subscription")({
 });
 
 const money = (n: number) => `$${n.toFixed(2)}`;
-const day = (iso: string) => new Date(iso).toLocaleDateString(undefined, { dateStyle: "long" });
+const day = (iso: string | null | undefined) => {
+  const d = iso ? new Date(iso) : null;
+  return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString(undefined, { dateStyle: "long" }) : "-";
+};
 const perLabel = (interval: string) => (interval === "Yearly" ? "year" : "month");
 
 /** Map an API plan to the local Plan shape expected by the upgrade/downgrade dialog. */
@@ -57,13 +65,79 @@ function apiCardToLocal(c: ApiPaymentMethod): SavedCard {
   };
 }
 
-/** Map an API invoice to the local Bill shape. */
+/** Map an API invoice to the local Bill shape (the API names the plan as an object and writes the status in capitals). */
 function apiInvoiceToLocal(inv: ApiInvoice): Bill {
-  const status: Bill["status"] =
-    inv.status === "paid" ? "Succeeded"
-    : inv.status === "open" ? "Pending"
-    : "Failed";
-  return { id: inv.id, date: inv.date, plan: inv.plan ?? "", amount: inv.amount / 100, status };
+  const raw = String(inv.status ?? "").toLowerCase();
+  const status: Bill["status"] = raw === "paid" || raw === "succeeded" ? "Succeeded" : raw === "open" || raw === "pending" ? "Pending" : "Failed";
+  const plan = typeof inv.plan === "string" ? inv.plan : (inv.plan?.name ?? "");
+  return { id: inv.invoiceReference ?? inv.id, date: inv.date, plan, amount: (inv.amount ?? 0) / 100, status };
+}
+
+type LiveState = "none" | "incomplete" | "ok";
+
+/** The server's subscription status in the page's vocabulary. "none" = never subscribed, "incomplete" = started paying, never finished. */
+function liveStateOf(status: string | null | undefined): LiveState {
+  const s = String(status ?? "").toLowerCase();
+  if (!s) return "none";
+  if (s === "incomplete" || s === "incomplete_expired") return "incomplete";
+  return "ok";
+}
+
+function pageStatus(status: string | null | undefined): SubscriptionStatus {
+  const s = String(status ?? "").toLowerCase();
+  if (s === "active" || s === "trialing") return "active";
+  if (s === "canceled" || s === "cancelled") return "canceled";
+  if (s === "past_due" || s === "unpaid") return "past_due";
+  return "expired";
+}
+
+/**
+ * A customer with no paid plan: either never subscribed, or they started paying and the payment link or form expired
+ * before they finished. Every click here makes a brand-new Stripe checkout link, so an old/expired link never blocks them.
+ */
+function GetPlanPanel({ state, plans, currentPlanId }: { state: "none" | "incomplete"; plans: ApiPlan[]; currentPlanId?: string }) {
+  const checkout = useCheckoutMutation();
+  const [pending, setPending] = useState<string | null>(null);
+  const go = (planId: string) => {
+    setPending(planId);
+    checkout.mutate(planId, {
+      onError: () => {
+        setPending(null);
+        toast.error("We couldn't open the payment page. Please try again.");
+      },
+    });
+  };
+  const resume = state === "incomplete" ? plans.find((p) => p.id === currentPlanId) : undefined;
+  return (
+    <Panel className="mt-6">
+      <PanelHeader title={state === "incomplete" ? "Finish your payment" : "Choose a plan"} />
+      <div className="space-y-4 p-5">
+        <p className="text-sm text-soft">
+          {state === "incomplete"
+            ? "Your payment wasn't completed, or the payment link expired. Get a fresh link and pay to start your membership."
+            : "You don't have a plan yet. Pick one to start watching, reading and listening."}
+        </p>
+        {resume && (
+          <Btn variant="primary" disabled={checkout.isPending} onClick={() => go(resume.id)}>
+            {pending === resume.id && checkout.isPending ? "Opening payment…" : `Get a new payment link for ${resume.name}`}
+          </Btn>
+        )}
+        <div className="grid gap-3 sm:grid-cols-3">
+          {plans.map((p) => (
+            <div key={p.id} className="rounded-lg border border-border bg-surface-2 p-4">
+              <div className="font-bold">{p.name}</div>
+              <div className="mt-1 text-sm text-muted-foreground">
+                {money(planPriceDollars(p))} / {perLabel(planInterval(p))}
+              </div>
+              <Btn className="mt-3 w-full" disabled={checkout.isPending} onClick={() => go(p.id)}>
+                {pending === p.id && checkout.isPending ? "Opening payment…" : state === "incomplete" && p.id === currentPlanId ? "Pay now" : "Subscribe"}
+              </Btn>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Panel>
+  );
 }
 
 function SubscriptionPage() {
@@ -84,6 +158,19 @@ function SubscriptionPage() {
   const resumeMutation = useResumeSubscriptionMutation();
   const changePlanMutation = useChangePlanMutation();
 
+  const qc = useQueryClient();
+  // Back from Stripe's payment page (?session_id=...): pull the new state now instead of waiting for the webhook
+  useEffect(() => {
+    if (DEMO_MODE || typeof window === "undefined") return;
+    if (!new URLSearchParams(window.location.search).get("session_id")) return;
+    void syncSubscription()
+      .catch(() => false)
+      .finally(() => {
+        void qc.invalidateQueries({ queryKey: SUBSCRIPTION_QUERY_KEY });
+        void qc.invalidateQueries({ queryKey: INVOICES_QUERY_KEY });
+      });
+  }, [qc]);
+
   // ── Component state ─────────────────────────────────────────────────────
   const [dialog, setDialog] = useState<null | "manage" | "upgrade" | "downgrade">(null);
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -98,12 +185,12 @@ function SubscriptionPage() {
     if (!s) return demoSub; // fallback (loading/error handled below)
     const invoices: Bill[] = (apiInvoicesQuery.data ?? []).map(apiInvoiceToLocal);
     return {
-      plan: s.plan?.name ?? "Unknown",
+      plan: s.plan?.name ?? "No plan",
       price: s.plan ? planPriceDollars(s.plan) : 0,
       interval: (s.plan ? planInterval(s.plan) : "Monthly") as "Monthly" | "Yearly",
-      status: (s.status === "trialing" ? "active" : s.status) as SubscriptionStatus,
-      startedOn: s.currentPeriodStart,
-      renewsOn: s.currentPeriodEnd,
+      status: pageStatus(s.status),
+      startedOn: s.currentPeriodStart ?? "",
+      renewsOn: s.currentPeriodEnd ?? "",
       pendingChange: s.pendingPlanChange
         ? {
             plan: s.pendingPlanChange.plan?.name ?? "",
@@ -149,6 +236,17 @@ function SubscriptionPage() {
       <div className="mx-auto max-w-[1100px] px-4 pt-8 md:px-8">
         <h1 className="text-3xl font-bold tracking-tight">Subscription</h1>
         <p className="mt-6 text-sm text-muted-foreground">Failed to load subscription details. Please refresh and try again.</p>
+      </div>
+    );
+  }
+
+  const liveState: LiveState = DEMO_MODE ? "ok" : liveStateOf(apiSubQuery.data?.status);
+  if (liveState !== "ok") {
+    return (
+      <div className="mx-auto max-w-[1100px] px-4 pt-8 md:px-8">
+        <h1 className="text-3xl font-bold tracking-tight">Subscription</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Your plan and billing.</p>
+        <GetPlanPanel state={liveState} plans={apiPlansQuery.data ?? []} {...(apiSubQuery.data?.plan?.id ? { currentPlanId: apiSubQuery.data.plan.id } : {})} />
       </div>
     );
   }

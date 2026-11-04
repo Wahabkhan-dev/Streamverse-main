@@ -64,11 +64,12 @@ export interface ApiPlan {
 
 export interface ApiSubscription {
   id: string;
-  status: "active" | "canceled" | "past_due" | "expired" | "trialing";
+  /** upper-case from the API ("ACTIVE", "INCOMPLETE", ...); null when the customer has never subscribed */
+  status: string | null;
   planId: string;
   plan?: ApiPlan;
-  currentPeriodStart: string;
-  currentPeriodEnd: string;
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
   stripeSubscriptionId?: string;
   pendingPlanChange?: {
@@ -81,10 +82,14 @@ export interface ApiSubscription {
 export interface ApiInvoice {
   id: string;
   date: string;
+  /** minor units (cents) */
   amount: number;
   currency: string;
-  status: "paid" | "open" | "uncollectible" | "void";
-  plan?: string;
+  /** as the API sends it: "SUCCEEDED", "FAILED", "REFUNDED", ... (older shapes: "paid" / "open") */
+  status: string;
+  /** the plan's name, or the plan itself as `{ id, name }` */
+  plan?: string | { id: string; name: string } | null;
+  invoiceReference?: string | null;
   downloadUrl?: string;
 }
 
