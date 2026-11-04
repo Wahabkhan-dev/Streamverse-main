@@ -8,6 +8,9 @@ export const findActiveById = (id: string) => prisma.plan.findFirst({ where: { i
 export const create = (data: Prisma.PlanUncheckedCreateInput) => prisma.plan.create({ data });
 export const update = (id: string, data: Prisma.PlanUncheckedUpdateInput) => prisma.plan.update({ where: { id }, data });
 
+/** Customers currently on a plan (paying, trialing or past due): who an admin's change to it affects. */
+export const countSubscribers = (planId: string) => prisma.subscription.count({ where: { planId, status: { in: ["ACTIVE", "TRIALING", "PAST_DUE"] } } });
+
 export const listAll = () => prisma.plan.findMany({ orderBy: { displayOrder: "asc" } });
 export const listActive = () => prisma.plan.findMany({ where: { active: true }, orderBy: { displayOrder: "asc" } });
 

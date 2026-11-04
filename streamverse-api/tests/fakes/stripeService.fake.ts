@@ -49,6 +49,7 @@ let refunds = new Map<string, FakeRefund>();
 let nextSessionUrl = "https://checkout.stripe.test/session";
 
 export function __reset() {
+  pendingItems = [];
   customers = new Map();
   paymentMethods = new Map();
   subscriptions = new Map();
@@ -76,7 +77,7 @@ export async function deleteCustomer(stripeCustomerId: string): Promise<void> {
 export async function retrieveCustomer(stripeCustomerId: string) {
   const c = customers.get(stripeCustomerId);
   if (!c) throw new Error("No such customer");
-  return { id: c.id, email: c.email, deleted: false, invoice_settings: { default_payment_method: c.defaultPaymentMethodId } };
+  return { id: c.id, email: c.email, deleted: false, balance: 0, invoice_settings: { default_payment_method: c.defaultPaymentMethodId } };
 }
 
 export async function updateCustomerDefaultPaymentMethod(stripeCustomerId: string, paymentMethodId: string) {
@@ -145,6 +146,14 @@ export async function changeSubscriptionPrice(stripeSubscriptionId: string, subs
   const item = sub.items.data.find((i) => i.id === subscriptionItemId);
   if (item) item.price = { id: newPriceId };
   return sub;
+}
+
+export let pendingItems: { amount: number }[] = [];
+export function __setPendingItems(items: { amount: number }[]) {
+  pendingItems = items;
+}
+export async function listPendingInvoiceItems(_customerId: string) {
+  return pendingItems;
 }
 
 export async function retrievePaymentIntent(paymentIntentId: string) {

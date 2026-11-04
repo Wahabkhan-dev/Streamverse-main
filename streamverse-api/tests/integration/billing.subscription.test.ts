@@ -96,7 +96,7 @@ describe("Change plan / upgrade-downgrade (Section 42/43/44/94/102)", () => {
     const planB = await createTestPlan({ name: "Premium", priceAmount: 2999 });
     const { headers } = await userWithActiveSubscription(planA);
 
-    const res = await request(app).post("/api/v1/me/subscription/change-plan").set(headers).send({ planId: planB.id });
+    const res = await request(app).post("/api/v1/me/subscription/change-plan").set(headers).send({ planId: planB.id, consent: true });
     expect(res.status).toBe(200);
     expect(res.body.data.plan.id).toBe(planB.id);
   });
@@ -107,10 +107,10 @@ describe("Change plan / upgrade-downgrade (Section 42/43/44/94/102)", () => {
     const { headers, stripeSub } = await userWithActiveSubscription(basic);
     fakeStripe.priceChanges.length = 0;
 
-    await request(app).post("/api/v1/me/subscription/change-plan").set(headers).send({ planId: premium.id });
+    await request(app).post("/api/v1/me/subscription/change-plan").set(headers).send({ planId: premium.id, consent: true });
     expect(fakeStripe.priceChanges.at(-1)).toMatchObject({ subscriptionId: stripeSub.id, chargeNow: true });
 
-    await request(app).post("/api/v1/me/subscription/change-plan").set(headers).send({ planId: basic.id });
+    await request(app).post("/api/v1/me/subscription/change-plan").set(headers).send({ planId: basic.id, consent: true });
     expect(fakeStripe.priceChanges.at(-1)).toMatchObject({ subscriptionId: stripeSub.id, chargeNow: false });
   });
 
@@ -119,7 +119,7 @@ describe("Change plan / upgrade-downgrade (Section 42/43/44/94/102)", () => {
     const yearly = await createTestPlan({ name: "Yearly", priceAmount: 9000, billingInterval: "YEARLY" }); // 750 / month
     const { headers } = await userWithActiveSubscription(monthly);
     fakeStripe.priceChanges.length = 0;
-    await request(app).post("/api/v1/me/subscription/change-plan").set(headers).send({ planId: yearly.id });
+    await request(app).post("/api/v1/me/subscription/change-plan").set(headers).send({ planId: yearly.id, consent: true });
     expect(fakeStripe.priceChanges.at(-1)?.chargeNow).toBe(false);
   });
 
@@ -129,17 +129,77 @@ describe("Change plan / upgrade-downgrade (Section 42/43/44/94/102)", () => {
     const { headers } = await userWithActiveSubscription(basic);
     fakeStripe.__declineNextCharge();
 
-    const res = await request(app).post("/api/v1/me/subscription/change-plan").set(headers).send({ planId: premium.id });
+    const res = await request(app).post("/api/v1/me/subscription/change-plan").set(headers).send({ planId: premium.id, consent: true });
     expect(res.status).toBe(402);
     expect(res.body.message).toMatch(/plan was not changed/);
     const now = await request(app).get("/api/v1/me/subscription").set(headers);
     expect(now.body.data.plan.id).toBe(basic.id);
   });
 
+  it("refuses a plan change without the customer's consent", async () => {
+    const basic = await createTestPlan({ name: "Basic", priceAmount: 499 });
+    const premium = await createTestPlan({ name: "Premium", priceAmount: 1499 });
+    const { headers } = await userWithActiveSubscription(basic);
+    fakeStripe.priceChanges.length = 0;
+    for (const body of [{ planId: premium.id }, { planId: premium.id, consent: false }]) {
+      const res = await request(app).post("/api/v1/me/subscription/change-plan").set(headers).send(body);
+      expect(res.status).toBe(400);
+    }
+    expect(fakeStripe.priceChanges).toHaveLength(0); // nothing was charged or changed
+  });
+
+  it("previews an upgrade: what is charged today, the credit for the unused part, the next renewal and the saved card", async () => {
+    const basic = await createTestPlan({ name: "Basic", priceAmount: 1000 });
+    const premium = await createTestPlan({ name: "Premium", priceAmount: 2000 });
+    const { headers } = await userWithActiveSubscription(basic);
+    const res = await request(app).get(`/api/v1/me/subscription/change-plan/preview?planId=${premium.id}`).set(headers);
+    expect(res.status).toBe(200);
+    const p = res.body.data;
+    expect(p.direction).toBe("upgrade");
+    expect(p.estimate).toBe(true);
+    expect(p.chargeToday).toBeGreaterThan(0);
+    expect(p.chargeToday).toBeLessThanOrEqual(1000); // the difference for the rest of a period never exceeds the price gap
+    expect(p.creditForUnused).toBeGreaterThan(0);
+    expect(p.creditAdded).toBe(0);
+    expect(p.nextRenewal.amount).toBe(2000);
+    expect(p.fromPlan.name).toBe("Basic");
+    expect(p.toPlan.name).toBe("Premium");
+  });
+
+  it("previews a downgrade: nothing charged, a credit added", async () => {
+    const basic = await createTestPlan({ name: "Basic", priceAmount: 1000 });
+    const premium = await createTestPlan({ name: "Premium", priceAmount: 2000 });
+    const { headers } = await userWithActiveSubscription(premium);
+    const res = await request(app).get(`/api/v1/me/subscription/change-plan/preview?planId=${basic.id}`).set(headers);
+    expect(res.body.data.direction).toBe("downgrade");
+    expect(res.body.data.chargeToday).toBe(0);
+    expect(res.body.data.creditAdded).toBeGreaterThan(0);
+  });
+
+  it("shows the customer's credit: pending credit on the next invoice plus any balance", async () => {
+    const plan = await createTestPlan();
+    const { headers } = await userWithActiveSubscription(plan);
+    expect((await request(app).get("/api/v1/me/subscription/credit").set(headers)).body.data.amount).toBe(0);
+    fakeStripe.__setPendingItems([{ amount: -350 }, { amount: 100 }]);
+    const res = await request(app).get("/api/v1/me/subscription/credit").set(headers);
+    expect(res.body.data).toMatchObject({ amount: 350, currency: "usd" });
+  });
+
+  it("records the customer's consent and the figures they were shown in the audit log", async () => {
+    const basic = await createTestPlan({ name: "Basic", priceAmount: 1000 });
+    const premium = await createTestPlan({ name: "Premium", priceAmount: 2000 });
+    const { headers } = await userWithActiveSubscription(basic);
+    await request(app).post("/api/v1/me/subscription/change-plan").set(headers).send({ planId: premium.id, consent: true });
+    const log = (prisma as unknown as { auditLog: { findMany: (a?: unknown) => Promise<{ action: string; metadata: { consent?: boolean; direction?: string } }[]> } }).auditLog;
+    const entries = await log.findMany();
+    const changed = entries.find((e) => e.action === "subscription.plan_changed");
+    expect(changed?.metadata).toMatchObject({ consent: true, direction: "upgrade" });
+  });
+
   it("refuses changing to the same plan", async () => {
     const plan = await createTestPlan();
     const { headers } = await userWithActiveSubscription(plan);
-    const res = await request(app).post("/api/v1/me/subscription/change-plan").set(headers).send({ planId: plan.id });
+    const res = await request(app).post("/api/v1/me/subscription/change-plan").set(headers).send({ planId: plan.id, consent: true });
     expect(res.status).toBe(409);
   });
 });

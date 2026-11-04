@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { estimatePlanChange, getAccountCredit } from "../services/billing/planChange.service";
 import * as subscriptionService from "../services/billing/subscription.service";
 import { auditContext } from "../services/auditLog.service";
 import { sendSuccess } from "../utils/apiResponse";
@@ -21,6 +22,14 @@ export async function cancel(req: Request, res: Response) {
 export async function resume(req: Request, res: Response) {
   sendSuccess(res, await subscriptionService.resumeSubscription(req.auth!.userId, auditContext(req)), "Subscription resumed");
 }
+export async function previewPlanChange(req: Request, res: Response) {
+  sendSuccess(res, await estimatePlanChange(req.auth!.userId, String(req.query["planId"])), "Plan change preview");
+}
+
+export async function accountCredit(req: Request, res: Response) {
+  sendSuccess(res, await getAccountCredit(req.auth!.userId), "Account credit");
+}
+
 export async function changePlan(req: Request, res: Response) {
   sendSuccess(res, await subscriptionService.changePlan(req.auth!.userId, req.body.planId, auditContext(req)), "Plan changed");
 }

@@ -128,6 +128,12 @@ export async function changeSubscriptionPrice(stripeSubscriptionId: string, subs
   );
 }
 
+/** Charges waiting to go on the customer's next invoice (a downgrade's unused-time credit is one, with a negative amount). */
+export async function listPendingInvoiceItems(stripeCustomerId: string): Promise<Stripe.InvoiceItem[]> {
+  const res = await getStripeClient().invoiceItems.list({ customer: stripeCustomerId, pending: true, limit: 100 });
+  return res.data;
+}
+
 export async function retrievePaymentIntent(paymentIntentId: string): Promise<Stripe.PaymentIntent> {
   return getStripeClient().paymentIntents.retrieve(paymentIntentId);
 }

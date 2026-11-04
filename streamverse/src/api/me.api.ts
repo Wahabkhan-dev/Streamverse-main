@@ -4,7 +4,9 @@ import type {
   ApiUser,
   ApiMeta,
   ApiSubscription,
+  ApiAccountCredit,
   ApiInvoice,
+  ApiPlanChangePreview,
   ApiPaymentMethod,
   ApiSetupIntent,
   ApiSyncedSubscription,
@@ -64,8 +66,17 @@ export const meApi = {
     return api.post<ApiResponse<{ message: string }>>("/me/subscription/resume");
   },
 
-  changePlan(planId: string) {
-    return api.post<ApiResponse<ApiSubscription>>("/me/subscription/change-plan", { planId });
+  /** `consent` is the customer's ticked agreement to what the change does to their bill; the server refuses without it. */
+  changePlan(planId: string, consent: true) {
+    return api.post<ApiResponse<ApiSubscription>>("/me/subscription/change-plan", { planId, consent });
+  },
+
+  previewPlanChange(planId: string) {
+    return api.get<ApiResponse<ApiPlanChangePreview>>(`/me/subscription/change-plan/preview?planId=${encodeURIComponent(planId)}`);
+  },
+
+  getCredit() {
+    return api.get<ApiResponse<ApiAccountCredit>>("/me/subscription/credit");
   },
 
   /** POST /me/billing-portal — returns Stripe billing portal URL */

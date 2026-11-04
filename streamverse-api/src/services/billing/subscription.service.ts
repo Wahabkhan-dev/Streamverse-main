@@ -13,6 +13,7 @@ import { recordAudit } from "../auditLog.service";
 import { createNotification } from "../notification.service";
 import * as stripeService from "../stripe/stripe.service";
 import { resolveActivePlanOrThrow, toCustomerPlan } from "./plan.service";
+import { estimatePlanChange } from "./planChange.service";
 import { statusGrantsAccess } from "./subscriptionAccess.service";
 import { getOrCreateStripeCustomer } from "./stripeCustomer.service";
 import { getDefaultPaymentMethodSummary } from "./paymentMethod.service";
@@ -279,6 +280,7 @@ export async function changePlan(userId: string, planId: string, ctx: AuditConte
 
   // An upgrade is charged now (the difference for the rest of this period, after crediting what was already paid for the old plan);
   // a downgrade just credits the unused part to the next invoice. Compared per month so a yearly plan can be judged against a monthly one.
+  const shown = await estimatePlanChange(userId, planId).catch(() => null); // what the customer was told, kept with their consent
   const currentPlan = await planRepository.findById(sub.planId);
   const perMonth = (p: { priceAmount: number; billingInterval: string }) => (p.billingInterval === "YEARLY" ? p.priceAmount / 12 : p.priceAmount);
   const isUpgrade = currentPlan ? perMonth(newPlan) > perMonth(currentPlan) : false;
@@ -295,7 +297,12 @@ export async function changePlan(userId: string, planId: string, ctx: AuditConte
   }
   await applyStripeSubscriptionSnapshot(updated);
   await createNotification(userId, "SUBSCRIPTION", "Plan changed", `Your subscription is now on the ${newPlan.name} plan.`);
-  await recordAudit(ctx, { action: "subscription.plan_changed", entityType: "SUBSCRIPTION", entityId: sub.id, metadata: { fromPlanId: sub.planId, toPlanId: newPlan.id } });
+  await recordAudit(ctx, {
+    action: "subscription.plan_changed",
+    entityType: "SUBSCRIPTION",
+    entityId: sub.id,
+    metadata: { fromPlanId: sub.planId, toPlanId: newPlan.id, direction: isUpgrade ? "upgrade" : "downgrade", consent: true, shown: shown ? { chargeToday: shown.chargeToday, creditAdded: shown.creditAdded } : null },
+  });
   return getMySubscription(userId);
 }
 

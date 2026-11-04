@@ -5,6 +5,7 @@ import type { AuditContext } from "../auditLog.service";
 import { recordAudit } from "../auditLog.service";
 import type { CreatePlanInput, UpdatePlanInput } from "../../validators/plan.validator";
 import { analyticsCache, publicCacheWindow } from "../../utils/analyticsCache";
+import * as entitlementCache from "../entitlement/entitlementCache.service";
 import { stripeConfig } from "../../config/stripe.config";
 import * as stripeService from "../stripe/stripe.service";
 
@@ -62,6 +63,8 @@ export async function updatePlan(id: string, input: UpdatePlanInput, ctx: AuditC
   if (input.stripePriceId && (await planRepository.stripePriceIdExists(input.stripePriceId, id))) throw new ConflictError("This Stripe Price is already linked to another plan.");
 
   let updated = await planRepository.update(id, input);
+  // limits and included content are read at the moment of access: drop every remembered decision so the change applies right now
+  entitlementCache.clear();
   // The price Admin sees must be the price Stripe charges. If the amount, currency or interval changed (and Admin did not link a
   // specific Stripe Price), mint a new Price now; if Stripe is not configured, park the plan on a placeholder so checkout refuses
   // instead of charging the old amount, and the first checkout after Stripe is set up creates the right Price.
@@ -85,10 +88,14 @@ export async function deactivatePlan(id: string, ctx: AuditContext = NO_ACTOR) {
 export async function getPlan(id: string) {
   const plan = await planRepository.findById(id);
   if (!plan) throw new NotFoundError("Plan not found");
-  return plan;
+  return { ...plan, subscriberCount: await planRepository.countSubscribers(plan.id) };
 }
 
-export const listAdminPlans = planRepository.listAll;
+/** Every plan with how many customers are on it, so Admin can see who a change to its limits will reach. */
+export async function listAdminPlans() {
+  const plans = await planRepository.listAll();
+  return Promise.all(plans.map(async (p) => ({ ...p, subscriberCount: await planRepository.countSubscribers(p.id) })));
+}
 
 /** Section 12: customer-visible list — active only, no unnecessary Stripe ids exposed. */
 export function listCustomerPlans() {

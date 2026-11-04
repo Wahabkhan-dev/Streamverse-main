@@ -6,6 +6,7 @@ import { useIsAuthenticated } from "@/lib/authState";
 export const SUBSCRIPTION_QUERY_KEY = ["me", "subscription"] as const;
 export const INVOICES_QUERY_KEY = ["me", "payments"] as const;
 export const PAYMENT_METHODS_QUERY_KEY = ["me", "payment-methods"] as const;
+export const CREDIT_QUERY_KEY = ["me", "credit"] as const;
 
 export function useApiSubscriptionQuery() {
   const authed = useIsAuthenticated();
@@ -70,11 +71,27 @@ export function useResumeSubscriptionMutation() {
   });
 }
 
+/** Changing plan moves money and credit around, so everything that shows them is refreshed afterwards. */
 export function useChangePlanMutation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (planId: string) => meApi.changePlan(planId),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: SUBSCRIPTION_QUERY_KEY }),
+    mutationFn: (v: { planId: string; consent: true }) => meApi.changePlan(v.planId, v.consent),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: SUBSCRIPTION_QUERY_KEY });
+      void qc.invalidateQueries({ queryKey: INVOICES_QUERY_KEY });
+      void qc.invalidateQueries({ queryKey: CREDIT_QUERY_KEY });
+    },
+  });
+}
+
+/** The customer's credit (used up by their next invoice): shown on the subscription page. */
+export function useAccountCreditQuery() {
+  const authed = useIsAuthenticated();
+  return useQuery({
+    queryKey: CREDIT_QUERY_KEY,
+    queryFn: async () => (await meApi.getCredit()).data,
+    enabled: !DEMO_MODE && authed,
+    staleTime: 30 * 1000,
   });
 }
 

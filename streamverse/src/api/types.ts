@@ -622,6 +622,29 @@ export interface ApiSyncedSubscription {
 export interface ApiCheckoutSession {
   checkoutUrl: string;
   sessionId: string;
+/** GET /me/subscription/change-plan/preview: what a plan change will do to the bill (an estimate; Stripe's invoice has the final figures). Amounts are in cents. */
+export interface ApiPlanChangePreview {
+  direction: "upgrade" | "downgrade";
+  estimate: true;
+  currency: string;
+  fromPlan: { id: string; name: string; priceAmount: number; currency: string; billingInterval: string };
+  toPlan: { id: string; name: string; priceAmount: number; currency: string; billingInterval: string };
+  periodEnd: string | null;
+  daysLeft: number;
+  creditForUnused: number;
+  newPlanForRest: number;
+  chargeToday: number;
+  creditAdded: number;
+  nextRenewal: { date: string; amount: number } | null;
+  paymentMethod: { brand: string; last4: string } | null;
+}
+
+/** GET /me/subscription/credit: credit that will be used up by the next invoice. Cents. */
+export interface ApiAccountCredit {
+  amount: number;
+  currency: string;
+}
+
 }
 
 export interface ApiBillingPortal {

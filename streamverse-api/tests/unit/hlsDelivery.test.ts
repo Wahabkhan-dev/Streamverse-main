@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 import { describe, expect, it } from "vitest";
-import { assertSafeRelativePath, rewritePlaylist, signHlsToken, verifyHlsToken, type RewriteContext } from "../../src/services/media/hlsDelivery.service";
+import { assertSafeRelativePath, capMasterPlaylist, heightCapOf, rewritePlaylist, signHlsToken, verifyHlsToken, type RewriteContext } from "../../src/services/media/hlsDelivery.service";
 
 const ctx = (playlistDir = ""): RewriteContext => ({
   playlistDir,
@@ -62,5 +62,53 @@ describe("HLS playback token", () => {
   it("cannot be forged with the access-token secret", () => {
     const forged = jwt.sign({ sub: "u", cid: "c", use: "hls" }, process.env["JWT_SECRET"]!, { expiresIn: 600 });
     expect(() => verifyHlsToken(forged, "c")).toThrow();
+  });
+});
+
+describe("Plan video-quality limit", () => {
+  const master = [
+    "#EXTM3U",
+    "#EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=640x360",
+    "360p/360p.m3u8",
+    "#EXT-X-STREAM-INF:BANDWIDTH=2800000,RESOLUTION=1280x720",
+    "720p/720p.m3u8",
+    "#EXT-X-STREAM-INF:BANDWIDTH=5000000,RESOLUTION=1920x1080",
+    "1080p/1080p.m3u8",
+  ].join("\n");
+
+  it("maps the plan's quality label to a picture height (null = no limit)", () => {
+    expect(heightCapOf("480p")).toBe(480);
+    expect(heightCapOf("720p")).toBe(720);
+    expect(heightCapOf("1080p")).toBe(1080);
+    expect(heightCapOf("4K")).toBe(2160);
+    expect(heightCapOf(null)).toBeNull();
+    expect(heightCapOf(undefined)).toBeNull();
+  });
+
+  it("a 720p plan's master playlist lists only the variants up to 720p", () => {
+    const { text, allowed } = capMasterPlaylist(master, 720);
+    expect(text).toContain("360p/360p.m3u8");
+    expect(text).toContain("720p/720p.m3u8");
+    expect(text).not.toContain("1080p");
+    expect(text).not.toContain("1920x1080");
+    expect([...allowed.dirs].sort()).toEqual(["360p", "720p"]);
+  });
+
+  it("a variant above the cap is not in the allowed list, so it cannot be fetched by guessing its path", () => {
+    const { allowed } = capMasterPlaylist(master, 720);
+    expect(allowed.paths.has("1080p/1080p.m3u8")).toBe(false);
+    expect(allowed.paths.has("720p/720p.m3u8")).toBe(true);
+    expect(allowed.dirs.has("1080p")).toBe(false);
+  });
+
+  it("an unlimited-size cap keeps every variant", () => {
+    expect(capMasterPlaylist(master, 2160).text).toBe(master);
+  });
+
+  it("if every variant is taller than the cap, the lowest stays so playback still works", () => {
+    const { text, allowed } = capMasterPlaylist(master, 240);
+    expect(text).toContain("360p/360p.m3u8");
+    expect(text).not.toContain("720p");
+    expect([...allowed.dirs]).toEqual(["360p"]);
   });
 });

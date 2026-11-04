@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { showBackendNotice } from "@/components/sv/BackendNotice";
 import { LegalLinks } from "@/components/sv/LegalLinks";
+import { ChangePlanDialog } from "@/components/sv/billing/ChangePlanDialog";
 import { PaymentFailed, SubscriptionExpired } from "@/components/sv/states";
 import { Btn, ConfirmDialog, Panel, PanelHeader, Skel, StatusBadge } from "@/components/sv/ui";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -23,6 +24,7 @@ import {
   useCancelSubscriptionMutation,
   useResumeSubscriptionMutation,
   useChangePlanMutation,
+  useAccountCreditQuery,
   useCheckoutMutation,
   SUBSCRIPTION_QUERY_KEY,
   INVOICES_QUERY_KEY,
@@ -155,6 +157,7 @@ function SubscriptionPage() {
   const apiPaymentsQuery = useApiPaymentMethodsQuery();
   const apiInvoicesQuery = useApiInvoicesQuery();
   const apiPlansQuery = useApiPlansQuery();
+  const creditQuery = useAccountCreditQuery();
   const cancelMutation = useCancelSubscriptionMutation();
   const resumeMutation = useResumeSubscriptionMutation();
   const changePlanMutation = useChangePlanMutation();
@@ -266,21 +269,7 @@ function SubscriptionPage() {
 
   // ── Action handlers ──────────────────────────────────────────────────────
   const apply = (kind: "upgrade" | "downgrade", p: Plan) => {
-    if (!DEMO_MODE) {
-      const planId = apiPlanIdByName.get(p.name);
-      if (!planId) { toast.error("Plan not found"); return; }
-      setChangeError("");
-      changePlanMutation.mutate(planId, {
-        onSuccess: () => {
-          toast.success(`You're now on ${p.name}`);
-          void qc.invalidateQueries({ queryKey: INVOICES_QUERY_KEY });
-          setDialog(null);
-          setChoice(null);
-        },
-        onError: (err) => setChangeError(isApiError(err) ? err.message : "We couldn't change your plan. Please try again."),
-      });
-      return;
-    }
+    if (!DEMO_MODE) return; // live plan changes go through ChangePlanDialog
     // Demo mode: local state mutation
     if (kind === "upgrade") {
       updateUser((s) => ({
@@ -382,6 +371,12 @@ function SubscriptionPage() {
                 </div>
               ))}
             </dl>
+            {!DEMO_MODE && (creditQuery.data?.amount ?? 0) > 0 && (
+              <p role="status" className="mt-4 rounded-md border border-success/30 bg-success/10 px-3 py-2 text-sm">
+                <b>{new Intl.NumberFormat("en-US", { style: "currency", currency: (creditQuery.data?.currency ?? "usd").toUpperCase() }).format((creditQuery.data?.amount ?? 0) / 100)} account credit.</b>{" "}
+                <span className="text-soft">It's taken off your next invoice automatically.</span>
+              </p>
+            )}
             {sub.pendingChange && (
               <p className="mt-4 rounded-md border border-info/30 bg-info/10 px-3 py-2 text-xs text-soft">
                 Switching to <b>{sub.pendingChange.plan}</b> ({money(sub.pendingChange.price)}/{perLabel(sub.pendingChange.interval)}) on {day(sub.pendingChange.on)}.
@@ -512,8 +507,18 @@ function SubscriptionPage() {
       </Dialog>
 
       {/* upgrade / downgrade */}
+      {!DEMO_MODE && (
+        <ChangePlanDialog
+          kind={planKind}
+          open={dialog === "upgrade" || dialog === "downgrade"}
+          onClose={() => setDialog(null)}
+          plans={apiPlansQuery.data ?? []}
+          current={apiSubQuery.data?.plan ? { id: apiSubQuery.data.plan.id, name: apiSubQuery.data.plan.name, priceAmount: apiSubQuery.data.plan.priceAmount, currency: apiSubQuery.data.plan.currency, billingInterval: apiSubQuery.data.plan.billingInterval } : null}
+          cards={apiPaymentsQuery.data ?? []}
+        />
+      )}
       <Dialog
-        open={dialog === "upgrade" || dialog === "downgrade"}
+        open={DEMO_MODE && (dialog === "upgrade" || dialog === "downgrade")}
         onOpenChange={(o) => {
           if (!o) {
             setDialog(null);

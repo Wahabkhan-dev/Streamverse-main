@@ -51,3 +51,36 @@ describe("a plan only unlocks the kinds of content it includes", () => {
     expect(res.body.data[0]).toMatchObject({ maxDevices: null, maxConcurrentStreams: 2, maxVideoQuality: "1080p", moviesEnabled: true });
   });
 });
+
+describe("an admin's change to a plan applies immediately", () => {
+  it("removing eBooks from a plan stops access at once (no waiting for the 60 s decision cache), and the admin list shows who is affected", async () => {
+    const { createAdmin } = await import("../helpers/adminAuth");
+    const userId = await subscriber({ moviesEnabled: true, ebooksEnabled: true, audiobooksEnabled: true });
+    const ebook = (await makePublishedEbook({ visibility: "SUBSCRIBERS_ONLY" })).content;
+    const ask = () => checkAccess({ userId, role: "USER" } as never, ebook.id, "ebook");
+    expect((await ask()).allowed).toBe(true); // remembered in the decision cache now
+
+    const { accessToken } = await createAdmin(app, db as never);
+    const headers = { Authorization: `Bearer ${accessToken}` };
+    const list = await request(app).get("/api/v1/admin/plans").set(headers);
+    const planId = list.body.data[0].id;
+    expect(list.body.data[0].subscriberCount).toBe(1);
+
+    const res = await request(app).put(`/api/v1/admin/plans/${planId}`).set(headers).send({ ebooksEnabled: false });
+    expect(res.status).toBe(200);
+    expect(await ask()).toMatchObject({ allowed: false, reason: "PLAN_NOT_ELIGIBLE" });
+  });
+
+  it("lowering the device limit on a plan applies to the next device straight away", async () => {
+    const { createAdmin } = await import("../helpers/adminAuth");
+    const userId = await subscriber({ maxDevices: 3 });
+    const { accessToken } = await createAdmin(app, db as never);
+    const headers = { Authorization: `Bearer ${accessToken}` };
+    const planId = (await request(app).get("/api/v1/admin/plans").set(headers)).body.data[0].id;
+    const res = await request(app).put(`/api/v1/admin/plans/${planId}`).set(headers).send({ maxDevices: 1 });
+    expect(res.status).toBe(200);
+    const plans = await request(app).get("/api/v1/plans");
+    expect(plans.body.data[0].maxDevices).toBe(1);
+    expect(userId).toBeTruthy();
+  });
+});

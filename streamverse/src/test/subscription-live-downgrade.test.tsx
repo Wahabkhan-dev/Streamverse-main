@@ -24,12 +24,31 @@ const states = {
 /** What GET /me/payments really returns once a customer has paid: the plan is an object and the status is in capitals. */
 const paid = [{ id: "pay1", date: "2026-11-04T00:28:45.000Z", amount: 499, currency: "usd", status: "SUCCEEDED", plan: { id: "p1", name: "Basic" }, invoiceReference: "in_123", refunded: false }];
 
-function serve(sub: unknown, payments: unknown[] = [], plans: unknown[] = [plan]) {
+/** What the live API returns for a plan-change preview (cents). */
+const previews = {
+  upgrade: { direction: "upgrade", estimate: true, currency: "usd", fromPlan: { id: "p2", name: "Standard", priceAmount: 999, currency: "usd", billingInterval: "MONTHLY" }, toPlan: { id: "p3", name: "Premium", priceAmount: 1499, currency: "usd", billingInterval: "MONTHLY" }, periodEnd: "2026-12-04T00:00:00.000Z", daysLeft: 20, creditForUnused: 660, newPlanForRest: 990, chargeToday: 330, creditAdded: 0, nextRenewal: { date: "2026-12-04T00:00:00.000Z", amount: 1499 }, paymentMethod: { brand: "visa", last4: "4242" } },
+  downgrade: { direction: "downgrade", estimate: true, currency: "usd", fromPlan: { id: "p2", name: "Standard", priceAmount: 999, currency: "usd", billingInterval: "MONTHLY" }, toPlan: { id: "p1", name: "Basic", priceAmount: 499, currency: "usd", billingInterval: "MONTHLY" }, periodEnd: "2026-12-04T00:00:00.000Z", daysLeft: 20, creditForUnused: 660, newPlanForRest: 330, chargeToday: 0, creditAdded: 330, nextRenewal: { date: "2026-12-04T00:00:00.000Z", amount: 499 }, paymentMethod: { brand: "visa", last4: "4242" } },
+};
+const card = { id: "pm1", brand: "visa", last4: "4242", expMonth: 12, expYear: 2030, isDefault: true };
+
+function serve(sub: unknown, payments: unknown[] = [], plans: unknown[] = [plan], extra: { preview?: unknown; credit?: number; cards?: unknown[] } = {}) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
       const u = String(url);
-      const body = u.includes("/me/subscription") ? { data: sub } : u.includes("/me/payments") ? { data: payments, pagination: {} } : u.includes("/me/payment-methods") ? { data: [] } : u.includes("/plans") ? { data: plans } : { data: null };
+      const body = u.includes("/change-plan/preview")
+        ? { data: extra.preview ?? null }
+        : u.includes("/subscription/credit")
+          ? { data: { amount: extra.credit ?? 0, currency: "usd" } }
+          : u.includes("/me/subscription")
+            ? { data: sub }
+            : u.includes("/me/payments")
+              ? { data: payments, pagination: {} }
+              : u.includes("/me/payment-methods")
+                ? { data: extra.cards ?? [] }
+                : u.includes("/plans")
+                  ? { data: plans }
+                  : { data: null };
       return new Response(JSON.stringify({ success: true, message: "ok", ...body }), { status: 200, headers: { "Content-Type": "application/json" } });
     }),
   );
@@ -68,15 +87,32 @@ async function openPlanDialog(label: "Upgrade" | "Downgrade") {
 }
 
 const callsTo = (part: string) => (fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.filter((c) => String(c[0]).includes(part));
+/** only the POSTs (the preview is a GET on a longer URL that starts the same way) */
+const postsTo = (part: string) => callsTo(part).filter((c) => (c[1] as { method?: string } | undefined)?.method === "POST");
 
 describe("Downgrade dialog (live)", () => {
-  it("says the change is immediate with a credit, not 'on the renewal date'", async () => {
-    serve({ ...states.active, plan: standard }, [], [plan, standard]);
+  it("explains the credit you will get, needs consent, never asks for a card, and downgrades through the API", async () => {
+    serve({ ...states.active, plan: standard }, [], [plan, standard], { preview: previews.downgrade, cards: [card] });
     renderAt("/subscription");
     const down = await openPlanDialog("Downgrade");
     expect(within(down).getByText("Your plan now")).toBeTruthy();
-    expect(within(down).getByText(/credited toward your next invoice/)).toBeTruthy();
     expect(within(down).getByText("-$5.00/mo")).toBeTruthy();
-    expect(within(down).queryByText(/when your current period ends/)).toBeNull();
+    expect(within(down).getByText(/kept as credit and used up by your next invoice/)).toBeTruthy();
+    fireEvent.click(down.querySelector('input[name="plan"]') as HTMLInputElement);
+
+    expect(await within(down).findByText("Credit added to your account", {}, { timeout: 5000 })).toBeTruthy();
+    expect(within(down).getAllByText("$3.30").length).toBeGreaterThan(0);
+    expect(within(down).getByText(/Unused time is not refunded to your card/)).toBeTruthy();
+    expect(down.querySelector('input[name="card"]')).toBeNull(); // a downgrade charges nothing, so no card is asked for
+
+    const confirm = within(down).getByText("Confirm downgrade").closest("button") as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true); // needs the customer's agreement
+    expect(within(down).getByText(/I understand my plan changes now/)).toBeTruthy();
+    fireEvent.click(down.querySelector('input[type="checkbox"]') as HTMLInputElement);
+    expect(confirm.disabled).toBe(false);
+    fireEvent.click(confirm);
+    await waitFor(() => expect(postsTo("/me/subscription/change-plan")).toHaveLength(1));
+    const call = postsTo("/me/subscription/change-plan")[0]!;
+    expect(JSON.parse(String((call[1] as { body: string }).body))).toEqual({ planId: "p1", consent: true });
   });
 });
