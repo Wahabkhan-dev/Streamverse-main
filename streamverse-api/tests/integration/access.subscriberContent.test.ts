@@ -17,7 +17,7 @@ import { createUser } from "../helpers/adminAuth";
 import { createTestPlan } from "../helpers/billing";
 import { makePublishedMovie } from "../helpers/publishedContent";
 import * as fakeStripe from "../fakes/stripeService.fake";
-import { applyStripeSubscriptionSnapshot } from "../../src/services/billing/subscription.service";
+import { applyStripeSubscriptionSnapshot, markCanceledByStripeSubscriptionId } from "../../src/services/billing/subscription.service";
 
 const db = prisma as unknown as {
   __reset: () => void;
@@ -99,6 +99,27 @@ describe("SUBSCRIBERS_ONLY — subscription states", () => {
       .set("Authorization", `Bearer ${accessToken}`);
     expect(res.status).toBe(200);
     expect(res.body.data.access).toMatchObject({ canConsume: false, reason: "SUBSCRIPTION_INACTIVE" });
+  });
+
+  it("access flips the moment the subscription changes (a cached 'no' never locks a new subscriber out)", async () => {
+    const { content } = await makePublishedMovie({ visibility: "SUBSCRIBERS_ONLY" });
+    const plan = await createTestPlan();
+    const { accessToken, userId } = await createUser(app);
+    const ask = async () => (await request(app).post(`/api/v1/media/movies/${content.id}/playback`).set("Authorization", `Bearer ${accessToken}`)).body.data.access;
+
+    // 1. no subscription yet: denied (and that answer is now cached)
+    expect(await ask()).toMatchObject({ canConsume: false, reason: "SUBSCRIPTION_REQUIRED" });
+
+    // 2. the payment goes through (Stripe tells us the subscription is active): allowed straight away
+    const customer = fakeStripe.__createFakeCustomer(`user-${userId}@test.com`, userId);
+    await (prisma as unknown as { user: { update: (a: unknown) => Promise<unknown> } }).user.update({ where: { id: userId }, data: { stripeCustomerId: customer.id } });
+    const stripeSub = fakeStripe.__createFakeSubscription({ customerId: customer.id, priceId: plan.stripePriceId, userId, planId: plan.id, status: "active" });
+    await applyStripeSubscriptionSnapshot(stripeSub as never);
+    expect(await ask()).toMatchObject({ canConsume: true });
+
+    // 3. Stripe reports it ended: denied straight away
+    await markCanceledByStripeSubscriptionId((stripeSub as { id: string }).id);
+    expect(await ask()).toMatchObject({ canConsume: false, reason: "SUBSCRIPTION_INACTIVE" });
   });
 
   it("PUBLIC content is accessible regardless of subscription status", async () => {
