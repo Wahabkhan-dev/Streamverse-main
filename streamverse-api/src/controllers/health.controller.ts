@@ -1,7 +1,8 @@
 import type { Request, Response } from "express";
 import { getLiveness, getReadiness } from "../services/health.service";
 import { getMetrics } from "../middleware/metrics.middleware";
-import { sendError, sendSuccess } from "../utils/apiResponse";
+import { logger } from "../config/logger";
+import { sendSuccess } from "../utils/apiResponse";
 
 export const health = (_req: Request, res: Response) => {
   sendSuccess(res, getLiveness(), "Service is running");
@@ -10,7 +11,10 @@ export const health = (_req: Request, res: Response) => {
 export const ready = async (req: Request, res: Response) => {
   const result = await getReadiness();
   if (!result.ready) {
-    sendError(res, 503, "Service is not ready", [], { code: "SERVICE_UNAVAILABLE", requestId: req.id });
+    // which check failed (ok / unavailable / disabled: never an error text or address), so a failing probe can be diagnosed
+    const failing = Object.entries(result.checks).filter(([, status]) => status === "unavailable").map(([name]) => name);
+    logger.warn({ failing }, "readiness: not ready");
+    res.status(503).json({ success: false, message: "Service is not ready", errors: [], code: "SERVICE_UNAVAILABLE", requestId: req.id, data: { ready: false, checks: result.checks } });
     return;
   }
   sendSuccess(res, result, "Service is ready");

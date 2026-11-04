@@ -535,14 +535,24 @@ export interface ApiAdminUser {
 export interface ApiAdminPayment {
   id: string;
   userId: string;
-  userName?: string;
-  userEmail?: string;
+/** One row of GET /admin/payments, as the server sends it (amounts in cents, status in capitals). */
+  /** minor units (cents) */
   amount: number;
   currency: string;
-  status: "succeeded" | "pending" | "failed" | "refunded";
-  plan?: string;
+  /** "SUCCEEDED" | "FAILED" | "PENDING" | "REFUNDED" | "PARTIALLY_REFUNDED" */
+  status: string;
+  /** the plan this payment was for, recorded when the payment arrived (newer payments) */
+  description?: string | null;
+  paidAt?: string | null;
   createdAt: string;
-  stripePaymentIntentId?: string;
+  stripeInvoiceId?: string | null;
+  stripePaymentIntentId?: string | null;
+  user?: { id: string; email: string; fullName: string } | null;
+  subscription?: { plan?: { name: string } | null } | null;
+  /** older shapes */
+  userName?: string;
+  userEmail?: string;
+  plan?: string;
 }
 
 export interface ApiAdminAnalytics {
@@ -642,15 +652,15 @@ export interface ApiPlanChangePreview {
   newPlanForRest: number;
   chargeToday: number;
   creditAdded: number;
-  nextRenewal: { date: string; amount: number } | null;
-  paymentMethod: { brand: string; last4: string } | null;
-}
   /** credit already on the account, and how much of it an upgrade uses */
   accountCredit: number;
   creditApplied: number;
 
 /** GET /admin/users/:id/activity: one customer's real subscription, billing, library and history. */
 export interface ApiAdminUserActivity {
+  nextRenewal: { date: string; amount: number } | null;
+  paymentMethod: { brand: string; last4: string } | null;
+}
   subscription: {
     status: string;
     plan: { id: string; name: string; priceAmount: number; currency: string; billingInterval: string } | null;
@@ -663,15 +673,15 @@ export interface ApiAdminUserActivity {
   history: { id: string; title: string; type: string; activityType: string; at: string }[];
 }
 
-  currency: string;
-}
-
 /** GET /me/subscription/credit: credit that will be used up by the next invoice. Cents. */
 export interface ApiAccountCredit {
   amount: number;
 export interface ApiCheckoutSession {
   checkoutUrl: string;
   sessionId: string;
+  currency: string;
+}
+
 }
 
 export interface ApiBillingPortal {

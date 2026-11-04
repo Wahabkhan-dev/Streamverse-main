@@ -1,4 +1,5 @@
-import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { QueryClientContext } from "@tanstack/react-query";
+import { useContext } from "react";
 import { Link } from "@tanstack/react-router";
 import { BookOpen, Headphones, Play } from "lucide-react";
 import type { Item } from "@/lib/items";
@@ -11,12 +12,7 @@ import { AudiobookCard, BookCard, BookCover, MovieCard } from "./media";
 
 /** The right card for any catalog entry. */
 export function ItemCard({ item, fixed = true }: { item: Item; fixed?: boolean }) {
-  let qc: QueryClient | undefined;
-  try {
-    qc = useQueryClient();
-  } catch {
-    qc = undefined; // rendered outside a QueryClientProvider (isolated tests)
-  }
+  const qc = useContext(QueryClientContext); // undefined when rendered outside a QueryClientProvider (isolated tests)
   // Start loading the detail page's data as soon as the pointer or focus reaches the card, so the click opens it already filled.
   const warm = () => {
     if (DEMO_MODE || !qc) return;

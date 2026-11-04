@@ -63,7 +63,9 @@ async function listAll<T>(path: string): Promise<ApiResponse<T[]> & { meta: ApiM
   for (let page = 1; ; page++) {
     const res = await api.get<ApiResponse<T[]> & { pagination?: { totalPages: number } }>(`${path}?page=${page}&limit=100`);
     out.push(...res.data);
-    if (!res.pagination || page >= res.pagination.totalPages) break;
+    // stop when the server says that was the last page, sent no page count, or returned nothing (never loop forever); 500 pages is a hard ceiling
+    const totalPages = res.pagination?.totalPages;
+    if (!totalPages || page >= totalPages || res.data.length === 0 || page >= 500) break;
   }
   return { data: out, meta: { total: out.length } };
 }
@@ -226,6 +228,8 @@ export const adminPlansApi = {
 export const adminUsersApi = {
   list: (p?: AdminListParams) =>
     api.get<ApiResponse<ApiAdminUser[]> & { meta: ApiMeta }>(`/admin/users${toQuery(p)}`),
+  /** every account (all pages) */
+  listAll: () => listAll<ApiAdminUser>("/admin/users"),
   get: (id: string) => api.get<ApiResponse<ApiAdminUser>>(`/admin/users/${id}`),
   activity: (id: string) => api.get<ApiResponse<ApiAdminUserActivity>>(`/admin/users/${id}/activity`),
   update: (id: string, data: Partial<ApiAdminUser>) =>
@@ -265,6 +269,8 @@ export const adminPaymentsApi = {
     api.get<ApiResponse<ApiAdminPayment[]> & { meta: ApiMeta }>(
       `/admin/payments${toQuery(p)}`,
     ),
+  /** every payment (all pages), so the list and its totals are never cut off at the first page */
+  listAll: () => listAll<ApiAdminPayment>("/admin/payments"),
   get: (id: string) => api.get<ApiResponse<ApiAdminPayment>>(`/admin/payments/${id}`),
   refund: (id: string) =>
     api.post<ApiResponse<{ message: string }>>(`/admin/payments/${id}/refund`),

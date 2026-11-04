@@ -7,7 +7,7 @@ import { downloadCsv } from "@/lib/csv";
 import { toast } from "sonner";
 import { Receipt } from "lucide-react";
 import { payments as demoPayments } from "@/lib/data";
-import { usd } from "@/lib/analytics";
+import { usd as demoUsd } from "@/lib/analytics";
 import { DEMO_MODE } from "@/lib/config";
 import { useAdminPaymentsQuery, useAdminRefundMutation } from "@/hooks/useAdminApi";
 import type { ApiAdminPayment } from "@/api/types";
@@ -16,16 +16,23 @@ export const Route = createFileRoute("/admin/payments")({ component: Payments })
 
 type PaymentRow = { id: string; user: string; plan: string; amount: number; currency: string; date: string; status: string };
 
+/** Real payments are small and exact, so the live site shows the cents; the demo's sample figures stay rounded to whole dollars. */
+const usd = (n: number) => (DEMO_MODE ? demoUsd(n) : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n));
+
+const STATUS_LABEL: Record<string, string> = { SUCCEEDED: "Succeeded", FAILED: "Failed", PENDING: "Pending", REFUNDED: "Refunded", PARTIALLY_REFUNDED: "Refunded" };
+
+/** A server row in the table's words: dollars (the server sends cents), the customer's name, the plan paid for, a readable status. */
 function apiToRow(p: ApiAdminPayment): PaymentRow {
-  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  const raw = String(p.status ?? "");
   return {
-    id: p.id,
-    user: p.userName ?? p.userEmail ?? p.userId,
-    plan: p.plan ?? "-",
-    amount: p.amount,
+    // the Stripe invoice number is what the admin looks up in the Stripe dashboard
+    id: p.stripeInvoiceId ?? p.id,
+    user: p.user?.fullName || p.user?.email || p.userName || p.userEmail || p.userId,
+    plan: p.description || p.subscription?.plan?.name || p.plan || "-",
+    amount: p.amount / 100,
     currency: p.currency,
-    date: p.createdAt.slice(0, 10),
-    status: cap(p.status),
+    date: (p.paidAt ?? p.createdAt).slice(0, 10),
+    status: STATUS_LABEL[raw.toUpperCase()] ?? `${raw.charAt(0).toUpperCase()}${raw.slice(1).toLowerCase()}`,
   };
 }
 

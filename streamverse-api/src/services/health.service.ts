@@ -33,8 +33,9 @@ export async function getReadiness(): Promise<Readiness> {
     checks["database"] = "unavailable";
   }
 
-  // Redis check — only relevant when configured
-  if (env.REDIS_URL) {
+  // Redis check — only relevant when something uses it: the BullMQ queue. With the inline queue a Redis address that happens to
+  // be set is unused, so it must not make the service look broken.
+  if (env.REDIS_URL && env.QUEUE_DRIVER === "bullmq") {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const IORedis = await import("ioredis").then((m) => (m.default ?? m) as any);

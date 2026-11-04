@@ -173,7 +173,7 @@ export const useAdminPlanMutation = () => {
 
 /* ─────────── Users ─────────── */
 export const useAdminUsersQuery = (p?: AdminListParams, opts?: { enabled?: boolean }) =>
-  useQuery({ queryKey: ["admin", "users", p], queryFn: () => adminUsersApi.list(p), enabled: E && (opts?.enabled ?? true) });
+  useQuery({ queryKey: ["admin", "users", p], queryFn: () => (p ? adminUsersApi.list(p) : adminUsersApi.listAll()), enabled: E && (opts?.enabled ?? true) });
 
 export const useAdminUserMutation = () => {
   const qc = useQueryClient();
@@ -196,7 +196,7 @@ export const useAdminSubscriptionsQuery = (p?: AdminListParams) =>
 
 /* ─────────── Payments ─────────── */
 export const useAdminPaymentsQuery = (p?: AdminListParams) =>
-  useQuery({ queryKey: ["admin", "payments", p], queryFn: () => adminPaymentsApi.list(p), enabled: E });
+  useQuery({ queryKey: ["admin", "payments", p], queryFn: () => (p ? adminPaymentsApi.list(p) : adminPaymentsApi.listAll()), enabled: E });
 
 export const useAdminRefundMutation = () => {
   const qc = useQueryClient();

@@ -1,4 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { Prisma } from "@prisma/client";
+
+/** What the real client throws when update/delete finds no row (the app turns it into a 404). */
+const recordNotFound = () => new Prisma.PrismaClientKnownRequestError("Record to update or delete not found.", { code: "P2025", clientVersion: "fake" });
 
 /**
  * An in-memory stand-in for the Prisma Client, implementing only the calls this codebase's repositories
@@ -276,7 +280,7 @@ class Table<T extends Row = Row> {
 
   async update({ where, data, include }: { where: Where; data: Partial<T>; include?: IncludeSpec }): Promise<T> {
     const key = this.keyFor(where);
-    if (!key) throw Object.assign(new Error("Record not found"), { code: "P2025" });
+    if (!key) throw recordNotFound();
     const existing = this.rows.get(key)!;
     // Prisma's scalar field-update operators (increment/decrement/set/multiply/divide), e.g.
     // `{ lastValue: { increment: 1 } }` — applied against the CURRENT row, not just overwritten with the
@@ -317,7 +321,7 @@ class Table<T extends Row = Row> {
 
   async delete({ where }: { where: Where }): Promise<T> {
     const key = this.keyFor(where);
-    if (!key) throw Object.assign(new Error("Record not found"), { code: "P2025" });
+    if (!key) throw recordNotFound();
     const row = this.rows.get(key)!;
     this.rows.delete(key);
     return structuredClone(row);

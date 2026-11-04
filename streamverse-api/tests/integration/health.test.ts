@@ -48,6 +48,13 @@ describe("/ready (Phase 10)", () => {
     expect(res.body).toMatchObject({ success: false, code: "SERVICE_UNAVAILABLE" });
   });
 
+  it("says which check failed (status words only), so a failing probe can be diagnosed", async () => {
+    vi.mocked(pingDatabase).mockRejectedValue(new Error("connection refused"));
+    const res = await request(app).get("/ready");
+    expect(res.status).toBe(503);
+    expect(res.body.data).toEqual({ ready: false, checks: { database: "unavailable", redis: "disabled" } });
+  });
+
   it("never leaks DB error details in the 503 response", async () => {
     vi.mocked(pingDatabase).mockRejectedValue(new Error("password=hunter2 host=10.0.0.1"));
     const res = await request(app).get("/ready");
