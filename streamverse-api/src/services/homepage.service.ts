@@ -60,7 +60,24 @@ export async function deleteSection(id: string, ctx: AuditContext = NO_ACTOR) {
   await recordAudit(ctx, { action: "homepage.section_deleted", entityType: "HOMEPAGE_SECTION", entityId: id });
 }
 
-export const listSections = homepageRepository.listSections;
+/**
+ * Admin list: every section WITH the titles Admin has picked for it. Without them the page could not show what is already chosen,
+ * and "Select content" always opened empty. These are the stored picks only (a dynamic section's automatic titles are not here).
+ */
+export async function listSections() {
+  const sections = await homepageRepository.listSections();
+  return Promise.all(
+    sections.map(async (section) => {
+      const picks = await homepageRepository.itemsFor(section.id);
+      const items = picks.map((p) => {
+        const kind = p.content.type.toLowerCase() as "movie" | "ebook" | "audiobook";
+        const ref = { id: p.content.id, slug: p.content.slug };
+        return { contentId: p.contentId, contentType: kind, position: p.displayOrder, slug: p.content.slug, title: p.content.title, image: null, [kind]: ref };
+      });
+      return { ...section, items };
+    }),
+  );
+}
 export const getSection = homepageRepository.findSectionById;
 
 export async function reorderSections(items: ReorderInput, ctx: AuditContext = NO_ACTOR) {

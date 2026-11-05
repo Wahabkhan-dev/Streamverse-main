@@ -14,7 +14,9 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "@/api/client";
+import { api, isApiError } from "@/api/client";
+import { adminHomepageApi } from "@/api/admin.api";
+import { isHeroSection, planSectionSave, savedAsManual } from "@/lib/homepageSave";
 import { ContentPicker } from "@/components/sv/ContentPicker";
 import {
   Btn,
@@ -81,7 +83,7 @@ type EditableSection = HomeSection & {
 };
 
 function apiSectionToEditable(s: ApiHomeSection): EditableSection {
-  const mode: "auto" | "manual" = s.type === "MANUAL" ? "manual" : "auto";
+  const mode: "auto" | "manual" = savedAsManual(s) ? "manual" : "auto";
   const autoFlag = SECTION_TYPE_TO_AUTO_FLAG[s.type];
   return {
     _dbId: s.id,
@@ -216,15 +218,25 @@ function Homepage() {
       return;
     }
     if (saving) return;
+    const originals = apiQuery.data?.data ?? [];
+    // a Manual section with nothing picked would show nothing: say so before anything is saved
+    const empty = localSections.find((s) => !s.sourceNote && s.mode === "manual" && s.items.length === 0 && !isHeroSection({ key: s.id, type: originals.find((o) => o.id === s._dbId)?.type ?? "MANUAL" }));
+    if (empty) {
+      toast.error(`"${empty.title}" is set to Manual but no titles are picked. Choose its titles with "Select Content", or switch it back to Automatic.`);
+      return;
+    }
     setSaving(true);
     try {
-      // 1. Persist per-section field changes FIRST: the reorder below bumps every row's updatedAt, which made these (stale-checked) edits fail with 409
-      const originals = apiQuery.data?.data ?? [];
+      // 1. Persist per-section changes FIRST: the reorder below bumps every row's updatedAt, which made these (stale-checked) edits fail with 409
       for (const s of localSections) {
         const orig = originals.find((o) => o.id === s._dbId);
         if (!orig) continue;
-        const changed =
-          s.title !== orig.displayTitle || s.enabled !== orig.enabled || s.limit !== orig.itemLimit;
+        // Banner / Collection sections have no mode or titles of their own: only the shared fields below
+        const plan = s.sourceNote ? null : planSectionSave(s, orig);
+        if (plan && plan.unsaveable > 0) {
+          throw new Error(`Some titles in "${s.title}" can't be saved yet. Remove them and pick them again with "Select Content".`);
+        }
+        const changed = s.title !== orig.displayTitle || s.enabled !== orig.enabled || s.limit !== orig.itemLimit || !!plan?.type;
         if (changed) {
           await mutation.update.mutateAsync({
             id: s._dbId,
@@ -232,10 +244,19 @@ function Homepage() {
               displayTitle: s.title,
               enabled: s.enabled,
               itemLimit: s.limit,
+              // Automatic <-> Manual is a change of the section's type
+              ...(plan?.type ? { type: plan.type } : {}),
+              ...(plan?.contentType ? { contentType: plan.contentType } : {}),
               // the stamp from the latest server copy, not the one captured when the page first loaded (earlier saves change it)
               ...(orig.updatedAt ? { expectedUpdatedAt: orig.updatedAt } : {}),
             },
           });
+        }
+        if (plan) {
+          // the picked titles: add the new ones, drop the removed ones, then fix the order
+          for (const id of plan.remove) await adminHomepageApi.removeItem(s._dbId, id);
+          for (const it of plan.add) await adminHomepageApi.addItem(s._dbId, it);
+          if (plan.order) await adminHomepageApi.reorderItems(s._dbId, plan.order);
         }
       }
       // 2. Persist display order (last, for the reason above)
@@ -245,8 +266,10 @@ function Homepage() {
         );
       }
       toast.success("Homepage layout saved. Changes are live.");
-    } catch {
-      toast.error("Failed to save layout. Please try again.");
+    } catch (err) {
+      // the server says what is wrong (a title that was deleted, a section changed by someone else...): show that
+      toast.error(isApiError(err) ? err.message : err instanceof Error ? err.message : "Failed to save layout. Please try again.");
+      void apiQuery.refetch();
     } finally {
       setSaving(false);
     }

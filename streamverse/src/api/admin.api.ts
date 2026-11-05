@@ -168,7 +168,7 @@ export const adminHomepageApi = {
   list: () => api.get<ApiResponse<ApiHomeSection[]>>("/admin/homepage/sections"),
   create: (data: { key: string; displayTitle: string; type: ApiHomeSection["type"]; contentType?: string; bannerId?: string; collectionId?: string; enabled?: boolean; displayOrder?: number; itemLimit?: number }) =>
     api.post<ApiResponse<ApiHomeSection>>("/admin/homepage/sections", data),
-  updateSection: (id: string, data: { displayTitle?: string; enabled?: boolean; itemLimit?: number; type?: ApiHomeSection["type"]; displayOrder?: number; expectedUpdatedAt?: string }) =>
+  updateSection: (id: string, data: { displayTitle?: string; enabled?: boolean; itemLimit?: number; type?: ApiHomeSection["type"]; contentType?: NonNullable<ApiHomeSection["contentType"]>; displayOrder?: number; expectedUpdatedAt?: string }) =>
     api.put<ApiResponse<ApiHomeSection>>(`/admin/homepage/sections/${id}`, data),
   reorder: (items: { id: string; displayOrder: number }[]) =>
     api.put<ApiResponse<null>>("/admin/homepage/sections/reorder", items),
@@ -178,6 +178,9 @@ export const adminHomepageApi = {
     api.post<ApiResponse<unknown>>(`/admin/homepage/sections/${sectionId}/items`, data),
   removeItem: (sectionId: string, contentId: string) =>
     api.delete<ApiResponse<null>>(`/admin/homepage/sections/${sectionId}/items/${contentId}`),
+  /** the final order of a manual section's picks */
+  reorderItems: (sectionId: string, items: { contentId: string; displayOrder: number }[]) =>
+    api.put<ApiResponse<null>>(`/admin/homepage/sections/${sectionId}/items/reorder`, items),
 };
 
 export const adminBannersApi = {
