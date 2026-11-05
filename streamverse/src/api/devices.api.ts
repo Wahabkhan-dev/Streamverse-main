@@ -8,7 +8,7 @@ export const devicesApi = {
   },
   /** Registers (or refreshes) one device. Over the plan's limit this fails with DEVICE_LIMIT_REACHED and a message to show. */
   register(device: { deviceIdentifier: string; deviceName?: string; deviceType?: string; platform?: string }) {
-    return api.post<ApiResponse<ApiDevice>>("/me/devices", device);
+    return api.post<ApiResponse<ApiDevice>>("/me/devices/register", device);
   },
   remove(id: string) {
     return api.delete<ApiResponse<{ message: string }>>(`/me/devices/${id}`);
