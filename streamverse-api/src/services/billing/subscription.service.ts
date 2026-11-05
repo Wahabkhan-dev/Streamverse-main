@@ -13,7 +13,7 @@ import { recordAudit } from "../auditLog.service";
 import { createNotification } from "../notification.service";
 import * as stripeService from "../stripe/stripe.service";
 import { resolveActivePlanOrThrow, toCustomerPlan } from "./plan.service";
-import { estimatePlanChange } from "./planChange.service";
+import { estimatePlanChange, paidPlanFromStripe } from "./planChange.service";
 import { statusGrantsAccess } from "./subscriptionAccess.service";
 import { getOrCreateStripeCustomer } from "./stripeCustomer.service";
 import { ensureChargeableCard, getDefaultPaymentMethodSummary } from "./paymentMethod.service";
@@ -56,7 +56,10 @@ const TERMINAL_STATUSES: SubscriptionStatus[] = ["CANCELED", "INCOMPLETE_EXPIRED
 export async function applyStripeSubscriptionSnapshot(stripeSub: Stripe.Subscription): Promise<void> {
   const priceId = stripeSub.items.data[0]?.price.id;
   if (!priceId) throw new Error(`Stripe subscription ${stripeSub.id} has no price on its first item`);
-  const planId = await resolvePlanIdForPrice(priceId);
+  const existing = await subscriptionRepository.findByStripeSubscriptionId(stripeSub.id);
+  // An admin price edit gives the plan a NEW Stripe price; people already subscribed stay on the old one (they keep what they agreed
+  // to pay). Their price no longer matches any plan, so fall back to the plan this very subscription is already on.
+  const planId = (await resolvePlanIdForPrice(priceId)) ?? existing?.planId ?? stripeSub.metadata?.["streamVersePlanId"];
   if (!planId) throw new Error(`No Plan is linked to Stripe price ${priceId} — cannot sync subscription ${stripeSub.id}`);
   const plan = await planRepository.findById(planId);
   if (!plan) throw new Error(`No Plan is linked to Stripe price ${priceId} — cannot sync subscription ${stripeSub.id}`);
@@ -65,7 +68,6 @@ export async function applyStripeSubscriptionSnapshot(stripeSub: Stripe.Subscrip
   if (!userId) throw new Error(`Could not resolve a StreamVerse user for Stripe subscription ${stripeSub.id}`);
 
   const incomingStatus = STRIPE_TO_LOCAL_STATUS[stripeSub.status]!;
-  const existing = await subscriptionRepository.findByStripeSubscriptionId(stripeSub.id);
 
   // Guard: never regress from a terminal state via a late/out-of-order event.
   // (e.g. a delayed ACTIVE snapshot must not restore access after a CANCELED event was processed)
@@ -301,7 +303,8 @@ export async function changePlan(userId: string, planId: string, ctx: AuditConte
   // An upgrade is charged now (the difference for the rest of this period, after crediting what was already paid for the old plan);
   // a downgrade just credits the unused part to the next invoice. Compared per month so a yearly plan can be judged against a monthly one.
   const shown = await estimatePlanChange(userId, planId).catch(() => null); // what the customer was told, kept with their consent
-  const currentPlan = await planRepository.findById(sub.planId);
+  const currentPlanRow = await planRepository.findById(sub.planId);
+  const currentPlan = currentPlanRow ? paidPlanFromStripe(current, currentPlanRow) : null; // judged by what they actually pay
   const perMonth = (p: { priceAmount: number; billingInterval: string }) => (p.billingInterval === "YEARLY" ? p.priceAmount / 12 : p.priceAmount);
   const isUpgrade = currentPlan ? perMonth(newPlan) > perMonth(currentPlan) : false;
 

@@ -21,13 +21,26 @@ const summary = (p: PlanLike) => ({ id: p.id, name: p.name, priceAmount: p.price
  *  - upgrade: the saved card is charged today for the new plan's remaining time, less the credit for the old plan's unused time;
  *  - downgrade: the unused part of the old plan, less the new plan's remaining time, becomes a credit on the next invoice.
  */
+/**
+ * What the customer really pays for the plan they are on: their own Stripe price. After an admin edits a plan's price, only
+ * new subscribers pay the new amount, so the plan's price today can differ from what this customer was charged and will be
+ * credited. Falls back to the plan's price when Stripe doesn't say.
+ */
+export function paidPlanFromStripe<P extends PlanLike>(stripeSub: { items?: { data?: { price?: { unit_amount?: number | null; recurring?: { interval?: string } | null } }[] } }, plan: P): P {
+  const price = stripeSub.items?.data?.[0]?.price;
+  if (typeof price?.unit_amount !== "number") return plan;
+  const interval = price.recurring?.interval === "year" ? "YEARLY" : price.recurring?.interval === "month" ? "MONTHLY" : plan.billingInterval;
+  return { ...plan, priceAmount: price.unit_amount, billingInterval: interval };
+}
+
 export async function estimatePlanChange(userId: string, planId: string, now = new Date()) {
   const sub = await subscriptionRepository.findByUserId(userId);
   if (!sub || !statusGrantsAccess(sub.status)) throw new ConflictError("You need an active subscription to change plans.");
   const toPlan = await resolveActivePlanOrThrow(planId);
   if (toPlan.id === sub.planId) throw new ConflictError("You are already on this plan.");
-  const fromPlan = await planRepository.findById(sub.planId);
-  if (!fromPlan) throw new NotFoundError("Current plan not found");
+  const fromPlanRow = await planRepository.findById(sub.planId);
+  if (!fromPlanRow) throw new NotFoundError("Current plan not found");
+  const fromPlan = paidPlanFromStripe(await stripeService.retrieveSubscription(sub.stripeSubscriptionId).catch(() => ({})), fromPlanRow);
 
   const start = sub.currentPeriodStart?.getTime() ?? now.getTime();
   const end = sub.currentPeriodEnd?.getTime() ?? now.getTime();
