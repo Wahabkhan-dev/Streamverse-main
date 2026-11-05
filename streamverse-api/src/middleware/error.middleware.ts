@@ -23,6 +23,9 @@ function normalize(err: unknown): AppError {
   if (err instanceof Prisma.PrismaClientInitializationError || (err instanceof Prisma.PrismaClientKnownRequestError && DB_UNAVAILABLE.has(err.code)))
     return new AppError("StreamVerse is busy or temporarily unavailable. Please try again in a moment.", 503, ERROR_CODES.SERVICE_UNAVAILABLE);
 
+  const stripeFailure = fromStripe(err);
+  if (stripeFailure) return stripeFailure;
+
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
     if (err.code === "P2002") return new ConflictError("A record with these values already exists");
     if (err.code === "P2025") return new NotFoundError();
@@ -31,6 +34,29 @@ function normalize(err: unknown): AppError {
     if (err.code === "P2034") return new ConflictError("Someone else changed this at the same moment. Please try again.");
   }
   return new AppError("Something went wrong", 500, ERROR_CODES.INTERNAL);
+}
+
+/**
+ * A payment provider failure, in words a customer can act on. Stripe's own messages and codes are never passed through, so
+ * nothing internal leaks. Returns null when the error is not from Stripe (or is our own misconfiguration, which stays a 500).
+ */
+function fromStripe(err: unknown): AppError | null {
+  const e = err as { type?: string; code?: string; decline_code?: string } | null;
+  const type = typeof e?.type === "string" ? e.type : "";
+  if (!type.startsWith("Stripe")) return null;
+
+  if (type === "StripeCardError") {
+    const hint = e?.code === "expired_card" ? "Your card has expired." : e?.code === "insufficient_funds" || e?.decline_code === "insufficient_funds" ? "Your card has insufficient funds." : "Your card was declined.";
+    return new AppError(`${hint} Please use a different card or update your payment method, then try again.`, 402, ERROR_CODES.BAD_REQUEST);
+  }
+  if (type === "StripeRateLimitError" || type === "StripeConnectionError" || type === "StripeAPIError")
+    return new AppError("Our payment provider is busy right now. Nothing was charged. Please try again in a moment.", 503, ERROR_CODES.SERVICE_UNAVAILABLE);
+  if (type === "StripeIdempotencyError") return new ConflictError("This payment is already being processed. Please wait a moment and refresh.");
+  if (type === "StripeInvalidRequestError") {
+    // e.g. the saved card needs extra confirmation from the bank, or there is no usable card on the account
+    return new AppError("We couldn't complete the payment with the card on your account, so nothing was changed or charged. Please add or update your payment method and try again.", 402, ERROR_CODES.BAD_REQUEST);
+  }
+  return null; // authentication/permission problems are ours to fix: they remain a logged 500
 }
 
 /** Prisma's "cannot reach the database / connection pool exhausted / timed out" codes. */
