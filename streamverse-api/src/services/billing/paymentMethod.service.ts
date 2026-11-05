@@ -63,8 +63,27 @@ async function assertOwnedByUser(userId: string, paymentMethodId: string): Promi
 export async function setDefaultPaymentMethod(userId: string, paymentMethodId: string, ctx: AuditContext = NO_ACTOR) {
   const { stripeCustomerId } = await assertOwnedByUser(userId, paymentMethodId);
   await stripeService.updateCustomerDefaultPaymentMethod(stripeCustomerId, paymentMethodId);
+  // the subscription may carry its own saved card (checkout sets one) and Stripe charges that first: keep it on the card picked
+  const sub = await subscriptionRepository.findByUserId(userId);
+  if (sub?.stripeSubscriptionId && statusGrantsAccess(sub.status)) await stripeService.setSubscriptionDefaultPaymentMethod(sub.stripeSubscriptionId, paymentMethodId);
   await recordAudit(ctx, { action: "billing.default_payment_method_changed", entityType: "USER", entityId: userId, metadata: { paymentMethodId } });
   return listPaymentMethods(userId);
+}
+
+/**
+ * Before an upgrade is charged: if neither the subscription nor the customer has a card marked to charge, but the customer has
+ * saved one, use the newest saved card (otherwise Stripe has nothing to charge and the upgrade fails although a card is on file).
+ * With no saved card at all nothing is done here: Stripe's refusal becomes the "add a payment method" message.
+ */
+export async function ensureChargeableCard(userId: string, stripeSub: Stripe.Subscription): Promise<void> {
+  if (stripeSub.default_payment_method) return;
+  const user = await userRepository.findById(userId);
+  if (!user?.stripeCustomerId) return;
+  if (await defaultPaymentMethodId(user.stripeCustomerId)) return;
+  const [newest] = await stripeService.listPaymentMethods(user.stripeCustomerId);
+  if (!newest) return;
+  await stripeService.updateCustomerDefaultPaymentMethod(user.stripeCustomerId, newest.id);
+  await stripeService.setSubscriptionDefaultPaymentMethod(stripeSub.id, newest.id);
 }
 
 /**

@@ -95,7 +95,9 @@ export function ChangePlanDialog({ kind, open, onClose, plans, current, cards }:
     setError("");
     try {
       // an upgrade is charged to the customer's default card: make the one they picked the default first
-      if (needsCard && cardId !== defaultCard?.id && cardId !== NEW_CARD) await setDefault.mutateAsync(cardId);
+      // (judged by what Stripe says is the default, not by the card that is merely listed first: with no default set, the first card is not one)
+      const picked = cards.find((c) => c.id === cardId);
+      if (needsCard && picked && !picked.isDefault) await setDefault.mutateAsync(picked.id);
       await change.mutateAsync({ planId, consent: true });
       void qc.invalidateQueries({ queryKey: PAYMENT_METHODS_QUERY_KEY });
       toast.success(

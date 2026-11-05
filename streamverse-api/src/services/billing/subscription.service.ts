@@ -16,7 +16,7 @@ import { resolveActivePlanOrThrow, toCustomerPlan } from "./plan.service";
 import { estimatePlanChange } from "./planChange.service";
 import { statusGrantsAccess } from "./subscriptionAccess.service";
 import { getOrCreateStripeCustomer } from "./stripeCustomer.service";
-import { getDefaultPaymentMethodSummary } from "./paymentMethod.service";
+import { ensureChargeableCard, getDefaultPaymentMethodSummary } from "./paymentMethod.service";
 import * as entitlementCache from "../entitlement/entitlementCache.service";
 
 const NO_ACTOR: AuditContext = { userId: undefined, ip: undefined, userAgent: undefined, requestId: undefined };
@@ -304,6 +304,8 @@ export async function changePlan(userId: string, planId: string, ctx: AuditConte
   const currentPlan = await planRepository.findById(sub.planId);
   const perMonth = (p: { priceAmount: number; billingInterval: string }) => (p.billingInterval === "YEARLY" ? p.priceAmount / 12 : p.priceAmount);
   const isUpgrade = currentPlan ? perMonth(newPlan) > perMonth(currentPlan) : false;
+
+  if (isUpgrade) await ensureChargeableCard(userId, current);
 
   let updated;
   try {

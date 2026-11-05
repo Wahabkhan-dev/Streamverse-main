@@ -18,6 +18,11 @@ export async function retrieveCustomer(stripeCustomerId: string): Promise<Stripe
   return getStripeClient().customers.retrieve(stripeCustomerId);
 }
 
+/** A subscription's own saved card: Stripe charges it before the customer's default, so it has to follow the card the customer picks. */
+export async function setSubscriptionDefaultPaymentMethod(stripeSubscriptionId: string, paymentMethodId: string): Promise<Stripe.Subscription> {
+  return getStripeClient().subscriptions.update(stripeSubscriptionId, { default_payment_method: paymentMethodId });
+}
+
 export async function updateCustomerDefaultPaymentMethod(stripeCustomerId: string, paymentMethodId: string): Promise<Stripe.Customer> {
   return getStripeClient().customers.update(stripeCustomerId, { invoice_settings: { default_payment_method: paymentMethodId } });
 }

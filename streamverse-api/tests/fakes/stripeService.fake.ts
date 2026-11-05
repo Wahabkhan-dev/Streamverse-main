@@ -87,6 +87,13 @@ export async function updateCustomerDefaultPaymentMethod(stripeCustomerId: strin
   return { id: c.id };
 }
 
+export async function setSubscriptionDefaultPaymentMethod(stripeSubscriptionId: string, paymentMethodId: string) {
+  const sub = subscriptions.get(stripeSubscriptionId) as { default_payment_method?: string | null } | undefined;
+  if (!sub) throw new Error("No such subscription");
+  sub.default_payment_method = paymentMethodId;
+  return sub;
+}
+
 export async function createSetupIntent(stripeCustomerId: string) {
   return { id: `seti_${randomUUID()}`, client_secret: `seti_${randomUUID()}_secret_test`, customer: stripeCustomerId };
 }
