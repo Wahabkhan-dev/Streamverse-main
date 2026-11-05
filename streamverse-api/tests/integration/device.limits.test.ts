@@ -87,7 +87,10 @@ describe("Device limits — maxDevices = 1", () => {
 
     const second = await registerDevice(headers, "device-second");
     expect(second.status).toBe(403);
-    expect(second.body.message).toBe("DEVICE_LIMIT_REACHED");
+    expect(second.body.code).toBe("DEVICE_LIMIT_REACHED");
+    // the customer is told what happened and what to do, not shown a code
+    expect(second.body.message).toMatch(/allows 1 device, and it is already in use/);
+    expect(second.body.message).toMatch(/Remove a device.*or upgrade your plan/);
   });
 });
 

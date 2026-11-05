@@ -1,11 +1,12 @@
 import { audiobookAccess, ebookAccess, movieAccess, withLocalCopy } from "@/lib/offline/shim";
+import { ensureDeviceRegistered } from "@/lib/device";
 import { api } from "./client";
 import type { ApiResponse, ApiPlaybackAccess, ApiMoviePlaybackAccess, ApiEbookAccess, ApiOfflineAuthorization } from "./types";
 
 export const mediaApi = {
   /** POST /media/movies/:id/playback — get signed streaming URL */
   getMoviePlayback(movieId: string) {
-    return withLocalCopy(movieId, () => api.post<ApiResponse<ApiMoviePlaybackAccess>>(`/media/movies/${movieId}/playback`), movieAccess);
+    return withLocalCopy(movieId, async () => { await ensureDeviceRegistered(); return api.post<ApiResponse<ApiMoviePlaybackAccess>>(`/media/movies/${movieId}/playback`); }, movieAccess);
   },
 
   /** POST /media/movies/:id/trailer - signed URL of the trailer or teaser (404 when the admin added none) */
@@ -15,7 +16,7 @@ export const mediaApi = {
 
   /** POST /media/audiobooks/:id/playback — get signed audio stream URL */
   getAudiobookPlayback(audiobookId: string) {
-    return withLocalCopy(audiobookId, () => api.post<ApiResponse<ApiPlaybackAccess>>(`/media/audiobooks/${audiobookId}/playback`), audiobookAccess);
+    return withLocalCopy(audiobookId, async () => { await ensureDeviceRegistered(); return api.post<ApiResponse<ApiPlaybackAccess>>(`/media/audiobooks/${audiobookId}/playback`); }, audiobookAccess);
   },
 
   /** POST /media/offline/:id/authorize: entitlement check + the files of an offline copy */
@@ -30,7 +31,7 @@ export const mediaApi = {
 
   /** POST /media/ebooks/:id/access — get signed ebook access URL */
   getEbookAccess(ebookId: string) {
-    return withLocalCopy(ebookId, () => api.post<ApiResponse<ApiEbookAccess>>(`/media/ebooks/${ebookId}/access`), ebookAccess);
+    return withLocalCopy(ebookId, async () => { await ensureDeviceRegistered(); return api.post<ApiResponse<ApiEbookAccess>>(`/media/ebooks/${ebookId}/access`); }, ebookAccess);
   },
 
   /** POST /media/ebooks/:id/access with format "pdf": the PDF a flipbook is built from (needs the connection; no offline copy) */

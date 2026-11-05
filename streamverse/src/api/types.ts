@@ -465,19 +465,41 @@ export interface ApiSearchSuggestion {
 /* ─────────────────────────────── Media Access ───────────────────────────── */
 
 /** Movies: playback is a backend-served HLS master playlist (variant playlists + segments are signed per object). */
+/** the server's verdict on one title; `message` is the reason in plain words, ready to show */
+export interface ApiAccessVerdict {
+  allowed: boolean;
+  canConsume: boolean;
+  reason?: string;
+  message?: string;
+}
+
+/** A device the customer is signed in on (counted against the plan's device limit). */
+export interface ApiDevice {
+  id: string;
+  deviceIdentifier: string;
+  deviceName: string | null;
+  deviceType: string | null;
+  platform: string | null;
+  status: string;
+  lastSeenAt: string;
+  createdAt: string;
+}
+
 export type ApiMoviePlaybackAccess =
-  | { mediaReady: true; playback: { type: "HLS"; url: string; expiresAt: string }; sessionId?: string; progress?: { positionSeconds: number } | null }
-  | { mediaReady: false; playback: null; sessionId?: string; progress?: null };
+  | { access?: ApiAccessVerdict; mediaReady: true; playback: { type: "HLS"; url: string; expiresAt: string }; sessionId?: string; progress?: { positionSeconds: number } | null }
+  | { access?: ApiAccessVerdict; mediaReady: false; playback: null; sessionId?: string; progress?: null };
 
 /** Audiobooks: a single signed file, or one signed file per chapter. */
 export type ApiPlaybackAccess =
   | {
+      access?: ApiAccessVerdict;
       mediaReady: true;
       playback: { mode: "SINGLE_FILE"; url: string; expiresAt: string };
       sessionId?: string;
       progress?: { positionSeconds: number; chapterId: string | null } | null;
     }
   | {
+      access?: ApiAccessVerdict;
       mediaReady: true;
       playback: {
         mode: "CHAPTER_FILES";
@@ -486,9 +508,10 @@ export type ApiPlaybackAccess =
       sessionId?: string;
       progress?: { positionSeconds: number; chapterId: string | null } | null;
     }
-  | { mediaReady: false; playback: null; sessionId?: string; progress?: null };
+  | { access?: ApiAccessVerdict; mediaReady: false; playback: null; sessionId?: string; progress?: null };
 
 export interface ApiEbookAccess {
+  access?: ApiAccessVerdict;
   signedUrl: string | null;
   fileType: "epub" | "pdf" | null;
   contentId: string;

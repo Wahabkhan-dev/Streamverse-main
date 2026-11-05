@@ -1,4 +1,5 @@
 import * as playbackSessionRepository from "../repositories/playbackSession.repository";
+import { streamLimitMessage } from "./entitlement/accessMessages";
 import * as subscriptionRepository from "../repositories/subscription.repository";
 import { runLockedForUser } from "../repositories/userLock.repository";
 import { ERROR_CODES } from "../constants/errors";
@@ -26,7 +27,7 @@ export async function startPlaybackSession(
     if (maxStreams !== null && maxStreams !== undefined) {
       const activeCount = await playbackSessionRepository.countActiveSessions(userId, tx);
       if (activeCount >= maxStreams) {
-        throw new AppError("CONCURRENT_STREAM_LIMIT_REACHED", 403, ERROR_CODES.CONCURRENT_STREAM_LIMIT_REACHED);
+        throw new AppError(streamLimitMessage(maxStreams, subscription?.plan?.name), 403, ERROR_CODES.CONCURRENT_STREAM_LIMIT_REACHED);
       }
     }
     const session = await playbackSessionRepository.createSession({ userId, contentId, contentType: contentType as string, ...(deviceId ? { deviceId } : {}) }, tx);

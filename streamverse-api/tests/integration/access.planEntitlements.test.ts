@@ -35,8 +35,9 @@ describe("a plan only unlocks the kinds of content it includes", () => {
     const audio = (await makePublishedAudiobook({ visibility: "SUBSCRIBERS_ONLY" })).content;
     const ask = (id: string, type: "movie" | "ebook" | "audiobook") => checkAccess({ userId, role: "USER" } as never, id, type);
     expect((await ask(movie.id, "movie")).allowed).toBe(true);
-    expect(await ask(ebook.id, "ebook")).toMatchObject({ allowed: false, reason: "PLAN_NOT_ELIGIBLE" });
-    expect(await ask(audio.id, "audiobook")).toMatchObject({ allowed: false, reason: "PLAN_NOT_ELIGIBLE" });
+    // the customer is told which kind of title the plan leaves out
+    expect(await ask(ebook.id, "ebook")).toMatchObject({ allowed: false, reason: "PLAN_NOT_ELIGIBLE", message: expect.stringMatching(/doesn't include eBooks/) });
+    expect(await ask(audio.id, "audiobook")).toMatchObject({ allowed: false, reason: "PLAN_NOT_ELIGIBLE", message: expect.stringMatching(/doesn't include audiobooks/) });
   });
 
   it("a full plan unlocks all three", async () => {

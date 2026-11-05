@@ -2,7 +2,7 @@
 import { ArrowLeft, Check, Moon, Pause, Play, RotateCcw, RotateCw, SkipBack, SkipForward, Volume1, Volume2, VolumeX } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { isApiError } from "@/api/client";
+import { accessMessage, deniedMessage } from "@/lib/accessMessage";
 import { mediaApi } from "@/api/media.api";
 import { meApi } from "@/api/me.api";
 import type { Book } from "@/lib/data";
@@ -179,7 +179,10 @@ export function AudiobookPlayer({ b, startChapter }: { b: Book; startChapter?: n
           setSessionId(p.sessionId ?? null);
           // resume from the server-side position (works on any device); metadata load then seeks to it
           if (p.progress?.positionSeconds) setPos(p.progress.positionSeconds);
-          if (!p.mediaReady || !p.playback) {
+          if (p.access && !p.access.canConsume) {
+            // the server said no (plan, subscription, age, region...): show its reason, not a vague "not ready"
+            setAudioError(deniedMessage(p.access));
+          } else if (!p.mediaReady || !p.playback) {
             setAudioError("This audiobook is not yet ready for playback.");
           } else if (p.playback.mode === "SINGLE_FILE") {
             setAudioUrl(p.playback.url);
@@ -197,14 +200,7 @@ export function AudiobookPlayer({ b, startChapter }: { b: Book; startChapter?: n
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          const code = isApiError(err) ? err.code : undefined;
-          setAudioError(
-            code === "NO_ACTIVE_SUBSCRIPTION" ? "A subscription is required to listen to this audiobook." :
-            code === "CONTENT_TYPE_NOT_IN_PLAN" ? "Your plan does not include audiobooks." :
-            code === "DOWNLOAD_EXPIRED" ? "This download has expired. Connect to the internet to renew it." :
-            code === "CONCURRENT_STREAM_LIMIT_REACHED" ? "You have reached your concurrent stream limit." :
-            "Unable to load audio.",
-          );
+          setAudioError(accessMessage(err, "We couldn't start this audiobook. Please check your connection and try again."));
           setAudioLoading(false);
         }
       });

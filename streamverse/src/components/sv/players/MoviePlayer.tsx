@@ -2,7 +2,7 @@
 import { ArrowLeft, Check, ChevronRight, Gauge, Keyboard, Maximize, Minimize, Pause, PictureInPicture, Play, RotateCcw, RotateCw, Settings, Volume1, Volume2, VolumeX, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { isApiError } from "@/api/client";
+import { accessMessage, deniedMessage } from "@/lib/accessMessage";
 import { mediaApi } from "@/api/media.api";
 import { isHlsUrl, preloadHls, useHls } from "@/hooks/useHls";
 import { usePlaybackSession } from "@/hooks/usePlaybackSession";
@@ -161,6 +161,12 @@ export function MoviePlayer({ m, trailer }: { m: Movie; trailer?: Trailer | unde
         if (!cancelled) {
           const p = res.data;
           const url = p.mediaReady ? p.playback.url : null;
+          // the server said no (plan, subscription, age, region...): show its reason, not a vague "not ready"
+          if (p.access && !p.access.canConsume) {
+            setAccessError(deniedMessage(p.access));
+            setAccessLoading(false);
+            return;
+          }
           setVideoUrl(url);
           setSessionId(res.data.sessionId ?? null);
           // resume from the server-side position (works on any device); metadata load then seeks to it
@@ -171,14 +177,7 @@ export function MoviePlayer({ m, trailer }: { m: Movie; trailer?: Trailer | unde
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          const code = isApiError(err) ? err.code : undefined;
-          setAccessError(
-            code === "NO_ACTIVE_SUBSCRIPTION" ? "A subscription is required to watch this movie." :
-            code === "CONTENT_TYPE_NOT_IN_PLAN" ? "Your plan does not include movies." :
-            code === "DOWNLOAD_EXPIRED" ? "This download has expired. Connect to the internet to renew it." :
-            code === "CONCURRENT_STREAM_LIMIT_REACHED" ? "You have reached your concurrent stream limit." :
-            "Unable to load video.",
-          );
+          setAccessError(accessMessage(err, "We couldn't start this movie. Please check your connection and try again."));
           setAccessLoading(false);
         }
       });

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { showBackendNotice } from "@/components/sv/BackendNotice";
 import { LegalLinks } from "@/components/sv/LegalLinks";
 import { ChangePlanDialog } from "@/components/sv/billing/ChangePlanDialog";
+import { DevicesCard } from "@/components/sv/billing/DevicesCard";
 import { PaymentFailed, SubscriptionExpired } from "@/components/sv/states";
 import { Btn, ConfirmDialog, Panel, PanelHeader, Skel, StatusBadge } from "@/components/sv/ui";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -439,6 +440,8 @@ function SubscriptionPage() {
           </ul>
         </Panel>
       </div>
+
+      {!DEMO_MODE && <DevicesCard maxDevices={apiSubQuery.data?.plan?.maxDevices} planName={apiSubQuery.data?.plan?.name} />}
 
       <Panel className="mt-6">
         <PanelHeader

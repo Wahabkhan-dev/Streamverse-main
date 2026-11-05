@@ -10,6 +10,7 @@
 import * as entitlementRepository from "../../repositories/entitlement.repository";
 import * as ageVerificationRepository from "../../repositories/ageVerification.repository";
 import { checkSubscriptionAccess } from "../billing/subscriptionAccess.service";
+import { denialMessage } from "./accessMessages";
 import * as cache from "./entitlementCache.service";
 import { logAccess } from "./accessAudit.service";
 
@@ -33,6 +34,8 @@ export interface AccessDecision {
   canViewMetadata: boolean;
   canConsume: boolean;
   reason?: AccessDenialReason;
+  /** the reason in plain words, ready to show to the customer */
+  message?: string;
   details?: Record<string, unknown>;
 }
 
@@ -64,8 +67,8 @@ export function calculateAge(dob: Date, now: Date = new Date()): number {
   return years;
 }
 
-function deny(reason: AccessDenialReason, canViewMetadata = false): AccessDecision {
-  return { allowed: false, canViewMetadata, canConsume: false, reason };
+function deny(reason: AccessDenialReason, canViewMetadata = false, contentKind?: string): AccessDecision {
+  return { allowed: false, canViewMetadata, canConsume: false, reason, message: denialMessage(reason, contentKind) };
 }
 
 function allow(): AccessDecision {
@@ -219,7 +222,7 @@ export async function checkAccess(
       // 10b. The subscription must also INCLUDE this kind of content (a plan can be movies-only, books-only, ...)
       const included = subAccess.plan === null || (contentType === "movie" ? subAccess.plan.moviesEnabled : contentType === "ebook" ? subAccess.plan.ebooksEnabled : subAccess.plan.audiobooksEnabled);
       if (!included) {
-        decision = deny("PLAN_NOT_ELIGIBLE", true);
+        decision = deny("PLAN_NOT_ELIGIBLE", true, contentType);
         return decision;
       }
     }

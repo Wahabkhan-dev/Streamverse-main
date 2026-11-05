@@ -1,4 +1,5 @@
 import { AuthGate } from "@/components/sv/AuthGate";
+import { accessMessage, deniedMessage } from "@/lib/accessMessage";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { mediaApi } from "@/api/media.api";
@@ -25,14 +26,10 @@ type AccessState = "idle" | "loading" | "ok" | "error";
 
 /** Map backend error codes → human-readable messages shown in the reader error card */
 function accessErrorMessage(err: unknown): string {
+  // the server's own sentence (device limit, plan, subscription...) when it gave one
   const msg = err instanceof Error ? err.message : String(err);
-  if (msg.includes("SUBSCRIPTION_REQUIRED")) return "You need an active subscription to read this book.";
-  if (msg.includes("PLAN_DOES_NOT_INCLUDE_EBOOKS")) return "Your current plan doesn't include eBooks. Upgrade to access.";
-  if (msg.includes("AGE_RESTRICTED")) return "This content is age-restricted.";
-  if (msg.includes("CONTENT_NOT_AVAILABLE")) return "This title is not currently available.";
   if (msg.includes("expired")) return "This download has expired. Connect to the internet to renew it.";
-  if (msg.includes("MEDIA_NOT_READY")) return "This eBook file is not yet ready. Please try again later.";
-  return "Unable to access this eBook. Please try again.";
+  return accessMessage(err, "We couldn't open this eBook. Please check your connection and try again.");
 }
 
 function ReadPage() {
@@ -57,7 +54,9 @@ function ReadPage() {
         // signedUrl or fileType being null means media not ready / access denied
         if (data.signedUrl === null || data.fileType === null) {
           setAccessError(
-            data.mediaReady === false
+            data.access && !data.access.canConsume
+              ? deniedMessage(data.access)
+              : data.mediaReady === false
               ? "This eBook file is not yet ready. Please try again later."
               : "Unable to access this eBook. Please try again.",
           );

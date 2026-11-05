@@ -74,7 +74,7 @@ describe("Stream limits — maxConcurrentStreams = 1", () => {
     // Second stream — must be rejected
     await expect(
       startPlaybackSession(userId, "content-b", "MOVIE"),
-    ).rejects.toThrow("CONCURRENT_STREAM_LIMIT_REACHED");
+    ).rejects.toMatchObject({ code: "CONCURRENT_STREAM_LIMIT_REACHED", message: expect.stringMatching(/allows 1 stream at the same time, and it is already playing.*upgrade your plan/) });
   });
 
   it("both MOVIE and AUDIOBOOK consume a stream slot", async () => {
@@ -88,7 +88,7 @@ describe("Stream limits — maxConcurrentStreams = 1", () => {
     // Audiobook also counts as a stream — must be rejected
     await expect(
       startPlaybackSession(userId, "content-audio", "AUDIOBOOK"),
-    ).rejects.toThrow("CONCURRENT_STREAM_LIMIT_REACHED");
+    ).rejects.toMatchObject({ code: "CONCURRENT_STREAM_LIMIT_REACHED", message: expect.stringMatching(/allows 1 stream at the same time, and it is already playing.*upgrade your plan/) });
   });
 
   it("eBook does NOT consume a stream slot and can always be opened", async () => {

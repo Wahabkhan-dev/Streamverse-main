@@ -3,6 +3,7 @@ import * as subscriptionRepository from "../repositories/subscription.repository
 import { runLockedForUser } from "../repositories/userLock.repository";
 import { ERROR_CODES } from "../constants/errors";
 import { AppError, NotFoundError } from "../utils/errors";
+import { deviceLimitMessage } from "./entitlement/accessMessages";
 
 export async function registerDevice(
   userId: string,
@@ -24,7 +25,7 @@ export async function registerDevice(
     if (maxDevices !== null && maxDevices !== undefined) {
       const activeCount = await deviceRepository.countActive(userId, tx);
       if (activeCount >= maxDevices) {
-        throw new AppError("DEVICE_LIMIT_REACHED", 403, ERROR_CODES.DEVICE_LIMIT_REACHED);
+        throw new AppError(deviceLimitMessage(maxDevices, subscription?.plan?.name), 403, ERROR_CODES.DEVICE_LIMIT_REACHED);
       }
     }
 
