@@ -10,6 +10,7 @@ import { clearAuthUser, setAuthError, setAuthLoading, setAuthUser, getAuthUser }
 import { DEMO_MODE } from "./config";
 import { removeAllDownloads } from "./offline/downloads";
 import { isUnreachable } from "./offline/shim";
+import { loadLook } from "./look";
 import { resetUser, setRole, updateUser } from "./user";
 
 /* ───────────── cache isolation ───────────── */
@@ -85,11 +86,14 @@ export function mirrorAuthUser(user: ApiUser | null) {
     setRole("user");
     return;
   }
+  const look = loadLook(user.email); // the colour and photo this customer chose, kept across sign-outs
   updateUser((s) => ({
     ...s,
     role: user.role,
     profile: {
       ...s.profile,
+      ...(look.avatar !== undefined ? { avatar: look.avatar } : {}),
+      ...(look.avatarImage ? { avatarImage: look.avatarImage } : {}),
       email: user.email,
       name: user.fullName,
       // the server stores an ISO code ("US"); the profile's list shows the country's name ("United States")

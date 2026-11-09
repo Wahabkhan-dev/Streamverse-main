@@ -200,7 +200,7 @@
   border-radius: 9999px;
   border: 1px solid transparent;
   border-top-color: var(--primary);
-  background: linear-gradient(0deg, color-mix(in oklab, var(--primary-deep) 22%, transparent), color-mix(in oklab, var(--primary) 6%, transparent));
+  background: transparent; /* plain: no dark tint inside the rings */
   animation: sv-loader-ripple 2s ease-in-out infinite;
 }
 /* rings shrink inward from the outer edge, so the ripple (scale up to 1.15) stays roughly inside the box */

@@ -13,7 +13,8 @@ import { isApiError } from "@/api/client";
 import { DEMO_MODE } from "@/lib/demo";
 import { resetDrafts } from "@/lib/drafts";
 import { resetStore } from "@/lib/store";
-import { resetUser, setRole, updateUser, useUser, useUserHydrated, type UserState } from "@/lib/user";
+import { saveLook } from "@/lib/look";
+import { getUser, resetUser, setRole, updateUser, useUser, useUserHydrated, type UserState } from "@/lib/user";
 
 export const Route = createFileRoute("/_site/profile")({
   head: () => ({ meta: [{ title: "Profile — StreamVerse" }, { name: "description", content: "Your account details and playback preferences." }] }),
@@ -50,6 +51,7 @@ function ProfileForm() {
   const pickColour = (i: number) => {
     setP("avatar", i);
     updateUser((s) => ({ ...s, profile: { ...s.profile, avatar: i } }));
+    saveLook(getUser().profile.email, { avatar: i });
   };
   /** A photo is shrunk to a small square and kept on this device at once, like the colour. */
   const photoInput = useRef<HTMLInputElement>(null);
@@ -57,6 +59,7 @@ function ProfileForm() {
   const keepPhoto = (avatarImage: string | undefined) => {
     setP("avatarImage", avatarImage);
     updateUser((s) => ({ ...s, profile: { ...s.profile, avatarImage } }));
+    if (!saveLook(getUser().profile.email, { avatarImage })) toast.warning("Your photo is showing, but this browser has no room to keep it. It may be gone next time.");
   };
   const uploadPhoto = async (f?: File) => {
     if (!f) return;

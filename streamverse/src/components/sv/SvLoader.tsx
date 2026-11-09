@@ -16,7 +16,7 @@ export function SvLoader({ size = 72, className }: { size?: number; className?: 
       <span className="sv-loader-ring" />
       <span className="sv-loader-ring" />
       <span className="sv-loader-ring" />
-      <span className="sv-loader-logo bg-red-grad shadow-red">S</span>
+      <span className="sv-loader-logo bg-primary">S</span>
     </div>
   );
 }
