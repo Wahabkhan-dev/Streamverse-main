@@ -32,6 +32,8 @@ declare module "page-flip" {
     flipPrev(corner?: "top" | "bottom"): void;
     turnToPage(page: number): void;
     flip(page: number, corner?: "top" | "bottom"): void;
+    /** re-reads the size of the element it lives in */
+    update(): void;
     getCurrentPageIndex(): number;
     getPageCount(): number;
     getOrientation(): "portrait" | "landscape";
