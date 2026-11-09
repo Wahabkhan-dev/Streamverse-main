@@ -1,4 +1,5 @@
-import { createFileRoute, Outlet } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useRouterState } from "@tanstack/react-router";
+import { AccountLayout, isAccountPath } from "@/components/sv/AccountNav";
 import { TopNavbar } from "@/components/sv/TopNavbar";
 import { Logo } from "@/components/sv/Logo";
 import { LEGAL_LINKS } from "@/lib/legal";
@@ -38,6 +39,7 @@ function FooterGroup({ title, links }: { title: string; links: readonly (readonl
 }
 
 function SiteLayout() {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { maintenance: demoMaintenance } = useSettings();
   const role = useRole();
   // live mode: the server decides. While maintenance is on it answers every non-admin request with 503 MAINTENANCE_MODE
@@ -83,7 +85,14 @@ function SiteLayout() {
       <SignInPromptHost />
       <main>
         <AuthGate>
-          <Outlet />
+          {/* the account pages (Profile, Subscription, Downloads...) carry their own tabs, so the account menu is needed only once */}
+          {isAccountPath(pathname) ? (
+            <AccountLayout>
+              <Outlet />
+            </AccountLayout>
+          ) : (
+            <Outlet />
+          )}
         </AuthGate>
       </main>
       <footer className="mt-16 border-t border-border bg-ink">

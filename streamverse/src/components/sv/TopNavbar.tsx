@@ -1,5 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Bell, Bookmark, Download, ChevronDown, CreditCard, History, Library, ListPlus, LogOut, Menu, Shield, UserCog, UserRound, Wallet, X } from "lucide-react";
+import { ACCOUNT_LINKS } from "./AccountNav";
+import { Bell, ChevronDown, LogOut, Menu, Shield, UserCog, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -149,46 +150,13 @@ export function TopNavbar() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56 border-border bg-surface-2">
               <DropdownMenuLabel className="truncate text-xs font-normal text-muted-foreground">{shownEmail}</DropdownMenuLabel>
-              <DropdownMenuItem asChild>
-                <Link to="/profile">
-                  <UserRound /> Profile
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link to="/subscription">
-                  <CreditCard /> Subscription
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link to="/payment-methods">
-                  <Wallet /> Payment methods
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link to="/my-library">
-                  <Library /> My Library
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link to="/downloads">
-                  <Download /> Downloads
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link to="/my-list">
-                  <ListPlus /> My List
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link to="/history">
-                  <History /> History
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link to="/notifications">
-                  <Bookmark /> Notifications
-                </Link>
-              </DropdownMenuItem>
+              {ACCOUNT_LINKS.map((l) => (
+                <DropdownMenuItem key={l.to} asChild>
+                  <Link to={l.to}>
+                    <l.icon /> {l.label}
+                  </Link>
+                </DropdownMenuItem>
+              ))}
               {role === "admin" && (
                 <>
                   <DropdownMenuSeparator />
