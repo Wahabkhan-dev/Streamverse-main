@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SiteRouteImport } from './routes/_site'
 import { Route as AdminRouteImport } from './routes/admin'
+import { Route as BannerFrameRouteImport } from './routes/banner-frame'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SignInRouteImport } from './routes/sign-in'
@@ -85,6 +86,11 @@ const SiteRoute = SiteRouteImport.update({
 const AdminRoute = AdminRouteImport.update({
   id: '/admin',
   path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BannerFrameRoute = BannerFrameRouteImport.update({
+  id: '/banner-frame',
+  path: '/banner-frame',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
@@ -422,6 +428,7 @@ const AdminMoviesSlugStatsRoute = AdminMoviesSlugStatsRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof SiteIndexRoute
   '/admin': typeof AdminRouteWithChildren
+  '/banner-frame': typeof BannerFrameRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/reset-password': typeof ResetPasswordRoute
   '/sign-in': typeof SignInRoute
@@ -489,6 +496,7 @@ export interface FileRoutesByFullPath {
   '/admin/movies/$slug/stats': typeof AdminMoviesSlugStatsRoute
 }
 export interface FileRoutesByTo {
+  '/banner-frame': typeof BannerFrameRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/reset-password': typeof ResetPasswordRoute
   '/sign-in': typeof SignInRoute
@@ -559,6 +567,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_site': typeof SiteRouteWithChildren
   '/admin': typeof AdminRouteWithChildren
+  '/banner-frame': typeof BannerFrameRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/reset-password': typeof ResetPasswordRoute
   '/sign-in': typeof SignInRoute
@@ -631,6 +640,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/admin'
+    | '/banner-frame'
     | '/forgot-password'
     | '/reset-password'
     | '/sign-in'
@@ -698,6 +708,7 @@ export interface FileRouteTypes {
     | '/admin/movies/$slug/stats'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/banner-frame'
     | '/forgot-password'
     | '/reset-password'
     | '/sign-in'
@@ -767,6 +778,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_site'
     | '/admin'
+    | '/banner-frame'
     | '/forgot-password'
     | '/reset-password'
     | '/sign-in'
@@ -838,6 +850,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   SiteRoute: typeof SiteRouteWithChildren
   AdminRoute: typeof AdminRouteWithChildren
+  BannerFrameRoute: typeof BannerFrameRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SignInRoute: typeof SignInRoute
@@ -865,6 +878,13 @@ declare module '@tanstack/react-router' {
       path: '/admin'
       fullPath: '/admin'
       preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/banner-frame': {
+      id: '/banner-frame'
+      path: '/banner-frame'
+      fullPath: '/banner-frame'
+      preLoaderRoute: typeof BannerFrameRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/forgot-password': {
@@ -1470,6 +1490,7 @@ const SignupRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   SiteRoute: SiteRouteWithChildren,
   AdminRoute: AdminRouteWithChildren,
+  BannerFrameRoute: BannerFrameRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SignInRoute: SignInRoute,

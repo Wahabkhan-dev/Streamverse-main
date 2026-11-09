@@ -11,7 +11,7 @@ it("shows how a banner looks, in every design, without opening the editor", asyn
   fireEvent.click(previews[0]!);
   const dialog = await screen.findByTestId("banner-preview");
   expect(within(dialog).getByText("How this banner looks")).toBeTruthy();
-  const tabs = within(dialog).getAllByRole("tab");
+  const tabs = within(within(dialog).getByRole("tablist", { name: "Banner design" })).getAllByRole("tab");
   expect(tabs.map((t) => t.textContent?.replace(/\(selected\)/, "").trim())).toEqual(["Hero", "Normal", "Latest Release", "Promotional"]);
   // the banner's own text is drawn by the real customer-site component
   const stage = within(dialog).getByTestId("banner-stage");

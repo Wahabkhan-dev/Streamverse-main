@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { BANNER_TYPES, type Banner, type BannerType } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -24,19 +24,8 @@ export interface BannerPreviewData {
   mobileImage: string;
 }
 
-/**
- * How a banner looks to customers. It draws the real customer-site banner components with the admin's own text and pictures,
- * so what is seen here is what is shown on the site. The type switch shows the same banner in each of the four designs.
- */
-export function BannerPreviewDialog({ open, onOpenChange, data }: { open: boolean; onOpenChange: (open: boolean) => void; data: BannerPreviewData | null }) {
-  const [view, setView] = useState<BannerType>("Hero Banner");
-  useEffect(() => {
-    if (open && data) setView(data.type);
-    // only when it opens: the viewer's own pick must survive edits to the text behind it
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-  if (!data) return null;
-
+/** The real customer-site banner for one design, drawn from the admin's own text and pictures. Used by the desktop stage and by the phone frame. */
+export function BannerRender({ view, data }: { view: BannerType; data: BannerPreviewData }) {
   const title = data.title.trim() || "Your banner title";
   const description = data.description.trim() || "A short line that tells people why to click.";
   const button = data.buttonText.trim();
@@ -57,6 +46,66 @@ export function BannerPreviewDialog({ open, onOpenChange, data }: { open: boolea
     end: "",
     active: true,
   };
+
+  if (!data.image) return <p className="px-6 py-16 text-center text-sm text-muted-foreground">Choose a desktop picture to see the banner.</p>;
+  if (view === "Hero Banner")
+    return <HeroBanner autoplay={false} slides={[{ key: "preview", image: data.image, mobileImage: banner.mobileImage, title, description, buttonText: button || "Learn more", ...(showButton ? { target: { to: "/subscription" } } : {}) }]} />;
+  if (view === "Promotional Banner") return <PromotionalBanner banner={banner} />;
+  if (view === "Latest Release Banner") return <LatestReleaseBanner banner={banner} />;
+  return <NormalBanner banner={banner} />;
+}
+
+/** Width and height of the phone screen shown in the preview: a common modern phone, so media queries answer exactly as on a real one. */
+const PHONE = { w: 390, h: 640 };
+
+/**
+ * The banner as a phone shows it. It is the real site running in a phone-wide frame (/banner-frame), so every phone-size rule of
+ * the real banner applies for real, not an approximation. The text and pictures are sent to the frame as they are now.
+ */
+function PhoneFrame({ view, data }: { view: BannerType; data: BannerPreviewData }) {
+  const frame = useRef<HTMLIFrameElement>(null);
+  const ready = useRef(false);
+  const latest = useRef({ view, data });
+  latest.current = { view, data };
+  const send = () => {
+    if (ready.current) frame.current?.contentWindow?.postMessage({ type: "sv-banner-preview", ...latest.current }, window.location.origin);
+  };
+  useEffect(() => {
+    const on = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin || e.source !== frame.current?.contentWindow) return;
+      if ((e.data as { type?: string } | null)?.type === "sv-banner-frame-ready") {
+        ready.current = true;
+        send();
+      }
+    };
+    window.addEventListener("message", on);
+    return () => window.removeEventListener("message", on);
+  }, []);
+  useEffect(send, [view, data]);
+  return (
+    <div className="flex justify-center rounded-xl border border-border bg-background py-5" data-testid="banner-phone">
+      <div className="rounded-[2.2rem] border-[10px] border-neutral-800 bg-neutral-800 shadow-xl" style={{ width: PHONE.w + 20 }}>
+        <iframe ref={frame} title="Banner on a phone" src="/banner-frame" width={PHONE.w} height={PHONE.h} className="block max-w-full rounded-[1.5rem] bg-background" style={{ width: PHONE.w, height: PHONE.h }} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * How a banner looks to customers. It draws the real customer-site banner components with the admin's own text and pictures,
+ * so what is seen here is what is shown on the site. The type switch shows the same banner in each of the four designs.
+ */
+export function BannerPreviewDialog({ open, onOpenChange, data }: { open: boolean; onOpenChange: (open: boolean) => void; data: BannerPreviewData | null }) {
+  const [view, setView] = useState<BannerType>("Hero Banner");
+  const [screen, setScreen] = useState<"desktop" | "phone">("desktop");
+  useEffect(() => {
+    if (open && data) setView(data.type);
+    // only when it opens: the viewer's own pick must survive edits to the text behind it
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  if (!data) return null;
+  const button = data.buttonText.trim();
+  const showButton = data.hasLink && !!button;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -83,38 +132,39 @@ export function BannerPreviewDialog({ open, onOpenChange, data }: { open: boolea
           ))}
         </div>
 
-        {/* the preview is only a picture of the banner: nothing in it navigates */}
-        <div
-          data-testid="banner-stage"
-          onClickCapture={(e) => {
-            if ((e.target as HTMLElement).closest("a")) e.preventDefault();
-          }}
-          className="overflow-hidden rounded-xl border border-border bg-background py-4 [&_section]:h-[340px]! [&_section]:min-h-0!"
-        >
-          {!data.image ? (
-            <p className="px-6 py-16 text-center text-sm text-muted-foreground">Choose a desktop picture to see the banner.</p>
-          ) : view === "Hero Banner" ? (
-            <HeroBanner autoplay={false} slides={[{ key: "preview", image: data.image, mobileImage: banner.mobileImage, title, description, buttonText: button || "Learn more", ...(showButton ? { target: { to: "/subscription" } } : {}) }]} />
-          ) : view === "Promotional Banner" ? (
-            <PromotionalBanner banner={banner} />
-          ) : view === "Latest Release Banner" ? (
-            <LatestReleaseBanner banner={banner} />
-          ) : (
-            <NormalBanner banner={banner} />
-          )}
+        <div role="tablist" aria-label="Screen" className="flex gap-2">
+          {(["desktop", "phone"] as const).map((k) => (
+            <button
+              key={k}
+              type="button"
+              role="tab"
+              aria-selected={screen === k}
+              onClick={() => setScreen(k)}
+              className={cn("rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors", screen === k ? "border-primary bg-primary/15 text-primary-text" : "border-border bg-surface text-soft hover:bg-surface-3")}
+            >
+              {k === "desktop" ? "Desktop" : "Phone"}
+            </button>
+          ))}
         </div>
 
-        <div className="flex flex-wrap items-start gap-4">
-          <div>
-            <div className="mb-1.5 text-xs font-semibold text-soft">On phones</div>
-            <div className="relative aspect-[3/4] w-28 overflow-hidden rounded-lg border border-border bg-surface">
-              {banner.mobileImage ? <img src={banner.mobileImage} alt="Phone picture" className="absolute inset-0 size-full object-cover" /> : <div className="grid size-full place-items-center px-2 text-center text-[10px] text-muted-foreground">No mobile picture</div>}
-            </div>
+        {screen === "phone" ? (
+          <PhoneFrame view={view} data={data} />
+        ) : (
+          /* the preview is only a picture of the banner: nothing in it navigates */
+          <div
+            data-testid="banner-stage"
+            onClickCapture={(e) => {
+              if ((e.target as HTMLElement).closest("a")) e.preventDefault();
+            }}
+            className="overflow-hidden rounded-xl border border-border bg-background py-4 [&_section]:h-[340px]! [&_section]:min-h-0!"
+          >
+            <BannerRender view={view} data={data} />
           </div>
-          <p className="min-w-0 flex-1 basis-60 text-xs text-muted-foreground">
-            The preview uses your text and pictures as they are now, before you save. {showButton ? `The “${button}” button opens the page you picked.` : "There is no button, because the banner has no link or button text."}
-          </p>
-        </div>
+        )}
+
+        <p className="text-xs text-muted-foreground">
+          The preview uses your text and pictures as they are now, before you save. {showButton ? `The “${button}” button opens the page you picked.` : "There is no button, because the banner has no link or button text."}
+        </p>
       </DialogContent>
     </Dialog>
   );
