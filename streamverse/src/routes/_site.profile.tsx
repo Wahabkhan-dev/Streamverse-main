@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Check, RotateCcw } from "lucide-react";
-import { useState } from "react";
+import { Check, ImagePlus, RotateCcw } from "lucide-react";
+import { useRef, useState } from "react";
+import { avatarFileProblem, photoToAvatar } from "@/lib/avatarImage";
 import { toast } from "sonner";
 import { Avatar } from "@/components/sv/TopNavbar";
 import { ACCENTS, accentGradient } from "@/lib/accent";
@@ -49,6 +50,31 @@ function ProfileForm() {
   const pickColour = (i: number) => {
     setP("avatar", i);
     updateUser((s) => ({ ...s, profile: { ...s.profile, avatar: i } }));
+  };
+  /** A photo is shrunk to a small square and kept on this device at once, like the colour. */
+  const photoInput = useRef<HTMLInputElement>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const keepPhoto = (avatarImage: string | undefined) => {
+    setP("avatarImage", avatarImage);
+    updateUser((s) => ({ ...s, profile: { ...s.profile, avatarImage } }));
+  };
+  const uploadPhoto = async (f?: File) => {
+    if (!f) return;
+    const problem = avatarFileProblem(f);
+    if (problem) return void toast.warning(problem);
+    setPhotoBusy(true);
+    try {
+      keepPhoto(await photoToAvatar(f));
+      toast.success("Profile photo updated");
+    } catch {
+      toast.error("We couldn't read that photo. Try a different one.");
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
+  const removePhoto = () => {
+    keepPhoto(undefined);
+    toast.success("Profile photo removed");
   };
   const setNote = (k: keyof Form["prefs"]["notifications"], v: boolean) => setForm((f) => ({ ...f, prefs: { ...f.prefs, notifications: { ...f.prefs.notifications, [k]: v } } }));
 
@@ -113,7 +139,18 @@ function ProfileForm() {
           <div className="grid gap-6 p-5 md:grid-cols-[auto_1fr]">
             <div>
               <div className="eyebrow mb-2 text-soft">Avatar</div>
-              <Avatar name={form.profile.name} index={form.profile.avatar} className="size-20 text-2xl" />
+              <Avatar name={form.profile.name} index={form.profile.avatar} image={form.profile.avatarImage} className="size-20 text-2xl" />
+              <input ref={photoInput} type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" aria-label="Profile photo file" className="hidden" onChange={(e) => { void uploadPhoto(e.target.files?.[0]); e.target.value = ""; }} />
+              <div className="mt-3 flex max-w-[11rem] flex-wrap gap-1.5">
+                <Btn type="button" size="sm" onClick={() => photoInput.current?.click()} disabled={photoBusy}>
+                  <ImagePlus /> {form.profile.avatarImage ? "Change photo" : "Upload photo"}
+                </Btn>
+                {form.profile.avatarImage && (
+                  <Btn type="button" size="sm" onClick={removePhoto}>
+                    Remove
+                  </Btn>
+                )}
+              </div>
               <div className="mt-3 flex max-w-[11rem] flex-wrap gap-1.5" role="radiogroup" aria-label="Avatar colour">
                 {ACCENTS.map((a, i) => (
                   <button

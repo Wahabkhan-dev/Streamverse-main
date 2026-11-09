@@ -52,7 +52,7 @@ export interface Bill {
 }
 export interface UserState {
   role: Role;
-  profile: { name: string; email: string; language: string; country: string; age: number; avatar: number };
+  profile: { name: string; email: string; language: string; country: string; age: number; avatar: number; /** a photo the customer uploaded (small data URL); shown instead of the initials */ avatarImage?: string | undefined };
   prefs: {
     preferredLanguage: string;
     subtitleLanguage: string;

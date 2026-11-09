@@ -32,7 +32,8 @@ export const initialsOf = (name: string) =>
     .map((p) => p[0]!.toUpperCase())
     .join("") || "?";
 
-export function Avatar({ name, index, className }: { name: string; index: number; className?: string }) {
+export function Avatar({ name, index, image, className }: { name: string; index: number; image?: string | undefined; className?: string }) {
+  if (image) return <img src={image} alt={`${name || "Your"} profile photo`} className={cn("shrink-0 rounded-md object-cover", className ?? "size-8")} />;
   // the picked colour is also the app's colour (lib/accent), so the avatar paints it directly and stays that colour on every screen
   return (
     <span style={{ backgroundImage: accentGradient(index) }} className={cn("grid shrink-0 place-items-center rounded-md text-xs font-bold text-white", className ?? "size-8")}>
@@ -139,7 +140,7 @@ export function TopNavbar() {
           <DropdownMenu>
             <DropdownMenuTrigger className="flex items-center gap-2.5 rounded-md py-1 pr-1 pl-1 hover:bg-surface-3">
               <span className="sr-only">Account menu</span>
-              <Avatar name={shownName} index={profile.avatar} />
+              <Avatar name={shownName} index={profile.avatar} image={profile.avatarImage} />
               <span className="hidden text-left xl:block">
                 <span className="block text-xs leading-tight font-semibold">{shownName}</span>
                 {!sub.plan ? null : sub.status === "expired" || sub.status === "canceled" ? <span className="rounded border border-warning/40 bg-warning/10 px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-warning uppercase">{sub.status}</span> : <PlanBadge plan={sub.plan} />}
