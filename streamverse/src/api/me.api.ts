@@ -33,8 +33,13 @@ export const meApi = {
     return api.delete<ApiResponse<{ message: string }>>("/me/profile");
   },
 
-  verifyAge() {
-    return api.post<ApiResponse<{ message: string }>>("/me/age-verification");
+  /** Self-declared date of birth (YYYY-MM-DD). The server stores it and decides from it; it is never sent back. */
+  verifyAge(dateOfBirth: string) {
+    return api.post<ApiResponse<{ ageConfirmed: boolean; method: string; verifiedAt: string }>>("/me/age-verification", { dateOfBirth });
+  },
+
+  getAgeVerification() {
+    return api.get<ApiResponse<{ ageConfirmed: boolean; method: string | null; verifiedAt: string | null }>>("/me/age-verification");
   },
 
   /* ────────── Subscription ────────── */

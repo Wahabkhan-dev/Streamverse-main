@@ -9,10 +9,9 @@ import { NotFoundError } from "../utils/errors";
  * how far along it is. If nothing has been published yet, that is a 404, not an empty/draft fallback.
  */
 async function sendPublished(res: Response, type: LegalDocType) {
-  const doc = await legalService.getDocument(type);
-  if (!doc?.currentPublishedVersion) throw new NotFoundError("This document has not been published yet.");
-  const v = doc.currentPublishedVersion;
-  sendSuccess(res, { type: doc.type, title: v.title, slug: doc.slug, content: v.content, version: v.version, effectiveAt: v.effectiveAt, publishedAt: v.publishedAt }, "Legal document");
+  const published = await legalService.getPublishedDocument(type);
+  if (!published) throw new NotFoundError("This document has not been published yet.");
+  sendSuccess(res, published, "Legal document");
 }
 
 export const privacyPolicy = (_req: Request, res: Response) => sendPublished(res, "PRIVACY_POLICY");

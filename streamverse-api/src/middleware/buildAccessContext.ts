@@ -18,7 +18,8 @@ export const buildAccessContext: RequestHandler = (req: Request, _res: Response,
       return;
     }
 
-    const user = await userRepository.findById(req.auth.userId);
+    // the auth middleware loaded (and status-checked) this account moments ago on this same request — no second read
+    const user = req.authUser?.id === req.auth.userId ? req.authUser : await userRepository.findById(req.auth.userId);
     if (!user) {
       // Shouldn't happen (requireAuth already checks this), but be defensive
       req.accessContext = {};

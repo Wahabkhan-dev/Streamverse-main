@@ -8,17 +8,13 @@ const seed: Seed = JSON.parse(readFileSync(SEED_FILE, "utf8"));
 test.use({ storageState: USER_STATE });
 
 /**
- * BLOCKED EXTERNAL: the R2 bucket `stream-verse` has no CORS policy, and the app's R2 token (correctly) cannot set
- * one. Until a bucket admin applies the policy (see scripts/configure-r2-cors.ts), a real browser cannot fetch
- * private media (HLS segments, EPUB, PDF) or PUT uploads directly.
- *
- * `test.fail` keeps this suite green while the block exists and turns it RED the moment CORS is fixed, which is the
- * prompt to delete the annotation and promote the *.r2.live.spec.ts specs to the normal browser project.
+ * The R2 bucket `stream-verse` has a CORS policy for the app's origin (see scripts/configure-r2-cors.ts): a normal browser,
+ * with web security on, can fetch private media (HLS segments, EPUB, PDF) through a signed link. This was BLOCKED EXTERNAL
+ * until the policy was applied; the *.r2.live.spec.ts specs now run in a normal browser too.
  */
 test("browser can GET a signed private R2 object from the app origin (needs bucket CORS)", async ({
   page,
 }) => {
-  test.fail(true, "BLOCKED EXTERNAL: R2 bucket CORS is not configured");
   await page.goto("/");
   const pb = await asUser().post<{ playback: { url: string } }>(
     `/media/audiobooks/${seed.audiobook.id}/playback`,

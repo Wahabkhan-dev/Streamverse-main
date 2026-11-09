@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Disc3, ImagePlus, Pencil, Plus, Trash2 } from "lucide-react";
+import { Disc3, Eye, ImagePlus, Pencil, Plus, Trash2 } from "lucide-react";
+import { BannerPreviewDialog, type BannerPreviewData } from "@/components/sv/BannerPreview";
 import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Btn, ConfirmDialog, Field, PageHeader, Panel, PanelHeader, SelectInput, Skel, StatusBadge, Tag, TextArea, TextInput, Toggle } from "@/components/sv/ui";
@@ -109,6 +110,12 @@ function Banners() {
   const [draft, setDraft] = useState<Banner>(blank(placeholder));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [del, setDel] = useState<string | null>(null);
+  const [preview, setPreview] = useState<BannerPreviewData | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const showPreview = (b: Banner) => {
+    setPreview({ type: b.type, title: b.title, description: b.description, buttonText: b.buttonText, hasLink: b.linkKind !== "none", image: b.image, mobileImage: b.mobileImage });
+    setPreviewOpen(true);
+  };
 
   const begin = (id: string, type?: BannerType) => {
     setErrors({});
@@ -205,6 +212,9 @@ function Banners() {
               </div>
             </div>
             <StatusBadge status={b.active ? "Active" : "Draft"} />
+            <button className="grid size-8 place-items-center rounded-md text-soft hover:bg-surface-3" aria-label={`Preview ${b.title}`} title="Preview" onClick={() => showPreview(b)}>
+              <Eye className="size-4" />
+            </button>
             <button className="grid size-8 place-items-center rounded-md text-soft hover:bg-surface-3" aria-label={`Edit ${b.title}`} title="Edit" onClick={() => begin(b.id)}>
               <Pencil className="size-4" />
             </button>
@@ -303,6 +313,9 @@ function Banners() {
             </div>
             <Toggle checked={draft.active} onChange={(v) => setDraft({ ...draft, active: v })} label="Active" />
             <div className="flex justify-end gap-2">
+              <Btn onClick={() => showPreview(draft)}>
+                <Eye /> Preview
+              </Btn>
               <Btn onClick={() => setEdit(null)}>Cancel</Btn>
               <Btn variant="primary" onClick={save}>
                 Save banner
@@ -311,6 +324,7 @@ function Banners() {
           </div>
         </DialogContent>
       </Dialog>
+      <BannerPreviewDialog open={previewOpen} onOpenChange={setPreviewOpen} data={preview} />
       <ConfirmDialog
         open={del !== null}
         onOpenChange={(o) => !o && setDel(null)}

@@ -72,10 +72,8 @@ function PlanStep() {
 
   const hydrated = useUserHydrated();
 
-  // When in real-API mode use backend plans; fall back to local store while loading or in demo mode
-  const plans: Plan[] = DEMO_MODE
-    ? localPlans
-    : (apiPlansQuery.data?.map(apiPlanToLocal) ?? localPlans);
+  // Live mode: the backend's plans only — never the demo cards, not even while loading or after an error
+  const plans: Plan[] = DEMO_MODE ? localPlans : (apiPlansQuery.data?.map(apiPlanToLocal) ?? []);
 
   const activePlans = plans.filter((p) => p.active);
   const [selected, setSelected] = useState<string>(() => readSessionPlan());
@@ -115,6 +113,17 @@ function PlanStep() {
 
       {/* Plan cards */}
       <div className="mt-10 w-full max-w-4xl">
+        {!DEMO_MODE && apiPlansQuery.isPending && (
+          <p role="status" className="text-center text-sm text-muted-foreground">Loading plans…</p>
+        )}
+        {!DEMO_MODE && apiPlansQuery.isError && (
+          <div role="alert" className="text-center text-sm text-muted-foreground">
+            Plans could not be loaded.{" "}
+            <button type="button" onClick={() => void apiPlansQuery.refetch()} className="font-semibold text-primary-text hover:underline">
+              Retry
+            </button>
+          </div>
+        )}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {activePlans.map((plan) => {
             const features = planFeatures(plan.features);

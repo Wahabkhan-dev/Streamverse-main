@@ -1,4 +1,5 @@
 import { env } from "../config/env";
+import { isSharedKey, listenForRemoteInvalidation, redisCacheEnabled, remoteGet, remoteInvalidate, remoteSet } from "./redisCache";
 
 interface CacheEntry<T> {
   value: T;
@@ -12,7 +13,8 @@ interface CacheEntry<T> {
 }
 
 /**
- * Simple in-memory key→value cache with TTL. Not distributed — per-process only.
+ * In-memory key→value cache with TTL. Public keys (redisCache.SHARED_PREFIXES) also go through Redis when REDIS_URL is set,
+ * so every API instance shares them and an admin change clears them everywhere; everything else stays per-process.
  *
  * Two things keep slow computations off the request path:
  *  - concurrent misses for one key share a single computation (no thundering herd on the database);
@@ -52,7 +54,24 @@ class AnalyticsCache {
     });
   }
 
+  /** Like set(), but keeps the expiry another instance gave the entry, so a copy taken from Redis never outlives the original. */
+  private setUntil<T>(key: string, value: T, expiresAt: number, staleUntil: number, rebuild: () => Promise<T>, ttl: number, stale: number): void {
+    const previous = this.store.get(key);
+    if (!previous && this.store.size >= MAX_ENTRIES) {
+      const oldest = this.store.keys().next().value;
+      if (oldest !== undefined) this.store.delete(oldest);
+    }
+    this.store.set(key, { value, expiresAt, staleUntil, rebuild: { fn: rebuild, ttl, stale }, lastHit: previous?.lastHit ?? Date.now() });
+  }
+
+  /** Clears matching entries here and — for shared (public) keys — in Redis and on every other instance. */
   invalidate(prefix?: string): void {
+    this.invalidateLocal(prefix);
+    void remoteInvalidate(prefix);
+  }
+
+  /** This instance's memory only (also what a remote instance's invalidation message triggers). */
+  invalidateLocal(prefix?: string): void {
     this.generation++;
     if (!prefix) {
       this.store.clear();
@@ -63,13 +82,30 @@ class AnalyticsCache {
     for (const key of this.inflight.keys()) if (key.startsWith(prefix)) this.inflight.delete(key);
   }
 
+  /**
+   * Fills the entry: from Redis when another instance already built a fresh one (shared keys only), otherwise by running `fn`
+   * — and then shares the result through Redis. Concurrent callers for one key share this single promise.
+   */
   private compute<T>(key: string, fn: () => Promise<T>, ttlSeconds: number, staleSeconds: number): Promise<T> {
     const running = this.inflight.get(key) as Promise<T> | undefined;
     if (running) return running;
     const startedAt = this.generation;
-    const promise = fn()
-      .then((value) => {
-        if (this.generation === startedAt) this.set(key, value, ttlSeconds, staleSeconds, fn);
+    const shared = isSharedKey(key) && redisCacheEnabled();
+    const fromRemote = shared ? remoteGet<T>(key) : Promise.resolve(undefined);
+    const promise = fromRemote
+      .then(async (remote) => {
+        if (remote && Date.now() <= remote.expiresAt) {
+          if (this.generation === startedAt) this.setUntil(key, remote.value, remote.expiresAt, remote.staleUntil, fn, ttlSeconds, staleSeconds);
+          return remote.value;
+        }
+        const value = await fn();
+        if (this.generation === startedAt && ttlSeconds > 0) {
+          this.set(key, value, ttlSeconds, staleSeconds, fn);
+          if (shared) {
+            const now = Date.now();
+            void remoteSet(key, { value, expiresAt: now + ttlSeconds * 1000, staleUntil: now + (ttlSeconds + Math.max(0, staleSeconds)) * 1000 });
+          }
+        }
         return value;
       })
       .finally(() => {
@@ -98,6 +134,32 @@ class AnalyticsCache {
   }
 
   /**
+   * Batch form for many small entries (e.g. one card per title): fresh entries come from memory, all the missing ones are built
+   * by ONE call to `loadMissing`. Memory only (no Redis round trip per key); invalidate() still clears them here and — through the
+   * shared invalidation message — on every other instance.
+   */
+  async getOrSetMany<T>(keys: string[], loadMissing: (missing: string[]) => Promise<Map<string, T>>, ttlSeconds: number, staleSeconds = 0): Promise<Map<string, T>> {
+    const now = Date.now();
+    const out = new Map<string, T>();
+    const missing: string[] = [];
+    for (const key of new Set(keys)) {
+      const entry = this.store.get(key) as CacheEntry<T> | undefined;
+      if (entry && now <= entry.expiresAt) {
+        entry.lastHit = now;
+        out.set(key, entry.value);
+      } else missing.push(key);
+    }
+    if (!missing.length) return out;
+    const startedAt = this.generation;
+    const loaded = await loadMissing(missing);
+    for (const [key, value] of loaded) {
+      out.set(key, value);
+      if (this.generation === startedAt) this.set(key, value, ttlSeconds, staleSeconds);
+    }
+    return out;
+  }
+
+  /**
    * Rebuilds, in the background, entries under `prefix` that are 60% through their fresh time and were asked for within the
    * last `maxIdleMs` — so anything people are actually using never expires and no visitor waits for a rebuild. Returns how
    * many rebuilds were started. A failed rebuild keeps the old entry.
@@ -119,6 +181,7 @@ class AnalyticsCache {
 }
 
 export const analyticsCache = new AnalyticsCache();
+listenForRemoteInvalidation((prefix) => analyticsCache.invalidateLocal(prefix || undefined));
 
 /**
  * How long a public payload that embeds signed image links may be cached: fresh for HOMEPAGE_CACHE_TTL_SECONDS, then served

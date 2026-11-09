@@ -1,4 +1,6 @@
 import { meApi } from "@/api/me.api";
+import { SUBSCRIPTION_QUERY_KEY } from "@/hooks/useApiSubscription";
+import { getQueryClient } from "./authSession";
 import type { ApiSyncedSubscription } from "@/api/types";
 import type { SubscriptionStatus } from "./user";
 import { updateUser } from "./user";
@@ -34,7 +36,12 @@ function mirror(view: ApiSyncedSubscription): boolean {
 
 /** Reads this customer's subscription (so nobody keeps the demo "Premium" that ships in the browser store). */
 export async function mirrorSubscription(): Promise<boolean> {
-  return mirror((await meApi.getSubscription()).data as unknown as ApiSyncedSubscription);
+  // through the shared query cache, so a page that also shows the subscription does not fetch it a second time
+  const qc = getQueryClient();
+  const view = qc
+    ? await qc.fetchQuery({ queryKey: SUBSCRIPTION_QUERY_KEY, queryFn: async () => (await meApi.getSubscription()).data, staleTime: 60 * 1000 })
+    : (await meApi.getSubscription()).data;
+  return mirror(view as unknown as ApiSyncedSubscription);
 }
 
 /** Asks Stripe (through the server) for the latest state right after a payment: works without a webhook. */

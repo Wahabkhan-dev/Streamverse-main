@@ -7,6 +7,7 @@ import type { ItemRef } from "@/lib/data";
 import { isSaved, toggleLibrary, toggleMyList, useLibrary, useMyList } from "@/lib/user";
 import { cn } from "@/lib/utils";
 import { Btn } from "./ui";
+import { guestPrompt } from "./SignInPrompt";
 import type { ApiMixedCard } from "@/api/types";
 
 type Size = "lg" | "md" | "sm";
@@ -31,6 +32,7 @@ export function MyListButton({ item, size = "lg", className }: { item: ItemRef; 
   const busy = useRef(false);
 
   const onClick = () => {
+    if (guestPrompt(null, `${window.location.pathname}${window.location.search}`, "save titles to My List")) return;
     if (DEMO_MODE) {
       toast.success(toggleMyList(item) ? "Added to My List" : "Removed from My List");
       return;
@@ -63,6 +65,7 @@ export function LibraryButton({ item, size = "lg", className }: { item: ItemRef;
   const busy = useRef(false);
 
   const onClick = () => {
+    if (guestPrompt(null, `${window.location.pathname}${window.location.search}`, "add titles to your library")) return;
     if (DEMO_MODE) {
       toast.success(toggleLibrary(item) ? "Added to your library" : "Removed from your library");
       return;

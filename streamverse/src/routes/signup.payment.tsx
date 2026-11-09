@@ -75,7 +75,7 @@ function PaymentStep() {
     ? localPlans.find((p) => p.name === planName)
     : apiSelectedPlan
       ? { name: apiSelectedPlan.name, price: planPriceDollars(apiSelectedPlan), interval: planInterval(apiSelectedPlan), features: apiSelectedPlan.features.join(", "), active: apiSelectedPlan.active, subs: 0 }
-      : localPlans.find((p) => p.name === planName);
+      : undefined; // live mode: only a real backend plan can be paid for (never a demo card)
 
   /** The customer paid (in the box or in the Stripe popup): the plan choice is used up, on to the welcome page. */
   function onPaid() {

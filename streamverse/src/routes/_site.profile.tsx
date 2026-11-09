@@ -2,10 +2,13 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Check, RotateCcw } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { AVATARS, Avatar } from "@/components/sv/TopNavbar";
+import { Avatar } from "@/components/sv/TopNavbar";
+import { ACCENTS, accentGradient } from "@/lib/accent";
 import { Btn, ConfirmDialog, Field, Panel, PanelHeader, SelectInput, TextInput, Toggle } from "@/components/sv/ui";
 import { COUNTRIES, LANGUAGES } from "@/components/sv/wizard/kit";
-import { useUpdateProfileMutation } from "@/hooks/useApiMe";
+import { countryCode } from "@/components/sv/wizard/live";
+import { useAgeVerificationQuery, useUpdateProfileMutation, useVerifyAgeMutation } from "@/hooks/useApiMe";
+import { isApiError } from "@/api/client";
 import { DEMO_MODE } from "@/lib/demo";
 import { resetDrafts } from "@/lib/drafts";
 import { resetStore } from "@/lib/store";
@@ -42,32 +45,47 @@ function ProfileForm() {
 
   const setP = <K extends keyof Form["profile"]>(k: K, v: Form["profile"][K]) => setForm((f) => ({ ...f, profile: { ...f.profile, [k]: v } }));
   const setPref = <K extends keyof Form["prefs"]>(k: K, v: Form["prefs"][K]) => setForm((f) => ({ ...f, prefs: { ...f.prefs, [k]: v } }));
+  /** The colour applies and is kept at once (it only changes how the app looks), so it never waits for Save Changes. */
+  const pickColour = (i: number) => {
+    setP("avatar", i);
+    updateUser((s) => ({ ...s, profile: { ...s.profile, avatar: i } }));
+  };
   const setNote = (k: keyof Form["prefs"]["notifications"], v: boolean) => setForm((f) => ({ ...f, prefs: { ...f.prefs, notifications: { ...f.prefs.notifications, [k]: v } } }));
 
   const save = () => {
     const e: Record<string, string> = {};
     if (!form.profile.name.trim()) e["name"] = "Enter your full name.";
     if (!EMAIL.test(form.profile.email.trim())) e["email"] = "Enter a valid email address.";
-    if (!(form.profile.age >= 5 && form.profile.age <= 120)) e["age"] = "Enter an age between 5 and 120.";
+    if (DEMO_MODE && !(form.profile.age >= 5 && form.profile.age <= 120)) e["age"] = "Enter an age between 5 and 120.";
     setErrors(e);
     if (Object.keys(e).length) {
       toast.warning("Please fix the highlighted fields.");
       return;
     }
-    updateUser((s) => ({ ...s, profile: { ...form.profile, name: form.profile.name.trim(), email: form.profile.email.trim() }, prefs: form.prefs }));
-    toast.success("Profile saved");
-    if (!DEMO_MODE) {
+    const keep = () => updateUser((s) => ({ ...s, profile: { ...form.profile, name: form.profile.name.trim(), email: form.profile.email.trim() }, prefs: form.prefs }));
+    if (DEMO_MODE) {
+      keep();
+      toast.success("Profile saved");
+    } else {
+      // live: "saved" only once the server has stored it
       updateProfileMutation.mutate(
         {
           fullName: form.profile.name.trim(),
-          country: form.profile.country ?? null,
+          // the list shows names, the API stores ISO codes ("United States" -> "US"); no country chosen = null, never ""
+          country: (form.profile.country && countryCode(form.profile.country)) || null,
           preferredLanguage: form.profile.language ?? null,
           subtitleLanguage: form.prefs.subtitleLanguage ?? null,
           audioLanguage: form.prefs.audioLanguage ?? null,
           videoQuality: form.prefs.quality ?? null,
           audiobookSpeed: form.prefs.audiobookSpeed ?? null,
         },
-        { onError: () => toast.error("Failed to sync profile with server") },
+        {
+          onSuccess: () => {
+            keep();
+            toast.success("Profile saved");
+          },
+          onError: () => toast.error("Your profile could not be saved. Please try again."),
+        },
       );
     }
   };
@@ -83,7 +101,7 @@ function ProfileForm() {
         </div>
         <div className="flex items-center gap-3">
           <span role="status" className="text-xs text-muted-foreground">{dirty ? "Unsaved changes" : "All changes saved"}</span>
-          <Btn variant="primary" onClick={save} disabled={!dirty}>
+          <Btn variant="primary" onClick={save} disabled={!dirty || updateProfileMutation.isPending}>
             <Check /> Save Changes
           </Btn>
         </div>
@@ -96,11 +114,22 @@ function ProfileForm() {
             <div>
               <div className="eyebrow mb-2 text-soft">Avatar</div>
               <Avatar name={form.profile.name} index={form.profile.avatar} className="size-20 text-2xl" />
-              <div className="mt-3 flex flex-wrap gap-1.5" role="radiogroup" aria-label="Avatar colour">
-                {AVATARS.map((_, i) => (
-                  <button key={i} type="button" role="radio" aria-checked={form.profile.avatar === i} aria-label={`Avatar colour ${i + 1}`} onClick={() => setP("avatar", i)} className={`size-7 rounded-md ring-offset-2 ring-offset-surface ${AVATARS[i]} ${form.profile.avatar === i ? "ring-2 ring-foreground" : ""}`} />
+              <div className="mt-3 flex max-w-[11rem] flex-wrap gap-1.5" role="radiogroup" aria-label="Avatar colour">
+                {ACCENTS.map((a, i) => (
+                  <button
+                    key={a.name}
+                    type="button"
+                    role="radio"
+                    aria-checked={form.profile.avatar === i}
+                    aria-label={`Avatar colour ${i + 1}: ${a.name}`}
+                    title={a.name}
+                    onClick={() => pickColour(i)}
+                    style={{ backgroundImage: accentGradient(i) }}
+                    className={`size-7 rounded-md ring-offset-2 ring-offset-surface ${form.profile.avatar === i ? "ring-2 ring-foreground" : ""}`}
+                  />
                 ))}
               </div>
+              <p className="mt-2 max-w-[11rem] text-[11px] text-muted-foreground">This colour is also used across StreamVerse on this device.</p>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
@@ -110,20 +139,24 @@ function ProfileForm() {
                 {err("name")}
               </div>
               <div>
-                <Field label="Email" required>
-                  <TextInput type="email" value={form.profile.email} onChange={(e) => setP("email", e.target.value)} aria-invalid={!!errors["email"]} />
+                <Field label="Email" required {...(DEMO_MODE ? {} : { hint: "Your sign-in email can't be changed here." })}>
+                  <TextInput type="email" value={form.profile.email} readOnly={!DEMO_MODE} onChange={(e) => setP("email", e.target.value)} aria-invalid={!!errors["email"]} />
                 </Field>
                 {err("email")}
               </div>
               <Field label="Country" hint="Used to show content available in your region.">
                 <SelectInput options={COUNTRIES} value={form.profile.country} onChange={(e) => setP("country", e.target.value)} />
               </Field>
-              <div>
-                <Field label="Age" hint="Used for age-restricted titles.">
-                  <TextInput type="number" min={5} max={120} value={form.profile.age} onChange={(e) => setP("age", Number(e.target.value))} aria-invalid={!!errors["age"]} />
-                </Field>
-                {err("age")}
-              </div>
+              {DEMO_MODE ? (
+                <div>
+                  <Field label="Age" hint="Used for age-restricted titles.">
+                    <TextInput type="number" min={5} max={120} value={form.profile.age} onChange={(e) => setP("age", Number(e.target.value))} aria-invalid={!!errors["age"]} />
+                  </Field>
+                  {err("age")}
+                </div>
+              ) : (
+                <AgeConfirm />
+              )}
             </div>
           </div>
         </Panel>
@@ -206,6 +239,39 @@ function ProfileForm() {
           toast.success("Demo data reset");
         }}
       />
+    </div>
+  );
+}
+
+/** Live mode: the customer confirms their age with their date of birth; the server stores it and decides age-restricted access from it. */
+function AgeConfirm() {
+  const status = useAgeVerificationQuery();
+  const verify = useVerifyAgeMutation();
+  const [dob, setDob] = useState("");
+  const confirmed = status.data?.ageConfirmed === true;
+  const submit = () => {
+    if (!dob) return;
+    verify.mutate(dob, {
+      onSuccess: () => {
+        setDob("");
+        toast.success("Age confirmed");
+      },
+      onError: (err) => toast.error(isApiError(err) && err.status === 400 ? "Enter a real date of birth." : "Your age could not be confirmed. Please try again."),
+    });
+  };
+  return (
+    <div>
+      <Field label="Date of birth" hint={confirmed ? "Age confirmed. Enter a date again only to correct it." : "Needed for age-restricted titles. It is never shown to anyone."}>
+        <div className="flex gap-2">
+          <TextInput type="date" aria-label="Date of birth" value={dob} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setDob(e.target.value)} />
+          <Btn onClick={submit} disabled={!dob || verify.isPending}>
+            Confirm age
+          </Btn>
+        </div>
+      </Field>
+      <p data-testid="age-status" className="mt-1 text-[11px] text-muted-foreground">
+        {status.isPending ? "Checking…" : confirmed ? "Age confirmed" : "Age not confirmed"}
+      </p>
     </div>
   );
 }

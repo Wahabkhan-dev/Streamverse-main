@@ -4,8 +4,29 @@ import { prisma } from "../config/database";
 /** Assets that are real library entries: not soft-deleted and not an internal rendition (HLS variant, etc.). */
 export const LIBRARY_BASE: Prisma.MediaAssetWhereInput = { deletedAt: null, sourceAssetId: null, status: { not: "DELETED" } };
 
+/** Only the columns the library table shows (not notes, captions, errors, checksums...). `metadata` carries processing progress. */
+export const LIST_SELECT = {
+  id: true,
+  type: true,
+  status: true,
+  metadata: true,
+  originalFileName: true,
+  displayTitle: true,
+  altText: true,
+  mimeType: true,
+  sizeBytes: true,
+  width: true,
+  height: true,
+  durationSeconds: true,
+  folder: true,
+  createdAt: true,
+  createdById: true,
+  storageKey: true,
+} as const satisfies Prisma.MediaAssetSelect;
+export type MediaListRow = Prisma.MediaAssetGetPayload<{ select: typeof LIST_SELECT }>;
+
 export const findPage = (where: Prisma.MediaAssetWhereInput, orderBy: Prisma.MediaAssetOrderByWithRelationInput[], skip: number, take: number) =>
-  prisma.mediaAsset.findMany({ where, orderBy, skip, take });
+  prisma.mediaAsset.findMany({ where, orderBy, skip, take, select: LIST_SELECT });
 
 export const count = (where: Prisma.MediaAssetWhereInput) => prisma.mediaAsset.count({ where });
 

@@ -17,6 +17,7 @@ import { estimatePlanChange, paidPlanFromStripe } from "./planChange.service";
 import { statusGrantsAccess } from "./subscriptionAccess.service";
 import { getOrCreateStripeCustomer } from "./stripeCustomer.service";
 import { ensureChargeableCard, getDefaultPaymentMethodSummary } from "./paymentMethod.service";
+import { recordPaymentFromInvoice } from "./payment.service";
 import * as entitlementCache from "../entitlement/entitlementCache.service";
 
 const NO_ACTOR: AuditContext = { userId: undefined, ip: undefined, userAgent: undefined, requestId: undefined };
@@ -223,8 +224,16 @@ export async function syncMySubscription(userId: string) {
       // so the customer does not depend on a webhook reaching this server. An active one wins over an abandoned attempt.
       const all = await stripeService.listCustomerSubscriptions(user.stripeCustomerId);
       const live = all.find((s) => s.status === "active" || s.status === "trialing") ?? all.find((s) => s.status === "past_due");
-      if (live) await applyStripeSubscriptionSnapshot(live);
-      else {
+      if (live) {
+        await applyStripeSubscriptionSnapshot(live);
+        // ...and its latest paid invoice, so payment history does not depend on a webhook either. The same recorder the
+        // invoice.paid webhook uses: one row per Stripe invoice (unique), and a settled payment is never rewritten.
+        const invoiceId = typeof live.latest_invoice === "string" ? live.latest_invoice : live.latest_invoice?.id;
+        if (invoiceId) {
+          const invoice = await stripeService.retrieveInvoice(invoiceId);
+          if (invoice.status === "paid") await recordPaymentFromInvoice(invoice);
+        }
+      } else {
         const local = await subscriptionRepository.findByUserId(userId);
         const known = local && all.find((s) => s.id === local.stripeSubscriptionId);
         if (known) await applyStripeSubscriptionSnapshot(known);

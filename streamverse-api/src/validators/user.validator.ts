@@ -12,7 +12,7 @@ export const profileUpdateSchema = z
     preferredLanguage: z.string().trim().min(2).max(35).nullable(),
     subtitleLanguage: z.string().trim().min(2).max(35).nullable(),
     audioLanguage: z.string().trim().min(2).max(35).nullable(),
-    videoQuality: z.enum(["Auto", "SD", "HD", "4K"]).nullable(),
+    videoQuality: z.enum(["Auto", "SD", "HD", "4K", "1080p", "720p", "480p"]).nullable(),
     audiobookSpeed: z.number().min(0.5).max(3).nullable(),
   })
   .partial();

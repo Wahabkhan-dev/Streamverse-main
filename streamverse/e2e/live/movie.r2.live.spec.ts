@@ -13,7 +13,7 @@ test.afterEach(async ({ page }) => {
   await page.waitForTimeout(500);
 });
 
-// Runs in the live-r2-no-cors project: hls.js fetches HLS segments straight from R2 with XHR, which needs bucket
+// Runs in the live-r2 project (a normal browser; the bucket has CORS): hls.js fetches HLS segments straight from R2 with XHR, which needs bucket
 // CORS (BLOCKED EXTERNAL, see cors.live.spec.ts). Everything else in the chain is real.
 test("movie: the processed HLS stream plays from R2 through the app, seeks, and progress + stream slot are handled", async ({
   page,

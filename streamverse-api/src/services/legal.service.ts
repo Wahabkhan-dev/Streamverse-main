@@ -4,6 +4,8 @@ import type { LegalVersionMetadataInput } from "../validators/legal.validator";
 import { NotFoundError, ValidationError } from "../utils/errors";
 import type { AuditContext } from "./auditLog.service";
 import { recordAudit } from "./auditLog.service";
+import { analyticsCache, publicCacheWindow } from "../utils/analyticsCache";
+import { HOMEPAGE_CACHE_PREFIX } from "./homepage.service";
 
 const NO_ACTOR: AuditContext = { userId: undefined, ip: undefined, userAgent: undefined, requestId: undefined };
 
@@ -23,6 +25,25 @@ export async function ensureDocument(type: LegalDocType) {
 }
 
 export const getDocument = legalRepository.findByType;
+
+/**
+ * The PUBLISHED version of a legal page as customers see it (null = nothing published yet). Never includes a draft. Cached
+ * because every sign-up and footer link reads it; publishing (an admin write) clears it at once.
+ */
+export function getPublishedDocument(type: LegalDocType) {
+  const { ttl, stale } = publicCacheWindow();
+  return analyticsCache.getOrSet(
+    `${HOMEPAGE_CACHE_PREFIX}legal:${type}`,
+    async () => {
+      const doc = await legalRepository.findByType(type);
+      const v = doc?.currentPublishedVersion;
+      if (!doc || !v) return null;
+      return { type: doc.type, title: v.title, slug: doc.slug, content: v.content, version: v.version, effectiveAt: v.effectiveAt, publishedAt: v.publishedAt };
+    },
+    ttl,
+    stale,
+  );
+}
 export const listVersions = legalRepository.listVersionsForType;
 
 /**

@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { isApiError } from "@/api/client";
 import { ArrowLeft, Layers } from "lucide-react";
 import { ItemCard } from "@/components/sv/ItemCard";
 import { ContentUnavailable, GeneralError } from "@/components/sv/states";
@@ -22,7 +23,8 @@ function CollectionPage() {
   const apiQuery = useApiCollectionQuery(slug);
 
   if (!DEMO_MODE && apiQuery.isLoading) return <DetailSkeleton tall={false} />;
-  if (!DEMO_MODE && apiQuery.isError) return <GeneralError />;
+  // a title that does not exist (404) gets the page's own "not found" screen below; only a real failure is a general error
+  if (!DEMO_MODE && apiQuery.isError && !(isApiError(apiQuery.error) && apiQuery.error.status === 404)) return <GeneralError />;
 
   const collection = DEMO_MODE ? demoCollection : apiQuery.data ? apiCollectionToLocal(apiQuery.data) : undefined;
   if (!collection) return <ContentUnavailable message="This collection doesn't exist or isn't published." />;

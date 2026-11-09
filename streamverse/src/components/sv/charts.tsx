@@ -1,7 +1,8 @@
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { Point } from "@/lib/analytics";
 
-export const CHART_COLORS = { red: "#E50914", soft: "#D7D7D7", amber: "#F0A020", blue: "#5AA9FF", green: "#20C77A" };
+/** "red" is the theme's primary colour, so charts follow the colour the customer picked on their Profile. */
+export const CHART_COLORS = { red: "var(--primary)", soft: "#D7D7D7", amber: "#F0A020", blue: "#5AA9FF", green: "#20C77A" };
 
 export interface SeriesDef {
   key: string;

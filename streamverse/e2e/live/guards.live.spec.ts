@@ -21,7 +21,7 @@ test.describe("customer pages: no failing API calls, no duplicates, bounded requ
     { name: "Movies", path: "/movies", maxCalls: 6 },
     { name: "eBooks", path: "/ebooks", maxCalls: 6 },
     { name: "Audiobooks", path: "/audiobooks", maxCalls: 6 },
-    { name: "Movie detail", path: `/movies/${seed.movie.slug}`, maxCalls: 6 },
+    { name: "Movie detail", path: `/movies/${seed.movie.slug}`, maxCalls: 7 }, // + the account's saved position (Resume button)
     { name: "Search", path: "/search", maxCalls: 7 },
     { name: "My List", path: "/my-list", maxCalls: 5 },
     { name: "My Library", path: "/my-library", maxCalls: 5 },
@@ -43,16 +43,16 @@ test.describe("customer pages: no failing API calls, no duplicates, bounded requ
 
 test.describe("admin pages: no failing API calls, no duplicates", () => {
   test.use({ storageState: ADMIN_STATE });
-  // admin pages also load the signed-in admin, their subscription and the admin settings; the Homepage CMS loads the
-  // published titles its section pickers choose from
+  // admin pages also load the signed-in admin, their subscription and the admin settings, plus the notification bell's two
+  // billing alerts (past-due subscriptions, failed payments); the Homepage CMS loads the published titles its pickers choose from
   const pages: Array<{ name: string; path: string; maxCalls: number }> = [
-    { name: "Dashboard", path: "/admin/dashboard", maxCalls: 11 },
-    { name: "Movies", path: "/admin/movies", maxCalls: 5 },
-    { name: "eBooks", path: "/admin/ebooks", maxCalls: 5 },
-    { name: "Audiobooks", path: "/admin/audiobooks", maxCalls: 5 },
-    { name: "Homepage CMS", path: "/admin/homepage", maxCalls: 9 },
-    { name: "Users", path: "/admin/users", maxCalls: 4 },
-    { name: "Settings", path: "/admin/settings", maxCalls: 5 },
+    { name: "Dashboard", path: "/admin/dashboard", maxCalls: 13 },
+    { name: "Movies", path: "/admin/movies", maxCalls: 7 },
+    { name: "eBooks", path: "/admin/ebooks", maxCalls: 7 },
+    { name: "Audiobooks", path: "/admin/audiobooks", maxCalls: 7 },
+    { name: "Homepage CMS", path: "/admin/homepage", maxCalls: 11 },
+    { name: "Users", path: "/admin/users", maxCalls: 8 },
+    { name: "Settings", path: "/admin/settings", maxCalls: 7 },
   ];
   for (const p of pages) {
     test(`${p.name}`, async ({ page }) => {

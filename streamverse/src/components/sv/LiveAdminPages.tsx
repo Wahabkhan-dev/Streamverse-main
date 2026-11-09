@@ -1,5 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
+import type { BannerType } from "@/lib/store";
+import { BannerPreviewDialog, type BannerPreviewData } from "./BannerPreview";
 import { useState } from "react";
 import { toast } from "sonner";
 import { api, isApiError } from "@/api/client";
@@ -139,6 +141,34 @@ function useLinkTargets() {
   });
 }
 
+const BANNER_DESIGN: Record<string, BannerType> = {
+  HERO: "Hero Banner",
+  NORMAL: "Normal Banner",
+  LATEST_RELEASE: "Latest Release Banner",
+  PROMOTIONAL: "Promotional Banner",
+};
+
+/** What a preview needs from a saved row or from the open form; the pictures are still library ids. */
+interface LivePreviewSource {
+  type: string;
+  title: string;
+  description: string;
+  buttonText: string;
+  hasLink: boolean;
+  desktopAssetId: string | null | undefined;
+  mobileAssetId: string | null | undefined;
+}
+
+/** The preview dialog for the live banners: looks the picked library pictures up, then draws the real customer banner. */
+function LiveBannerPreview({ src, open, onOpenChange }: { src: LivePreviewSource | null; open: boolean; onOpenChange: (open: boolean) => void }) {
+  const desktop = useMediaDetailQuery(src?.desktopAssetId || undefined).data?.data?.previewUrl ?? "";
+  const mobile = useMediaDetailQuery(src?.mobileAssetId || undefined).data?.data?.previewUrl ?? "";
+  const data: BannerPreviewData | null = src
+    ? { type: BANNER_DESIGN[src.type] ?? "Normal Banner", title: src.title, description: src.description, buttonText: src.buttonText, hasLink: src.hasLink, image: desktop, mobileImage: mobile || desktop }
+    : null;
+  return <BannerPreviewDialog open={open} onOpenChange={onOpenChange} data={data} />;
+}
+
 export function LiveBanners() {
   const qc = useQueryClient();
   const invalidateMedia = useInvalidateMedia();
@@ -160,6 +190,12 @@ export function LiveBanners() {
   const [form, setForm] = useState<BannerForm | null>(null);
   const [del, setDel] = useState<Row | null>(null);
   const [saving, setSaving] = useState(false);
+  const [previewSrc, setPreviewSrc] = useState<LivePreviewSource | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const showPreview = (src: LivePreviewSource) => {
+    setPreviewSrc(src);
+    setPreviewOpen(true);
+  };
 
   const refresh = async () => {
     await qc.invalidateQueries({ queryKey: ["admin", "banners"] });
@@ -288,6 +324,24 @@ export function LiveBanners() {
                 </div>
               </div>
               <StatusBadge status={b["active"] ? "Active" : "Draft"} />
+              <button
+                className="grid size-8 place-items-center rounded-md text-soft hover:bg-surface-3"
+                aria-label={`Preview ${String(b["title"])}`}
+                title="Preview"
+                onClick={() =>
+                  showPreview({
+                    type: String(b["type"] ?? "NORMAL"),
+                    title: String(b["title"] ?? ""),
+                    description: String(b["description"] ?? ""),
+                    buttonText: String(b["buttonText"] ?? ""),
+                    hasLink: b["linkToSubscription"] === true || !!b["linkedContentId"],
+                    desktopAssetId: (b["desktopAssetId"] as string | null) ?? undefined,
+                    mobileAssetId: (b["mobileAssetId"] as string | null) ?? undefined,
+                  })
+                }
+              >
+                <Eye className="size-4" />
+              </button>
               <button
                 className="grid size-8 place-items-center rounded-md text-soft hover:bg-surface-3"
                 aria-label={`Edit ${String(b["title"])}`}
@@ -491,6 +545,22 @@ export function LiveBanners() {
                 label="Active"
               />
               <div className="flex justify-end gap-2">
+                <Btn
+                  data-testid="preview-banner"
+                  onClick={() =>
+                    showPreview({
+                      type: form.type,
+                      title: form.title,
+                      description: form.description,
+                      buttonText: form.buttonText,
+                      hasLink: form.linkKind === "subscription" || (form.linkKind === "title" && !!form.linkedContentId),
+                      desktopAssetId: form.desktopAssetId,
+                      mobileAssetId: form.mobileAssetId,
+                    })
+                  }
+                >
+                  <Eye /> Preview
+                </Btn>
                 <Btn onClick={() => setForm(null)}>Cancel</Btn>
                 <Btn
                   variant="primary"
@@ -505,6 +575,7 @@ export function LiveBanners() {
           )}
         </DialogContent>
       </Dialog>
+      <LiveBannerPreview src={previewSrc} open={previewOpen} onOpenChange={setPreviewOpen} />
       <ConfirmDialog
         open={!!del}
         onOpenChange={(o) => !o && setDel(null)}

@@ -20,6 +20,8 @@ export const registerQueryClient = (c: QueryClient) => {
 };
 /** Everything cached for a customer (My List, library, history, notifications, progress...) goes when the customer changes. */
 export const dropUserCaches = () => queryClient?.clear();
+/** The app's one query cache (null before the router has started), for non-React code that should share its requests. */
+export const getQueryClient = () => queryClient;
 
 /* ───────────── which pages need a session ───────────── */
 
@@ -69,6 +71,14 @@ export function takeReturnTo(): string | null {
 
 /* ───────────── mirror into the local user store ───────────── */
 
+const countryName = (code: string): string => {
+  try {
+    return new Intl.DisplayNames(["en"], { type: "region" }).of(code) ?? code;
+  } catch {
+    return code;
+  }
+};
+
 /** The screens that still read the browser store (profile name, role) follow the server's answer. Call after the store hydrated. */
 export function mirrorAuthUser(user: ApiUser | null) {
   if (!user) {
@@ -82,8 +92,16 @@ export function mirrorAuthUser(user: ApiUser | null) {
       ...s.profile,
       email: user.email,
       name: user.fullName,
-      ...(user.preferences?.country ? { country: user.preferences.country } : {}),
+      // the server stores an ISO code ("US"); the profile's list shows the country's name ("United States")
+      ...(user.preferences?.country ? { country: countryName(user.preferences.country) } : {}),
       ...(user.preferences?.preferredLanguage ? { language: user.preferences.preferredLanguage } : {}),
+    },
+    prefs: {
+      ...s.prefs,
+      ...(user.preferences?.subtitleLanguage ? { subtitleLanguage: user.preferences.subtitleLanguage } : {}),
+      ...(user.preferences?.audioLanguage ? { audioLanguage: user.preferences.audioLanguage } : {}),
+      ...(user.preferences?.videoQuality ? { quality: user.preferences.videoQuality } : {}),
+      ...(user.preferences?.audiobookSpeed ? { audiobookSpeed: user.preferences.audiobookSpeed } : {}),
     },
   }));
 }

@@ -422,7 +422,7 @@ export const openApiDocument = {
           preferredLanguage: { type: "string", nullable: true },
           subtitleLanguage: { type: "string", nullable: true },
           audioLanguage: { type: "string", nullable: true },
-          videoQuality: { type: "string", enum: ["Auto", "SD", "HD", "4K"], nullable: true },
+          videoQuality: { type: "string", enum: ["Auto", "SD", "HD", "4K", "1080p", "720p", "480p"], nullable: true },
           audiobookSpeed: { type: "number", minimum: 0.5, maximum: 3, nullable: true },
         },
       },

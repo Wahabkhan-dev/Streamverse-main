@@ -1,4 +1,5 @@
 import { AuthGate } from "@/components/sv/AuthGate";
+import { isApiError } from "@/api/client";
 import { createFileRoute } from "@tanstack/react-router";
 import { MoviePlayer } from "@/components/sv/players/MoviePlayer";
 import { PlayerGate } from "@/components/sv/players/PlayerGate";
@@ -30,7 +31,8 @@ function WatchPage() {
   // Live mode resolves the title from the API, exactly like the detail page. The local catalog only holds demo
   // titles, so using it here made every real uploaded movie show "This title is unavailable".
   if (!DEMO_MODE && apiQuery.isLoading) return <div className="h-screen" aria-busy="true" />;
-  if (!DEMO_MODE && apiQuery.isError) return <GeneralError />;
+  // a title that does not exist (404) gets the page's own "not found" screen below; only a real failure is a general error
+  if (!DEMO_MODE && apiQuery.isError && !(isApiError(apiQuery.error) && apiQuery.error.status === 404)) return <GeneralError />;
 
   const m: Movie | undefined = DEMO_MODE ? cat.movies.find((x) => x.slug === slug) : apiQuery.data ? apiMovieToLocal(apiQuery.data) : undefined;
   return (

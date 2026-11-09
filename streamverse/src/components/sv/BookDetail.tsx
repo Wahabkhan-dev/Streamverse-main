@@ -4,12 +4,13 @@ import { useState } from "react";
 import type { Book } from "@/lib/data";
 import { chaptersOf } from "@/lib/book-content";
 import { clock } from "@/lib/runtime";
-import { useProgressOf } from "@/lib/user";
+import { useResumeProgress } from "@/hooks/useResumeProgress";
 import { cn } from "@/lib/utils";
 import { AudiobookCard, BookCard, BookCover, MediaRow } from "./media";
 import { DownloadButton } from "./DownloadButton";
 import { LibraryButton, MyListButton } from "./SaveButtons";
 import { EmptyState, TabBar, Tag } from "./ui";
+import { guestPrompt } from "./SignInPrompt";
 
 const reviews = [
   { n: "Jordan P.", r: 5, t: "Couldn't put it down. The last third is extraordinary." },
@@ -45,7 +46,7 @@ export function BookDetail({ b, kind, related }: { b: Book; kind: "ebook" | "aud
   const tabs = isBook ? EBOOK_TABS : AUDIO_TABS;
   const [tab, setTab] = useState<string>("about");
   const ref = { type: isBook ? ("eBook" as const) : ("Audiobook" as const), slug: b.slug, ...(b.cid ? { id: b.cid } : {}) };
-  const progress = useProgressOf(ref);
+  const progress = useResumeProgress(ref);
   const started = !!progress && progress.pct > 0 && !progress.completed;
   const info = b.info ?? {};
   const chapters = chaptersOf(b);
@@ -117,16 +118,16 @@ export function BookDetail({ b, kind, related }: { b: Book; kind: "ebook" | "aud
             </dl>
             <div className="mt-6 flex flex-wrap gap-3">
               {isBook ? (
-                <Link to="/read/$slug" params={{ slug: b.slug }} className="inline-flex h-12 items-center gap-2 rounded-md bg-primary px-6 text-sm font-bold tracking-wide text-primary-foreground uppercase shadow-red transition-colors hover:bg-primary-hover [&_svg]:size-4">
+                <Link to="/read/$slug" params={{ slug: b.slug }} onClick={(e) => guestPrompt(e, `/read/${b.slug}`, "read this eBook")} className="inline-flex h-12 items-center gap-2 rounded-md bg-primary px-6 text-sm font-bold tracking-wide text-primary-foreground uppercase shadow-red transition-colors hover:bg-primary-hover [&_svg]:size-4">
                   <BookOpen /> {started ? "Continue Reading" : "Read Now"}
                 </Link>
               ) : (
-                <Link to="/listen/$slug" params={{ slug: b.slug }} className="inline-flex h-12 items-center gap-2 rounded-md bg-primary px-6 text-sm font-bold tracking-wide text-primary-foreground uppercase shadow-red transition-colors hover:bg-primary-hover [&_svg]:size-4">
+                <Link to="/listen/$slug" params={{ slug: b.slug }} onClick={(e) => guestPrompt(e, `/listen/${b.slug}`, "listen to this audiobook")} className="inline-flex h-12 items-center gap-2 rounded-md bg-primary px-6 text-sm font-bold tracking-wide text-primary-foreground uppercase shadow-red transition-colors hover:bg-primary-hover [&_svg]:size-4">
                   <Play className="fill-current" /> {started ? "Resume" : "Play"}
                 </Link>
               )}
               {isBook && b.flipbook && (
-                <Link to="/flipbook/$slug" params={{ slug: b.slug }} data-testid="flipbook-button" className="inline-flex h-12 items-center gap-2 rounded-md border border-border bg-surface-2 px-6 text-sm font-bold tracking-wide uppercase transition-colors hover:bg-surface-3 [&_svg]:size-4">
+                <Link to="/flipbook/$slug" params={{ slug: b.slug }} onClick={(e) => guestPrompt(e, `/flipbook/${b.slug}`, "read this eBook")} data-testid="flipbook-button" className="inline-flex h-12 items-center gap-2 rounded-md border border-border bg-surface-2 px-6 text-sm font-bold tracking-wide uppercase transition-colors hover:bg-surface-3 [&_svg]:size-4">
                   <BookMarked /> Flipbook
                 </Link>
               )}
@@ -182,7 +183,7 @@ export function BookDetail({ b, kind, related }: { b: Book; kind: "ebook" | "aud
             <ol className="max-w-3xl divide-y divide-border rounded-xl border border-border bg-surface">
               {chapters.map((c, i) => (
                 <li key={c.title}>
-                  <Link to="/listen/$slug" params={{ slug: b.slug }} search={{ chapter: i }} className="flex items-center justify-between gap-3 px-5 py-3 text-sm hover:bg-surface-2">
+                  <Link to="/listen/$slug" params={{ slug: b.slug }} search={{ chapter: i }} onClick={(e) => guestPrompt(e, `/listen/${b.slug}?chapter=${i}`, "listen to this audiobook")} className="flex items-center justify-between gap-3 px-5 py-3 text-sm hover:bg-surface-2">
                     <span className="flex min-w-0 items-center gap-3">
                       <Play className="size-3.5 shrink-0 fill-current text-primary-text" />
                       <span className="truncate">{c.title}</span>

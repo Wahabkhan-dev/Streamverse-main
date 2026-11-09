@@ -120,7 +120,13 @@ async function computePublishedCollections(page: number, limit: number) {
  * Section 18: items whose content is no longer customer-visible (unpublished, archived, soft-deleted,
  * hidden) are filtered out — never returned as a broken card.
  */
-export async function getPublishedCollectionBySlug(slug: string) {
+/** One public collection page: the same for everyone, cached like the collection list (admin writes clear it). Unknown → 404, not cached. */
+export function getPublishedCollectionBySlug(slug: string) {
+  const { ttl, stale } = publicCacheWindow();
+  return analyticsCache.getOrSet(`${HOMEPAGE_CACHE_PREFIX}collection:${slug}`, () => computePublishedCollection(slug), ttl, stale);
+}
+
+async function computePublishedCollection(slug: string) {
   const collection = await collectionRepository.findPublishedBySlug(slug);
   if (!collection) throw new NotFoundError("Collection not found");
   const items = await collectionRepository.itemsWithContent(collection.id);

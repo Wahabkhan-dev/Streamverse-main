@@ -160,13 +160,14 @@ export function MoviePlayer({ m, trailer }: { m: Movie; trailer?: Trailer | unde
         if (cancelled && res.data.sessionId) void meApi.endSession(res.data.sessionId).catch(() => undefined);
         if (!cancelled) {
           const p = res.data;
-          const url = p.mediaReady ? p.playback.url : null;
-          // the server said no (plan, subscription, age, region...): show its reason, not a vague "not ready"
+          // the server said no (plan, subscription, age, region...): show its reason, not a vague "not ready".
+          // Checked first: a refused answer has no playback at all (playback: null).
           if (p.access && !p.access.canConsume) {
             setAccessError(deniedMessage(p.access));
             setAccessLoading(false);
             return;
           }
+          const url = p.mediaReady ? (p.playback?.url ?? null) : null;
           setVideoUrl(url);
           setSessionId(res.data.sessionId ?? null);
           // resume from the server-side position (works on any device); metadata load then seeks to it

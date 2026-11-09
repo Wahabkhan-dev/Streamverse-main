@@ -295,12 +295,15 @@ export interface ApiBookmark {
 
 export type NotificationKind = "New Release" | "Subscription" | "Recommendation" | "Account";
 
+/** What GET /me/notifications actually returns (backend Notification row). */
+export type ApiNotificationType = "NEW_RELEASE" | "SUBSCRIPTION" | "RECOMMENDATION" | "ACCOUNT" | "SYSTEM";
+
 export interface ApiNotification {
   id: string;
-  kind: NotificationKind;
+  type: ApiNotificationType;
   title: string;
-  subtitle: string;
-  read: boolean;
+  message: string;
+  readAt: string | null;
   createdAt: string;
 }
 

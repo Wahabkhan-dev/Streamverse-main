@@ -35,6 +35,7 @@ import { createAnnouncementSchema } from "../validators/announcement.validator";
 import { asyncHandler } from "../utils/asyncHandler";
 import { analyticsCache } from "../utils/analyticsCache";
 import { HOMEPAGE_CACHE_PREFIX } from "../services/homepage.service";
+import * as entitlementCache from "../services/entitlement/entitlementCache.service";
 
 /**
  * Every route mounted under /api/v1/admin inherits requireAuth + requireRole("ADMIN") from here —
@@ -44,11 +45,16 @@ export const adminRouter = Router();
 adminRouter.use(requireAuth, requireRole("ADMIN"));
 
 // Any successful admin write (content, homepage, banners, collections...) can change what the cached public
-// homepage should show, so drop it; the next visitor request rebuilds it.
+// homepage should show, so drop it; the next visitor request rebuilds it. It can also change who may open a title
+// (visibility, age rule, availability window, territory, plan), so the short-lived per-user access decisions go too:
+// an admin change applies to the very next Play, not up to a minute later.
 adminRouter.use((req, res, next) => {
   if (req.method !== "GET") {
     res.on("finish", () => {
-      if (res.statusCode < 400) analyticsCache.invalidate(HOMEPAGE_CACHE_PREFIX);
+      if (res.statusCode < 400) {
+        analyticsCache.invalidate(HOMEPAGE_CACHE_PREFIX);
+        entitlementCache.clear();
+      }
     });
   }
   next();

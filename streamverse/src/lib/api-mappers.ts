@@ -154,8 +154,16 @@ export function apiBookToLocal(b: ApiBook): Book {
 }
 
 /** Convert an ApiCollection to the local Collection shape expected by UI components. */
+/** GET /collections/:slug sends its items as mixed cards (in display order, each with its `type`); older payloads used
+ * { contentId, contentType, movie|ebook|audiobook, position }. Both are read. */
+const isCard = (item: unknown): item is ApiMixedCard => !!item && typeof (item as { type?: unknown }).type === "string" && "slug" in (item as object);
+const CARD_TYPE: Record<string, ItemRef["type"]> = { MOVIE: "Movie", EBOOK: "eBook", AUDIOBOOK: "Audiobook" };
+
 export function apiCollectionToLocal(c: ApiCollection): Collection {
-  const items: ItemRef[] = [...(c.items ?? [])]
+  const raw = (c.items ?? []) as unknown[];
+  const items: ItemRef[] = raw.every(isCard)
+    ? (raw as ApiMixedCard[]).filter((card) => CARD_TYPE[card.type]).map((card) => ({ type: CARD_TYPE[card.type]!, slug: card.slug, id: card.id }))
+    : [...(c.items ?? [])]
     .sort((a, b) => a.position - b.position)
     .map((item) => {
       const slug =
@@ -180,6 +188,8 @@ export function apiCollectionToLocal(c: ApiCollection): Collection {
 
 /** Convert an ApiCollection's items to Item[] directly from embedded objects (avoids catalog lookup). */
 export function apiCollectionToItems(c: ApiCollection): Item[] {
+  const raw = (c.items ?? []) as unknown[];
+  if (raw.every(isCard)) return (raw as ApiMixedCard[]).filter((card) => CARD_TYPE[card.type]).map(mixedCardToItem);
   return [...(c.items ?? [])]
     .sort((a, b) => a.position - b.position)
     .flatMap((item) => {

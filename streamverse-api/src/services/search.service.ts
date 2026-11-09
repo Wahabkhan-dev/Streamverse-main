@@ -57,7 +57,12 @@ async function computeSearch(query: SearchQuery) {
 const SUGGESTION_LIMIT = 8;
 
 /** Section 22: a small, lightweight result set — titles and people names, nothing structured like a full card. */
-export async function suggest(q: string) {
+export function suggest(q: string) {
+  const { ttl, stale } = publicCacheWindow();
+  return analyticsCache.getOrSet(`${HOMEPAGE_CACHE_PREFIX}suggestions:${q}`, () => computeSuggestions(q), ttl, stale);
+}
+
+async function computeSuggestions(q: string) {
   const [content, people] = await Promise.all([searchRepository.searchContent(undefined, q, {}, 0, SUGGESTION_LIMIT), searchRepository.searchPeople(q, SUGGESTION_LIMIT)]);
   const titleSuggestions = content.rows.map((c) => ({ kind: "title" as const, label: c.title, type: c.type, slug: c.slug }));
   const peopleNames = [...new Set(people.map((p) => p.name))].slice(0, SUGGESTION_LIMIT);

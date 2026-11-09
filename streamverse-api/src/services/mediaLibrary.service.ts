@@ -65,7 +65,7 @@ async function buildWhere(q: LibraryListQuery): Promise<Prisma.MediaAssetWhereIn
 const usageSummary = (usages: AssetUsage[]) => usages.slice(0, 3).map((u) => ({ kind: u.kind, role: u.role, title: u.title, code: u.code, href: u.href }));
 
 /** Compact row for grid/list. No storage key, no signed URL for anything but image thumbnails, no per-row queries. */
-async function toListItem(a: MediaAsset, usages: AssetUsage[], uploaders: Map<string, string>) {
+async function toListItem(a: library.MediaListRow, usages: AssetUsage[], uploaders: Map<string, string>) {
   const category = categoryOf(a.type);
   return {
     id: a.id,

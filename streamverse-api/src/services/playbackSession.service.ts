@@ -11,6 +11,8 @@ export async function startPlaybackSession(
   contentId: string,
   contentType: ContentType,
   deviceId?: string,
+  /** The plan read, when the caller already started it alongside its own checks (see readStreamPlan). */
+  planRead?: Promise<Awaited<ReturnType<typeof subscriptionRepository.findByUserId>>>,
 ): Promise<{ sessionId: string }> {
   // eBooks do not occupy a stream slot. Everything else checks + inserts under a per-user lock so two
   // simultaneous starts cannot both see a free slot.
@@ -20,7 +22,7 @@ export async function startPlaybackSession(
   }
 
   // Plan read happens before the lock (a second pooled connection inside the transaction could exhaust the pool).
-  const subscription = await subscriptionRepository.findByUserId(userId);
+  const subscription = await (planRead ?? subscriptionRepository.findByUserId(userId));
   const maxStreams = subscription?.plan?.maxConcurrentStreams;
 
   return runLockedForUser(userId, async (tx) => {
@@ -33,6 +35,16 @@ export async function startPlaybackSession(
     const session = await playbackSessionRepository.createSession({ userId, contentId, contentType: contentType as string, ...(deviceId ? { deviceId } : {}) }, tx);
     return { sessionId: session.id };
   });
+}
+
+/**
+ * Starts the plan read startPlaybackSession needs, so a Play request can run it at the same time as the access checks instead
+ * of after them. The stream-limit check itself still happens inside the per-user lock. Never rejects unhandled.
+ */
+export function readStreamPlan(userId: string) {
+  const read = subscriptionRepository.findByUserId(userId);
+  read.catch(() => undefined);
+  return read;
 }
 
 export async function heartbeatSession(sessionId: string, userId: string): Promise<void> {

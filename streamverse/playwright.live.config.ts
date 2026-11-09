@@ -10,12 +10,11 @@ import { defineConfig, devices } from "@playwright/test";
  *
  *   npx playwright test -c playwright.live.config.ts
  *
- * Two projects:
- *   live-chromium      a normal browser (CORS enforced).
- *   live-r2-no-cors    ONLY for *.r2.live.spec.ts. Those specs make the browser fetch private R2 objects directly
- *                      (HLS segments, EPUB, PDF). The R2 bucket has no CORS policy yet (BLOCKED EXTERNAL — see
- *                      cors.live.spec.ts), so these run with web-security disabled to verify everything else in the
- *                      chain. Passing here does NOT mean browsers can read R2 in production.
+ * Two projects, both normal browsers with web security ON (CORS enforced):
+ *   live-chromium      every spec except *.r2.live.spec.ts.
+ *   live-r2            *.r2.live.spec.ts: the browser fetches private R2 objects directly (HLS segments, EPUB, PDF) and
+ *                      uploads to R2. The bucket's CORS policy allows the app's origin (cors.live.spec.ts proves it).
+ *                      These once ran with web security disabled, while that policy was still missing.
  */
 export default defineConfig({
   testDir: "./e2e/live",
@@ -35,10 +34,6 @@ export default defineConfig({
   },
   projects: [
     { name: "live-chromium", testIgnore: /.*\.r2\.live\.spec\.ts/, use: { ...devices["Desktop Chrome"] } },
-    {
-      name: "live-r2-no-cors",
-      testMatch: /.*\.r2\.live\.spec\.ts/,
-      use: { ...devices["Desktop Chrome"], launchOptions: { args: ["--disable-web-security", "--disable-site-isolation-trials"] } },
-    },
+    { name: "live-r2", testMatch: /.*\.r2\.live\.spec\.ts/, use: { ...devices["Desktop Chrome"] } },
   ],
 });

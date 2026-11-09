@@ -8,7 +8,7 @@ import { audiobookToImages, ebookToCovers, movieToImages, pickLibraryImage } fro
 
 /**
  * The reusable Media Library picker in every place that takes a picture, plus the backend's type/size limits and the
- * storage-health screen. Runs in the live-r2-no-cors project like the rest of the media specs (R2 bucket CORS is
+ * storage-health screen. Runs in the live-r2 project (a normal browser; the bucket has CORS) like the rest of the media specs (R2 bucket CORS is
  * BLOCKED EXTERNAL; see cors.live.spec.ts).
  */
 test.use({ storageState: ADMIN_STATE });

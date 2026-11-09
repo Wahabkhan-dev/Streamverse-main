@@ -24,11 +24,14 @@ async function signedUrlFor(key: string, contentType?: string) {
 
 /** `apiBase` is the public API origin + prefix, e.g. https://api.example.com/api/v1 — playlists are served from it. */
 export async function getMoviePlayback(contentId: string, context: AccessContext, apiBase: string) {
-  const decision = await checkAccess(context, contentId, "movie");
+  // Three independent reads at once. Nothing from the movie row or the saved position is returned unless access allows it below.
+  const [decision, row, saved] = await Promise.all([
+    checkAccess(context, contentId, "movie"),
+    mediaAccessRepository.findMovieMasterAsset(contentId),
+    context.userId ? progressRepository.findMovieProgress(context.userId, contentId) : null,
+  ]);
   // Section 67: existence of hidden/removed content is never confirmed either way → 404
   if (!decision.canViewMetadata) throw new NotFoundError("Movie not found");
-
-  const row = await mediaAccessRepository.findMovieForPlayback(contentId);
   if (!row) throw new NotFoundError("Movie not found");
 
   const mediaReady = row.masterAsset?.status === "READY" && !!row.masterAsset.hlsManifestKey;
@@ -38,8 +41,7 @@ export async function getMoviePlayback(contentId: string, context: AccessContext
   // gets the URL of a backend-served, per-object-signed master playlist, authorised by a short-lived token.
   const { token, expiresAt } = signHlsToken(context.userId!, contentId);
   const playback = { type: "HLS" as const, url: `${apiBase}/media/hls/${contentId}/master.m3u8?t=${encodeURIComponent(token)}`, expiresAt };
-  // where this user left off, so playback resumes on any device (not just the browser that saved it)
-  const saved = await progressRepository.findMovieProgress(context.userId!, contentId);
+  // where this user left off (read above), so playback resumes on any device (not just the browser that saved it)
   // stopped in the last few seconds (the credits) counts as finished: the movie starts again from the beginning
   const nearEnd = !!saved?.durationSeconds && saved.positionSeconds >= saved.durationSeconds - Math.max(3, saved.durationSeconds * 0.05);
   const progress = saved && !saved.completed && !nearEnd ? { positionSeconds: saved.positionSeconds } : null;
@@ -125,10 +127,9 @@ async function audiobookResume(context: AccessContext, contentId: string) {
 }
 
 export async function getAudiobookPlayback(contentId: string, context: AccessContext) {
-  const decision = await checkAccess(context, contentId, "audiobook");
+  // independent reads at once; nothing from the row is returned unless access allows it below
+  const [decision, row] = await Promise.all([checkAccess(context, contentId, "audiobook"), mediaAccessRepository.findAudiobookForPlayback(contentId)]);
   if (!decision.canViewMetadata) throw new NotFoundError("Audiobook not found");
-
-  const row = await mediaAccessRepository.findAudiobookForPlayback(contentId);
   if (!row) throw new NotFoundError("Audiobook not found");
 
   if (!decision.canConsume) return { access: decision, mediaReady: false, playback: null };

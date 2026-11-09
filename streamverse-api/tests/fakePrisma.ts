@@ -306,7 +306,8 @@ class Table<T extends Row = Row> {
     let count = 0;
     for (const [key, row] of this.rows.entries()) {
       if (matches(row, where, this.relations)) {
-        this.rows.set(key, { ...row, ...data, updatedAt: new Date() });
+        // like Prisma (and a raw SQL UPDATE that sets it): an explicit updatedAt is kept, otherwise it is stamped now
+        this.rows.set(key, { ...row, ...data, updatedAt: (data as { updatedAt?: Date }).updatedAt ?? new Date() });
         count++;
       }
     }
@@ -587,9 +588,34 @@ export function createFakePrisma() {
 
   const $queryRaw = async () => [{ "?column?": 1 }];
 
+  /**
+   * The one raw-statement shape the repositories use (the hot progress/history writes):
+   * UPDATE `Table` SET `col` = ?, `col2` = NULL … WHERE `a` = ? AND `b` = ?  → that table's updateMany; returns rows changed.
+   */
+  const $executeRaw = async (strings: TemplateStringsArray, ...values: unknown[]): Promise<number> => {
+    const statement = Prisma.sql(strings, ...values);
+    const m = /^UPDATE `(\w+)` SET (.+) WHERE (.+)$/s.exec(statement.sql.trim());
+    if (!m) throw new Error(`fakePrisma.$executeRaw: unsupported statement: ${statement.sql}`);
+    const params = [...statement.values];
+    const assign = (parts: string[]) =>
+      Object.fromEntries(
+        parts.map((part) => {
+          const p = /^`(\w+)` = (\?|NULL)$/.exec(part.trim());
+          if (!p) throw new Error(`fakePrisma.$executeRaw: unsupported clause: ${part}`);
+          return [p[1]!, p[2] === "NULL" ? null : params.shift()];
+        }),
+      );
+    const data = assign(m[2]!.split(/\s*,\s*/));
+    const where = assign(m[3]!.split(" AND "));
+    const table = (tables as Record<string, { updateMany: (a: { where: Where; data: Row }) => Promise<{ count: number }> }>)[m[1]![0]!.toLowerCase() + m[1]!.slice(1)];
+    if (!table) throw new Error(`fakePrisma.$executeRaw: unknown table ${m[1]}`);
+    return (await table.updateMany({ where, data })).count;
+  };
+
   return {
     ...tables,
     $queryRaw,
+    $executeRaw,
     $disconnect: async () => undefined,
     // not a real transaction (no rollback) — see the module doc comment; the callback also gets $queryRaw (row locks are a no-op here)
     $transaction: async <T>(fn: (tx: typeof tables & { $queryRaw: typeof $queryRaw }) => Promise<T>) => fn({ ...tables, $queryRaw }),

@@ -10,6 +10,8 @@ declare module "express-serve-static-core" {
     requestId: string;
     /** set by requireAuth; absent on an unauthenticated request */
     auth?: AuthContext;
+    /** The account row the auth middleware loaded for this same request — reused (e.g. by buildAccessContext) instead of read twice. */
+    authUser?: { id: string; role: string; status: string; country: string | null };
     /**
      * Phase 8: built by `buildAccessContext` middleware.
      * Present on any route that runs that middleware (currently: media access routes).

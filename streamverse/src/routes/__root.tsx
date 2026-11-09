@@ -13,7 +13,8 @@ import appCss from "../styles.css?url";
 import { hydrateDrafts } from "../lib/drafts";
 import { hydrateLegal } from "../lib/legal";
 import { hydrateStore } from "../lib/store";
-import { hydrateUser } from "../lib/user";
+import { hydrateUser, useUser, useUserHydrated } from "../lib/user";
+import { applyAccent } from "../lib/accent";
 import { BackendNoticeHost } from "../components/sv/BackendNotice";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { GeneralError, NotFoundScreen } from "../components/sv/states";
@@ -116,6 +117,13 @@ function RootComponent() {
     hydrateDrafts();
     hydrateLegal();
   }, []);
+
+  // The colour picked on the Profile page is the colour of the whole app (every screen reads the theme's primary tokens).
+  const accent = useUser((s) => s.profile.avatar);
+  const userReady = useUserHydrated();
+  useEffect(() => {
+    if (userReady) applyAccent(accent);
+  }, [accent, userReady]);
 
   // Installable app + our own "can't reach StreamVerse" screen instead of the browser's error page. The worker only handles
   // page loads and built files, so it is harmless in development too.

@@ -64,10 +64,10 @@ export async function login(input: { email: string; password: string }, req: Req
     throw new UnauthorizedError(GENERIC_LOGIN_ERROR);
   }
 
-  const updated = await userRepository.touchLastLogin(user.id);
+  // Independent writes (last-login time, new session row): one round trip of waiting instead of two.
+  const [updated, session] = await Promise.all([userRepository.touchLastLogin(user.id), issueSession(user.id, user.role, req)]);
   logAuthEvent("login.success", req, { userId: user.id });
 
-  const session = await issueSession(user.id, user.role, req);
   return { user: serializeUser(updated), ...session };
 }
 // A real-shaped argon2id hash with no matching password, so verifying against "no such user" costs the

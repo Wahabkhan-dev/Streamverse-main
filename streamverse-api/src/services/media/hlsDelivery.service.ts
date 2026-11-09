@@ -7,6 +7,7 @@ import * as subscriptionRepository from "../../repositories/subscription.reposit
 import { ForbiddenError, NotFoundError, UnauthorizedError, ValidationError } from "../../utils/errors";
 import { isCustomerVisible } from "../contentAccess.service";
 import { getStorageProvider } from "../storage";
+import { analyticsCache } from "../../utils/analyticsCache";
 
 /**
  * Private HLS delivery.
@@ -143,35 +144,50 @@ export async function rewritePlaylist(text: string, ctx: RewriteContext): Promis
 
 const MAX_PLAYLIST_BYTES = 2 * 1024 * 1024;
 
+/** The playlist files never change once processing finished; re-processing bumps the asset's updatedAt, so a new key is used. */
+const PLAYLIST_CACHE_SECONDS = 60 * 60;
+
+/**
+ * Every request is authorised from scratch (token, title still visible and READY, the viewer's plan quality limit, read live) —
+ * those two database reads run together. Only the playlist FILE text, identical for every viewer, comes from the cache.
+ */
 async function loadAuthorizedHls(contentId: string, token: string | undefined) {
   const { sub: userId } = verifyHlsToken(token, contentId);
-  const row = await mediaAccessRepository.findMovieForPlayback(contentId);
-  const key = row?.masterAsset?.hlsManifestKey;
+  const [row, cap] = await Promise.all([mediaAccessRepository.findMovieForHls(contentId), qualityCapFor(userId)]);
+  const asset = row?.masterAsset;
+  const key = asset?.hlsManifestKey;
   // Unpublished / archived / deleted titles stop streaming immediately, even with an unexpired token.
-  if (!row || !isCustomerVisible(row.content) || row.masterAsset?.status !== "READY" || !key) throw new NotFoundError("Movie not found");
-  return { hlsRoot: posix.dirname(key), manifestName: posix.basename(key), userId };
+  if (!row || !asset || !isCustomerVisible(row.content) || asset.status !== "READY" || !key) throw new NotFoundError("Movie not found");
+  const hlsRoot = posix.dirname(key);
+  const read = (name: string): Promise<string> =>
+    analyticsCache.getOrSet(
+      `media:playlist:${asset.id}:${asset.updatedAt.getTime()}:${name}`,
+      () =>
+        getStorageProvider()
+          .getObjectRange(posix.join(hlsRoot, name), 0, MAX_PLAYLIST_BYTES - 1)
+          .then((buf) => buf.toString("utf8"))
+          .catch(() => {
+            throw new NotFoundError("Playlist not found");
+          }),
+      PLAYLIST_CACHE_SECONDS,
+    );
+  return { hlsRoot, manifestName: posix.basename(key), cap, read };
 }
 
 export async function getHlsPlaylist(contentId: string, relPath: string, token: string | undefined, apiBase: string): Promise<string> {
-  const { hlsRoot, manifestName, userId } = await loadAuthorizedHls(contentId, token);
+  const { hlsRoot, manifestName, cap, read } = await loadAuthorizedHls(contentId, token);
   const rel = relPath === "" || relPath === "master.m3u8" ? manifestName : assertSafeRelativePath(relPath);
   if (!isPlaylist(rel)) throw new ValidationError([{ path: "path", message: "Not a playlist." }]);
 
   const storage = getStorageProvider();
-  const read = (name: string) =>
-    storage.getObjectRange(posix.join(hlsRoot, name), 0, MAX_PLAYLIST_BYTES - 1).catch(() => {
-      throw new NotFoundError("Playlist not found");
-    });
-
   let text: string;
-  const cap = await qualityCapFor(userId);
   if (cap === null) {
-    text = (await read(rel)).toString("utf8");
+    text = await read(rel);
   } else {
     // the plan limits picture quality: the master only lists the variants it allows, and a variant outside that list is refused
-    const { text: masterText, allowed } = capMasterPlaylist((await read(manifestName)).toString("utf8"), cap);
+    const { text: masterText, allowed } = capMasterPlaylist(await read(manifestName), cap);
     if (rel === manifestName) text = masterText;
-    else if (isAllowedByCap(rel, allowed)) text = (await read(rel)).toString("utf8");
+    else if (isAllowedByCap(rel, allowed)) text = await read(rel);
     else throw new ForbiddenError("Your plan doesn't include this video quality.");
   }
   return rewritePlaylist(text, {
@@ -182,16 +198,11 @@ export async function getHlsPlaylist(contentId: string, relPath: string, token: 
   });
 }
 
-/** A segment requested through the API (instead of via a rewritten playlist) is redirected to a signed R2 URL. */
 export async function getHlsSegmentRedirect(contentId: string, relPath: string, token: string | undefined): Promise<string> {
-  const { hlsRoot, manifestName, userId } = await loadAuthorizedHls(contentId, token);
+  const { hlsRoot, manifestName, cap, read } = await loadAuthorizedHls(contentId, token);
   const rel = assertSafeRelativePath(relPath);
-  const cap = await qualityCapFor(userId);
-  if (cap !== null) {
-    const master = await getStorageProvider().getObjectRange(posix.join(hlsRoot, manifestName), 0, MAX_PLAYLIST_BYTES - 1).catch(() => {
-      throw new NotFoundError("Playlist not found");
-    });
-    if (!isAllowedByCap(rel, capMasterPlaylist(master.toString("utf8"), cap).allowed)) throw new ForbiddenError("Your plan doesn't include this video quality.");
+  if (cap !== null && !isAllowedByCap(rel, capMasterPlaylist(await read(manifestName), cap).allowed)) {
+    throw new ForbiddenError("Your plan doesn't include this video quality.");
   }
   return getStorageProvider().createDownloadUrl(posix.join(hlsRoot, rel), env.HLS_SEGMENT_URL_TTL_SECONDS);
 }

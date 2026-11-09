@@ -5,6 +5,8 @@ export interface ApiCall {
   status: number;
   method: string;
   path: string;
+  /** path + query: two calls are the same request only when this matches */
+  url: string;
 }
 
 /** Records every API call and console/page error a page makes, so tests can assert on request counts and failures. */
@@ -14,7 +16,7 @@ export function track(page: Page) {
   const pageErrors: string[] = [];
   page.on("response", (r) => {
     const url = r.url();
-    if (url.startsWith(API)) calls.push({ status: r.status(), method: r.request().method(), path: url.slice(API.length).split("?")[0]! });
+    if (url.startsWith(API)) calls.push({ status: r.status(), method: r.request().method(), path: url.slice(API.length).split("?")[0]!, url: url.slice(API.length) });
   });
   page.on("console", (m) => {
     if (m.type() === "error") consoleErrors.push(m.text());
@@ -29,7 +31,7 @@ export function track(page: Page) {
     count: (pathPrefix: string) => calls.filter((c) => c.path.startsWith(pathPrefix)).length,
     duplicates: () => {
       const seen = new Map<string, number>();
-      for (const c of calls.filter((c) => c.method === "GET")) seen.set(`${c.method} ${c.path}`, (seen.get(`${c.method} ${c.path}`) ?? 0) + 1);
+      for (const c of calls.filter((c) => c.method === "GET")) seen.set(`${c.method} ${c.url}`, (seen.get(`${c.method} ${c.url}`) ?? 0) + 1);
       return [...seen].filter(([, n]) => n > 1).map(([k, n]) => `${k} x${n}`);
     },
   };

@@ -1,6 +1,6 @@
 import { cva, type VariantProps } from "class-variance-authority";
 import { forwardRef, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { Check, Cloud, ImagePlus, Loader2, RotateCcw, Upload, X, AlertCircle, Inbox, TrendingUp, TrendingDown } from "lucide-react";
+import { Check, Cloud, ImagePlus, Loader2, RotateCcw, Upload, X, AlertCircle, Inbox, TrendingUp, TrendingDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
@@ -120,10 +120,10 @@ export function PageHeader({ title, sub, actions, eyebrow }: { title: string; su
   );
 }
 
-export function MetricCard({ icon: Icon, label, value, trend }: { icon: React.ElementType; label: string; value: string; trend?: number }) {
+export function MetricCard({ icon: Icon, label, value, trend, onClick }: { icon: React.ElementType; label: string; value: string; trend?: number; onClick?: () => void }) {
   const up = (trend ?? 0) >= 0;
-  return (
-    <Panel className="p-4 transition-colors hover:border-foreground/20">
+  const card = (
+    <Panel className={cn("p-4 transition-colors hover:border-foreground/20", onClick && "group-hover:border-primary/50 group-focus-visible:border-primary")}>
       <div className="flex items-center justify-between">
         <span className="grid size-9 place-items-center rounded-md bg-primary/12 text-primary-text">
           <Icon className="size-4" />
@@ -137,8 +137,17 @@ export function MetricCard({ icon: Icon, label, value, trend }: { icon: React.El
         )}
       </div>
       <div className="mt-4 text-2xl font-bold tracking-tight">{value}</div>
-      <div className="mt-0.5 text-xs text-muted-foreground">{label}</div>
+      <div className="mt-0.5 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+        <span>{label}</span>
+        {onClick && <span className="inline-flex items-center gap-0.5 font-semibold text-primary-text opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 max-sm:opacity-100">Details <ChevronRight className="size-3" aria-hidden /></span>}
+      </div>
     </Panel>
+  );
+  if (!onClick) return card;
+  return (
+    <button type="button" onClick={onClick} aria-label={`${label}: ${value}. Show details`} className="group block w-full cursor-pointer rounded-xl text-left outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      {card}
+    </button>
   );
 }
 

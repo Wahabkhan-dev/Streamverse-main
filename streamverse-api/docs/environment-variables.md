@@ -7,7 +7,7 @@
 | Variable | Example | Notes |
 |---|---|---|
 | DATABASE_URL | postgresql://user:pass@host:5432/streamverse?sslmode=require | PostgreSQL with TLS |
-| REDIS_URL | redis://:password@host:6379 | Or rediss:// for TLS |
+| REDIS_URL | redis://:password@host:6379 | Or rediss:// for TLS. Used by the BullMQ queue AND, when set, as the shared public cache for every API instance (see CACHE_DRIVER) |
 | JWT_SECRET | (64+ hex chars) | Generated with crypto.randomBytes(64).toString('hex') |
 | JWT_REFRESH_SECRET | (64+ hex chars, different from above) | Separate from access token secret |
 | STRIPE_SECRET_KEY | sk_live_… | Never expose to browser |
@@ -28,6 +28,7 @@
 | ALLOWED_ORIGINS | https://streamverse.com,https://www.streamverse.com | CORS — no trailing slash, no wildcards |
 | TRUST_PROXY | 1 | Set to 1 behind Cloudflare/load balancer |
 | PLAYBACK_SESSION_TIMEOUT_SECONDS | 120 | Session stale timeout |
+| CACHE_DRIVER | auto | `auto` (default): public cached data (homepage, lists, title pages, search, suggestions, banners, genres, collections, legal pages, video playlist files) is shared through Redis when REDIS_URL is set, and an admin change clears it on every instance; without REDIS_URL each instance caches in memory. `memory`: never use Redis for caching. Per-user data is never put in the shared cache. |
 | NODE_ENV | production | |
 | LOG_LEVEL | info | fatal \| error \| warn \| info \| debug |
 

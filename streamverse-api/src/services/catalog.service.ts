@@ -164,8 +164,8 @@ async function movieShared(slug: string, adminPreview: boolean) {
   return { row, related, urls };
 }
 
-export async function getMovieBySlug(slug: string, userId: string | undefined, adminPreview = false) {
-  const [{ row, related, urls }, user] = await Promise.all([sharedDetail(`movie:${slug}`, adminPreview, () => movieShared(slug, adminPreview)), loadAccessUser(userId)]);
+export async function getMovieBySlug(slug: string, userId: string | undefined, adminPreview = false, knownUser?: { id: string; country: string | null }) {
+  const [{ row, related, urls }, user] = await Promise.all([sharedDetail(`movie:${slug}`, adminPreview, () => movieShared(slug, adminPreview)), loadAccessUser(userId, knownUser)]);
   const access = accessForUser(row.content, user);
   const image = (row.posterAssetId && urls.get(row.posterAssetId)) || null;
   const backdropImage = (row.backdropAssetId && urls.get(row.backdropAssetId)) || null;
@@ -179,8 +179,8 @@ async function ebookShared(slug: string, adminPreview: boolean) {
   return { row, related, urls };
 }
 
-export async function getEbookBySlug(slug: string, userId: string | undefined, adminPreview = false) {
-  const [{ row, related, urls }, user] = await Promise.all([sharedDetail(`ebook:${slug}`, adminPreview, () => ebookShared(slug, adminPreview)), loadAccessUser(userId)]);
+export async function getEbookBySlug(slug: string, userId: string | undefined, adminPreview = false, knownUser?: { id: string; country: string | null }) {
+  const [{ row, related, urls }, user] = await Promise.all([sharedDetail(`ebook:${slug}`, adminPreview, () => ebookShared(slug, adminPreview)), loadAccessUser(userId, knownUser)]);
   const access = accessForUser(row.content, user);
   const image = (row.frontCoverAssetId && urls.get(row.frontCoverAssetId)) || null;
   return { ...toEbookDetail(row, access), image, related, ...previewOf(row.content) };
@@ -193,8 +193,8 @@ async function audiobookShared(slug: string, adminPreview: boolean) {
   return { row, related, urls };
 }
 
-export async function getAudiobookBySlug(slug: string, userId: string | undefined, adminPreview = false) {
-  const [{ row, related, urls }, user] = await Promise.all([sharedDetail(`audiobook:${slug}`, adminPreview, () => audiobookShared(slug, adminPreview)), loadAccessUser(userId)]);
+export async function getAudiobookBySlug(slug: string, userId: string | undefined, adminPreview = false, knownUser?: { id: string; country: string | null }) {
+  const [{ row, related, urls }, user] = await Promise.all([sharedDetail(`audiobook:${slug}`, adminPreview, () => audiobookShared(slug, adminPreview)), loadAccessUser(userId, knownUser)]);
   const access = accessForUser(row.content, user);
   const image = (row.coverAssetId && urls.get(row.coverAssetId)) || null;
   return { ...toAudiobookDetail(row, access), image, related, ...previewOf(row.content) };

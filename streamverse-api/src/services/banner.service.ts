@@ -9,6 +9,8 @@ import { signAssetsById } from "./assetUrl.service";
 import type { CreateBannerInput, UpdateBannerInput } from "../validators/banner.validator";
 import type { AuditContext } from "./auditLog.service";
 import { recordAudit } from "./auditLog.service";
+import { analyticsCache, publicCacheWindow } from "../utils/analyticsCache";
+import { HOMEPAGE_CACHE_PREFIX } from "./homepage.service";
 
 const NO_ACTOR: AuditContext = { userId: undefined, ip: undefined, userAgent: undefined, requestId: undefined };
 
@@ -69,8 +71,37 @@ export async function listBanners(filters: { page: number; limit: number; sortBy
  * whole banner is dropped from the response — never shown with a dead link, and never silently shown
  * "unlinked" either (that would misrepresent what it was supposed to point at).
  */
-export async function listActiveBannersForCustomer(type?: "HERO" | "NORMAL" | "LATEST_RELEASE" | "PROMOTIONAL", placement?: "MOVIES" | "EBOOKS" | "AUDIOBOOKS") {
-  const banners = (await bannerRepository.listActiveWithinWindow(type, placement)).filter((b) => !b.linkedContentId || (b.linkedContent && isCustomerVisible(b.linkedContent)));
+type BannerType = "HERO" | "NORMAL" | "LATEST_RELEASE" | "PROMOTIONAL";
+type BannerPlacement = "MOVIES" | "EBOOKS" | "AUDIOBOOKS";
+
+/**
+ * Banners are the same for every visitor, so the list is cached per type + placement (admin writes clear it at once, like the
+ * homepage). A banner has its own start/end time, so a cached copy also carries `validUntil` — the moment one of its banners
+ * ends or the next scheduled one starts — and is rebuilt as soon as that passes, never served past it.
+ */
+export async function listActiveBannersForCustomer(type?: BannerType, placement?: BannerPlacement) {
+  const key = `${HOMEPAGE_CACHE_PREFIX}banners:${type ?? "all"}:${placement ?? "all"}`;
+  const { ttl, stale } = publicCacheWindow();
+  const load = () => analyticsCache.getOrSet(key, () => computeActiveBanners(type, placement), ttl, stale);
+  let cached = await load();
+  if (Date.now() >= cached.validUntil) {
+    analyticsCache.invalidate(key);
+    cached = await load();
+  }
+  return cached.banners;
+}
+
+async function computeActiveBanners(type?: BannerType, placement?: BannerPlacement) {
+  const now = new Date();
+  const [rows, nextStart] = await Promise.all([bannerRepository.listActiveWithinWindow(type, placement, now), bannerRepository.nextStartAfter(now, type, placement)]);
+  const endsAt = rows.map((b) => b.endsAt?.getTime()).filter((t): t is number => t !== undefined);
+  // shown up to and including endsAt (the query uses gte), so the copy is good until just after the earliest end
+  const validUntil = Math.min(Number.MAX_SAFE_INTEGER, nextStart ? nextStart.getTime() : Number.MAX_SAFE_INTEGER, ...endsAt.map((t) => t + 1));
+  return { banners: await toCustomerBanners(rows), validUntil };
+}
+
+async function toCustomerBanners(rows: Awaited<ReturnType<typeof bannerRepository.listActiveWithinWindow>>) {
+  const banners = rows.filter((b) => !b.linkedContentId || (b.linkedContent && isCustomerVisible(b.linkedContent)));
   // signed picture URLs for the whole list in one batch (never one query or signature per banner)
   const urls = await signAssetsById(banners.flatMap((b) => [b.desktopAssetId, b.mobileAssetId]));
   return banners.map((b) => ({

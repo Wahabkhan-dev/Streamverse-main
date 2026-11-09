@@ -15,6 +15,7 @@ const LIBRARY_KEY = ["me", "library"] as const;
 const HISTORY_KEY = ["me", "history"] as const;
 const NOTIFICATIONS_KEY = ["me", "notifications"] as const;
 const PROFILE_KEY = ["me", "profile"] as const;
+const AGE_KEY = ["me", "age-verification"] as const;
 
 export function useApiProfileQuery() {
   const live = useLiveSession();
@@ -37,6 +38,21 @@ export function useUpdateProfileMutation() {
       void qc.invalidateQueries({ queryKey: PROFILE_KEY });
       void refreshAuthUser();
     },
+  });
+}
+
+/** Whether this account has confirmed its age (the date of birth itself is never sent back). */
+export function useAgeVerificationQuery() {
+  const live = useLiveSession();
+  return useQuery({ queryKey: AGE_KEY, queryFn: async () => (await meApi.getAgeVerification()).data, enabled: live });
+}
+
+export function useVerifyAgeMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (dateOfBirth: string) => meApi.verifyAge(dateOfBirth),
+    // an age-restricted title's page and player decide from it: drop what was fetched before
+    onSuccess: () => void qc.invalidateQueries(),
   });
 }
 

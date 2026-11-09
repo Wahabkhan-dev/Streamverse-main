@@ -98,6 +98,10 @@ export async function listCustomerSubscriptions(stripeCustomerId: string): Promi
   return (await getStripeClient().subscriptions.list({ customer: stripeCustomerId, status: "all", limit: 10 })).data;
 }
 
+export async function retrieveInvoice(invoiceId: string): Promise<Stripe.Invoice> {
+  return getStripeClient().invoices.retrieve(invoiceId);
+}
+
 export async function cancelSubscriptionNow(stripeSubscriptionId: string): Promise<void> {
   await getStripeClient().subscriptions.cancel(stripeSubscriptionId);
 }

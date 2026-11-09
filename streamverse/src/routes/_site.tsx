@@ -3,6 +3,7 @@ import { TopNavbar } from "@/components/sv/TopNavbar";
 import { Logo } from "@/components/sv/Logo";
 import { LEGAL_LINKS } from "@/lib/legal";
 import { AuthGate } from "@/components/sv/AuthGate";
+import { SignInPromptHost } from "@/components/sv/SignInPrompt";
 import { InstallPrompt } from "@/components/sv/InstallPrompt";
 import { MiniPlayer } from "@/components/sv/players/MiniPlayer";
 import { useEffect } from "react";
@@ -79,6 +80,7 @@ function SiteLayout() {
       <TopNavbar />
       <InstallPrompt />
       <MiniPlayer />
+      <SignInPromptHost />
       <main>
         <AuthGate>
           <Outlet />

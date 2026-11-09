@@ -8,7 +8,7 @@ import type { Seed } from "./lib/seed";
 const seed: Seed = JSON.parse(readFileSync(SEED_FILE, "utf8"));
 test.use({ storageState: USER_STATE });
 
-// Runs in the live-r2-no-cors project: epub.js / pdf.js download the file from R2 with XHR/fetch, which needs bucket
+// Runs in the live-r2 project (a normal browser; the bucket has CORS): epub.js / pdf.js download the file from R2 with XHR/fetch, which needs bucket
 // CORS (BLOCKED EXTERNAL, see cors.live.spec.ts). The access check, rendering, navigation and progress are real.
 
 const resetProgress = async (id: string) => {

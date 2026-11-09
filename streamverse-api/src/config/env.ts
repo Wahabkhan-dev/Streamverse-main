@@ -93,6 +93,11 @@ const schema = z
 
     /** Seconds the public homepage payload is cached in memory (must stay well under DOWNLOAD_URL_TTL_SECONDS — it embeds signed image URLs). 0 = disabled. */
     HOMEPAGE_CACHE_TTL_SECONDS: z.coerce.number().int().min(0).max(300).default(60),
+    /**
+     * Where shared PUBLIC cache entries live. "auto": in Redis (shared by every API instance) when REDIS_URL is set, otherwise
+     * memory only. "memory": never use Redis for caching (the queue may still use it). Per-user data is never cached in Redis.
+     */
+    CACHE_DRIVER: z.enum(["auto", "memory"]).default("auto"),
 
     /** How long a movie playback token (and so the right to fetch its playlists) lasts. */
     HLS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(300).max(24 * 60 * 60).default(4 * 60 * 60),

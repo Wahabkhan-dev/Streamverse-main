@@ -38,6 +38,7 @@ export const requireAuth: RequestHandler = (req: Request, _res: Response, next: 
     if (!user || user.status !== "ACTIVE") throw new UnauthorizedError("Authentication required");
 
     req.auth = { userId: user.id, role: user.role };
+    req.authUser = user;
   })().then(() => next(), next);
 };
 
@@ -54,7 +55,10 @@ export const optionalAuth: RequestHandler = (req: Request, _res: Response, next:
     try {
       const payload = verifyAccessToken(match[1]!);
       const user = await userRepository.findById(payload.sub);
-      if (user && user.status === "ACTIVE") req.auth = { userId: user.id, role: user.role };
+      if (user && user.status === "ACTIVE") {
+        req.auth = { userId: user.id, role: user.role };
+        req.authUser = user;
+      }
     } catch {
       /* anonymous */
     }

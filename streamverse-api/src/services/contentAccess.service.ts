@@ -8,6 +8,7 @@ import type { TerritoryMode, Visibility } from "@prisma/client";
 import * as userRepository from "../repositories/user.repository";
 import * as ageVerificationRepository from "../repositories/ageVerification.repository";
 import { hasActiveAccess } from "./billing/subscriptionAccess.service";
+import { calculateAge } from "./entitlement/entitlement.service";
 
 export type AccessReason = "SUBSCRIPTION_REQUIRED" | "AGE_RESTRICTED" | "REGION_RESTRICTED" | "NOT_YET_AVAILABLE" | "EXPIRED" | "UNAVAILABLE";
 
@@ -35,6 +36,8 @@ export interface AccessUser {
   /// Phase 7 (Section 59): real Stripe-backed subscription state, via `subscriptionAccess.service.ts`.
   hasActiveSubscription: boolean;
   ageVerified: boolean;
+  /** Today's age from the verified date of birth (null when unknown) — compared with the title's minimumAge, as playback does. */
+  age?: number | null;
 }
 
 /**
@@ -69,18 +72,25 @@ export function evaluateAccess(content: AccessibleContent, user: AccessUser | un
 
   if (content.visibility === "SUBSCRIBERS_ONLY" && !user?.hasActiveSubscription) return { canViewMetadata, canConsume: false, reason: "SUBSCRIPTION_REQUIRED" };
 
-  if (content.ageRestricted && !user?.ageVerified) return { canViewMetadata, canConsume: false, reason: "AGE_RESTRICTED" };
+  // same rule as playback (entitlement.service): a verified age at or above the title's minimum age; no minimum set = not openable
+  if (content.ageRestricted && (!user?.ageVerified || content.minimumAge === null || (user.age ?? 0) < content.minimumAge)) return { canViewMetadata, canConsume: false, reason: "AGE_RESTRICTED" };
 
   return { canViewMetadata: true, canConsume: true };
 }
 
 /** `req.auth?.userId` -> the fields evaluateAccess needs, or undefined for an anonymous visitor. */
-export async function loadAccessUser(userId: string | undefined): Promise<AccessUser | undefined> {
+export async function loadAccessUser(userId: string | undefined, knownUser?: { id: string; country: string | null }): Promise<AccessUser | undefined> {
   if (!userId) return undefined;
-  // asked together: each one is a round trip to the database, so in a row they add up on every title page
-  const [user, ageVerif, hasActiveSubscription] = await Promise.all([userRepository.findById(userId), ageVerificationRepository.findByUserId(userId), hasActiveAccess(userId)]);
+  // asked together: each one is a round trip to the database, so in a row they add up on every title page. `knownUser` is the
+  // account the auth middleware already loaded on this same request — reused instead of read again.
+  const [user, ageVerif, hasActiveSubscription] = await Promise.all([
+    knownUser?.id === userId ? knownUser : userRepository.findById(userId),
+    ageVerificationRepository.findByUserId(userId),
+    hasActiveAccess(userId),
+  ]);
   if (!user) return undefined;
-  return { country: user.country, hasActiveSubscription, ageVerified: ageVerif !== null && ageVerif !== undefined };
+  const age = ageVerif ? (ageVerif.dateOfBirth ? calculateAge(ageVerif.dateOfBirth) : (ageVerif.verifiedAge ?? null)) : null;
+  return { country: user.country, hasActiveSubscription, ageVerified: ageVerif !== null && ageVerif !== undefined, age };
 }
 
 /** Section 59: a reliable country needs a signed-in user with one set — no geolocation is invented here. */

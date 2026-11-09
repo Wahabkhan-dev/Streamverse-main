@@ -4,6 +4,8 @@ import type { CreateGenreInput, UpdateGenreInput } from "../validators/genre.val
 import { ConflictError } from "../utils/errors";
 import type { AuditContext } from "./auditLog.service";
 import { recordAudit } from "./auditLog.service";
+import { analyticsCache, publicCacheWindow } from "../utils/analyticsCache";
+import { HOMEPAGE_CACHE_PREFIX } from "./homepage.service";
 
 const NO_ACTOR: AuditContext = { userId: undefined, ip: undefined, userAgent: undefined, requestId: undefined };
 
@@ -49,4 +51,8 @@ export async function listGenres() {
   return genres.map((g) => ({ ...g, usage: usage.get(g.id) ?? 0 }));
 }
 export const getGenre = genreRepository.findById;
-export const listActiveGenres = genreRepository.listActive;
+/** The public genre list: the same for everyone and rarely changed, so cached; any admin write clears it at once. */
+export function listActiveGenres() {
+  const { ttl, stale } = publicCacheWindow();
+  return analyticsCache.getOrSet(`${HOMEPAGE_CACHE_PREFIX}genres`, () => genreRepository.listActive(), ttl, stale);
+}

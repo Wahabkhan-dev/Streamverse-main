@@ -19,11 +19,13 @@ const isLimitError = (err: unknown) => err instanceof AppError && (err.code === 
  */
 export async function moviePlayback(req: Request, res: Response) {
   const contentId = req.params["contentId"]!;
+  const userId = req.accessContext!.userId;
+  const planRead = userId ? playbackSessionService.readStreamPlan(userId) : undefined; // runs alongside the access checks
   const result = await mediaAccessService.getMoviePlayback(contentId, req.accessContext!, apiBaseOf(req));
-  if (result.access.canConsume && req.accessContext!.userId) {
+  if (result.access.canConsume && userId) {
     let sessionId: string | undefined;
     try {
-      const session = await playbackSessionService.startPlaybackSession(req.accessContext!.userId, contentId, "MOVIE");
+      const session = await playbackSessionService.startPlaybackSession(userId, contentId, "MOVIE", undefined, planRead);
       sessionId = session.sessionId;
     } catch (err) {
       if (isLimitError(err)) throw err;
@@ -43,11 +45,13 @@ export async function ebookAccess(req: Request, res: Response) {
 }
 export async function audiobookPlayback(req: Request, res: Response) {
   const contentId = req.params["contentId"]!;
+  const userId = req.accessContext!.userId;
+  const planRead = userId ? playbackSessionService.readStreamPlan(userId) : undefined; // runs alongside the access checks
   const result = await mediaAccessService.getAudiobookPlayback(contentId, req.accessContext!);
-  if (result.access.canConsume && req.accessContext!.userId) {
+  if (result.access.canConsume && userId) {
     let sessionId: string | undefined;
     try {
-      const session = await playbackSessionService.startPlaybackSession(req.accessContext!.userId, contentId, "AUDIOBOOK");
+      const session = await playbackSessionService.startPlaybackSession(userId, contentId, "AUDIOBOOK", undefined, planRead);
       sessionId = session.sessionId;
     } catch (err) {
       if (isLimitError(err)) throw err;

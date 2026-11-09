@@ -7,7 +7,7 @@ generator client {
   // relationJoins: load relations in ONE query (JOIN) instead of one query per relation — big win on a remote database.
   previewFeatures = ["relationJoins"]
   // "native" for local dev; debian-openssl-3.0.x for the node:20-bookworm-slim Docker image.
-  binaryTargets = ["native", "debian-openssl-3.0.x"]
+  binaryTargets   = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {

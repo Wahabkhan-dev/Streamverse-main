@@ -6,7 +6,7 @@ import { track } from "./lib/net";
 import { imagesUploaded, movieToImages, pickLibraryImage } from "./lib/wizard";
 
 /**
- * Runs in the live-r2-no-cors project: the browser PUTs the file straight to the R2 bucket, which needs bucket CORS
+ * Runs in the live-r2 project (a normal browser; the bucket has CORS): the browser PUTs the file straight to the R2 bucket, which needs bucket CORS
  * (BLOCKED EXTERNAL, see cors.live.spec.ts). Everything else - login, API, MySQL, R2 objects - is real.
  */
 test.use({ storageState: ADMIN_STATE });

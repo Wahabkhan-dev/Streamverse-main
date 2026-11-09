@@ -160,21 +160,26 @@ function SignInPage() {
               </button>
             </form>
 
-            {/* Divider */}
-            <div className="my-5 flex items-center gap-3">
-              <span className="h-px flex-1 bg-border" />
-              <span className="text-xs text-muted-foreground">or continue with</span>
-              <span className="h-px flex-1 bg-border" />
-            </div>
-
-            {/* Google */}
-            <button
-              type="button"
-              className="flex w-full items-center justify-center gap-2.5 rounded-lg border border-border bg-surface-3 px-4 py-2.5 text-sm font-medium transition hover:bg-surface-2"
-            >
-              <GoogleIcon />
-              Google
-            </button>
+            {/* Google sign-in exists only in the demo: the live API has no Google login, so the button is not offered there */}
+            {DEMO_MODE && (
+              <>
+                {/* Divider */}
+                <div className="my-5 flex items-center gap-3">
+                  <span className="h-px flex-1 bg-border" />
+                  <span className="text-xs text-muted-foreground">or continue with</span>
+                  <span className="h-px flex-1 bg-border" />
+                </div>
+    
+                {/* Google */}
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-center gap-2.5 rounded-lg border border-border bg-surface-3 px-4 py-2.5 text-sm font-medium transition hover:bg-surface-2"
+                >
+                  <GoogleIcon />
+                  Google
+                </button>
+                  </>
+            )}
 
             <p className="mt-6 text-center text-sm text-muted-foreground">
               Don't have an account?{" "}

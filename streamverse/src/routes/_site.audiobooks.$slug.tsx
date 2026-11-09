@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { isApiError } from "@/api/client";
 import { BookDetail } from "@/components/sv/BookDetail";
 import { Gated, PreviewBanner } from "@/components/sv/Gate";
 import { ContentUnavailable, GeneralError } from "@/components/sv/states";
@@ -34,7 +35,8 @@ function AudiobookDetail() {
   const peek = useCachedCard(slug);
 
   if (!DEMO_MODE && apiQuery.isLoading) return <DetailSkeleton peek={peek} />;
-  if (!DEMO_MODE && apiQuery.isError) return <GeneralError />;
+  // a title that does not exist (404) gets the page's own "not found" screen below; only a real failure is a general error
+  if (!DEMO_MODE && apiQuery.isError && !(isApiError(apiQuery.error) && apiQuery.error.status === 404)) return <GeneralError />;
 
   const b: Book | undefined = DEMO_MODE
     ? cat.audiobooks.find((x) => x.slug === slug)

@@ -7,7 +7,7 @@ import type { Seed } from "./lib/seed";
 const seed: Seed = JSON.parse(readFileSync(SEED_FILE, "utf8"));
 test.use({ storageState: USER_STATE });
 
-// Runs in the live-r2-no-cors project: pdf.js downloads the PDF from R2 in the browser (see reader.r2.live.spec.ts).
+// Runs in the live-r2 project (a normal browser; the bucket has CORS): pdf.js downloads the PDF from R2 in the browser (see reader.r2.live.spec.ts).
 
 test("flipbook: the option shows a Flipbook button on the book page and opens a page-turning reader", async ({ page }) => {
   await asAdmin().put(`/admin/ebooks/${seed.ebookPdf.id}`, { ebook: { flipbookEnabled: true } });

@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { isApiError } from "@/api/client";
 import { Film, Play, ShieldAlert } from "lucide-react";
 import { useState } from "react";
 import { Gated, PreviewBanner } from "@/components/sv/Gate";
@@ -14,7 +15,8 @@ import { findMovie, type Movie } from "@/lib/data";
 import { itemEntity, toItem, useCatalog } from "@/lib/items";
 import { apiMovieToLocal, mixedCardToItem } from "@/lib/api-mappers";
 import { relatedTo } from "@/lib/related";
-import { useProgressOf } from "@/lib/user";
+import { useResumeProgress } from "@/hooks/useResumeProgress";
+import { guestPrompt } from "@/components/sv/SignInPrompt";
 
 const TABS = [
   { id: "overview", label: "Overview" },
@@ -48,7 +50,8 @@ function MovieDetailPage() {
   const peek = useCachedCard(slug);
 
   if (!DEMO_MODE && apiQuery.isLoading) return <DetailSkeleton peek={peek} />;
-  if (!DEMO_MODE && apiQuery.isError) return <GeneralError />;
+  // a title that does not exist (404) gets the page's own "not found" screen below; only a real failure is a general error
+  if (!DEMO_MODE && apiQuery.isError && !(isApiError(apiQuery.error) && apiQuery.error.status === 404)) return <GeneralError />;
 
   const m: Movie | undefined = DEMO_MODE
     ? cat.movies.find((x) => x.slug === slug)
@@ -84,7 +87,7 @@ function Fact({ k, children }: { k: string; children: React.ReactNode }) {
 
 function MovieDetail({ m, related }: { m: Movie; related: Movie[] }) {
   const [tab, setTab] = useState<TabId>("overview");
-  const progress = useProgressOf({ type: "Movie", slug: m.slug });
+  const progress = useResumeProgress({ type: "Movie", slug: m.slug, ...(m.cid ? { id: m.cid } : {}) });
   const info = m.info ?? {};
   const warnings = m.restrictions?.warnings ?? [];
   const resuming = !!progress && !progress.completed && progress.pct > 0;
@@ -117,7 +120,7 @@ function MovieDetail({ m, related }: { m: Movie; related: Movie[] }) {
               </div>
             )}
             <div className="mt-6 flex flex-wrap gap-3">
-              <Link to="/watch/$slug" params={{ slug: m.slug }} className="inline-flex h-12 items-center gap-2 rounded-md bg-primary px-6 text-sm font-bold tracking-wide text-primary-foreground uppercase shadow-red transition-colors hover:bg-primary-hover [&_svg]:size-4">
+              <Link to="/watch/$slug" params={{ slug: m.slug }} onClick={(e) => guestPrompt(e, `/watch/${m.slug}`, "watch this movie")} className="inline-flex h-12 items-center gap-2 rounded-md bg-primary px-6 text-sm font-bold tracking-wide text-primary-foreground uppercase shadow-red transition-colors hover:bg-primary-hover [&_svg]:size-4">
                 <Play className="fill-current" /> {resuming ? "Resume" : "Play"}
               </Link>
               <MyListButton item={{ type: "Movie", slug: m.slug, ...(m.cid ? { id: m.cid } : {}) }} />

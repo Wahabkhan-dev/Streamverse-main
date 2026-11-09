@@ -42,7 +42,8 @@ export const getRouter = () => {
         staleTime: 30_000,
         // run even with no internet: a downloaded title is answered from the device, anything else fails fast
         networkMode: "offlineFirst",
-        retry: (count) => (typeof navigator === "undefined" || navigator.onLine) && count < 2,
+        // a 4xx is a definite answer (not found, not allowed): asking again cannot change it. Only network / server failures retry.
+        retry: (count, err) => !(isApiError(err) && err.status >= 400 && err.status < 500) && (typeof navigator === "undefined" || navigator.onLine) && count < 2,
       },
     },
   });

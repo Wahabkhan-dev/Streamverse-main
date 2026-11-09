@@ -34,14 +34,23 @@ interface NoteRow {
   read: boolean;
 }
 
+// The API's notification types → the page's tabs. SYSTEM (admin announcements) has no tab of its own and is shown under Account.
+const KIND_OF_TYPE: Record<ApiNotification["type"], CustomerNoteKind> = {
+  NEW_RELEASE: "New Release",
+  SUBSCRIPTION: "Subscription",
+  RECOMMENDATION: "Recommendation",
+  ACCOUNT: "Account",
+  SYSTEM: "Account",
+};
+
 function apiNotifToRow(n: ApiNotification): NoteRow {
   return {
     key: n.id,
-    kind: n.kind as CustomerNoteKind,
+    kind: KIND_OF_TYPE[n.type] ?? "Account",
     t: n.title,
-    s: n.subtitle,
+    s: n.message,
     at: new Date(n.createdAt).getTime(),
-    read: n.read,
+    read: n.readAt !== null,
   };
 }
 
@@ -143,7 +152,7 @@ function NotificationsPage() {
         ) : (
           <ul className="divide-y divide-border rounded-xl border border-border bg-surface">
             {shown.map((n) => {
-              const Icon = IconOf[n.kind];
+              const Icon = IconOf[n.kind] ?? Bell;
               return (
                 <li key={n.key} className={cn("flex items-start gap-3 p-4", !n.read && "bg-surface-2")}>
                   <span className="grid size-9 shrink-0 place-items-center rounded-md bg-surface-3 text-soft">
@@ -162,9 +171,12 @@ function NotificationsPage() {
                       <span className="sr-only">Unread</span>
                     </>
                   )}
-                  <Btn size="icon" variant="ghost" aria-label={n.read ? "Mark as unread" : "Mark as read"} title={n.read ? "Mark as unread" : "Mark as read"} onClick={() => handleToggleRead(n)}>
-                    {n.read ? <Eye /> : <Check />}
-                  </Btn>
+                  {/* the API can mark read but not unread, so in live mode a read row has no toggle */}
+                  {(DEMO_MODE || !n.read) && (
+                    <Btn size="icon" variant="ghost" aria-label={n.read ? "Mark as unread" : "Mark as read"} title={n.read ? "Mark as unread" : "Mark as read"} onClick={() => handleToggleRead(n)}>
+                      {n.read ? <Eye /> : <Check />}
+                    </Btn>
+                  )}
                   {DEMO_MODE && (
                     <Btn
                       size="icon"

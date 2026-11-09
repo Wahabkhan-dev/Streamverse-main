@@ -114,6 +114,9 @@ export async function listDynamic(flag: "FEATURED" | "TRENDING" | "POPULAR" | "N
 }
 
 /** The cover-ish asset + one headline field for a batch of ids, one query per type (never one per id). */
+/** Content rows with the relations a card shows (genres, tags, languages, warnings), for a batch of ids — one query. */
+export const contentForCards = (ids: string[]) => prisma.content.findMany({ where: { id: { in: ids } }, include: WITH_CONTENT_RELATIONS });
+
 export async function coverFieldsByContentId(movieIds: string[], ebookIds: string[], audiobookIds: string[]) {
   const [movies, ebooks, audiobooks] = await Promise.all([
     movieIds.length ? prisma.movie.findMany({ where: { contentId: { in: movieIds } }, select: { contentId: true, posterAssetId: true, runtimeMinutes: true } }) : [],

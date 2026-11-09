@@ -61,8 +61,8 @@ function unrestricted(): AccessibleContent {
 }
 
 /** Builds an AccessUser with an explicit `ageVerified` flag. */
-function userWithAge(ageVerified: boolean): AccessUser {
-  return { country: null, hasActiveSubscription: true, ageVerified };
+function userWithAge(ageVerified: boolean, age: number | null = ageVerified ? 30 : null): AccessUser {
+  return { country: null, hasActiveSubscription: true, ageVerified, age };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -80,6 +80,13 @@ describe("evaluateAccess — contentAccess.service (catalog path)", () => {
     const result = evaluateAccess(ageRestrictedContent(18), userWithAge(true), []);
     expect(result.canConsume).toBe(true);
     expect(result.reason).toBeUndefined();
+  });
+
+  it("blocks a verified user who is younger than the title's minimum age (same rule as playback)", () => {
+    const result = evaluateAccess(ageRestrictedContent(18), userWithAge(true, 15), []);
+    expect(result.canConsume).toBe(false);
+    expect(result.reason).toBe("AGE_RESTRICTED");
+    expect(evaluateAccess(ageRestrictedContent(18), userWithAge(true, 18), []).canConsume).toBe(true);
   });
 
   it("blocks anonymous user (undefined) with AGE_RESTRICTED when content is age-restricted", () => {

@@ -17,6 +17,16 @@ export const listHomepageBanners = () =>
   prisma.banner.findMany({ where: { active: true, showOnHomepage: true, type: { not: "HERO" } }, orderBy: [{ priority: "asc" }, { createdAt: "asc" }], select: { id: true, homepageAfter: true } });
 
 /** Section 15: active + inside its start/end window. Linked content's visibility is checked by the service. */
+/** When the next active banner (of this type/placement) is scheduled to start — the moment a cached banner list goes out of date. */
+export async function nextStartAfter(now: Date, type?: Prisma.BannerWhereInput["type"], placement?: Prisma.BannerWhereInput["placement"]): Promise<Date | null> {
+  const next = await prisma.banner.findFirst({
+    where: { active: true, ...(type ? { type } : {}), ...(placement ? { placement } : {}), startsAt: { gt: now } },
+    orderBy: { startsAt: "asc" },
+    select: { startsAt: true },
+  });
+  return next?.startsAt ?? null;
+}
+
 export function listActiveWithinWindow(type: Prisma.BannerWhereInput["type"] | undefined, placement?: Prisma.BannerWhereInput["placement"], now = new Date()) {
   return prisma.banner.findMany({
     where: {

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { accentGradient } from "@/lib/accent";
 import { DEMO_MODE } from "@/lib/demo";
 import { markAllNotesRead, markNoteRead, timeAgo, useCustomerNotifications } from "@/lib/notifications";
 import { setRole, updateUser, useProfile, useRole, useSubscription, useUserHydrated } from "@/lib/user";
@@ -23,7 +24,6 @@ const links = [
   { to: "/my-list", label: "My List" },
 ] as const;
 
-export const AVATARS = ["bg-red-grad", "bg-gradient-to-br from-info to-ink", "bg-gradient-to-br from-success to-ink", "bg-gradient-to-br from-warning to-primary-deep", "bg-gradient-to-br from-soft to-surface-3 text-ink", "bg-gradient-to-br from-primary-bright to-warning"];
 export const initialsOf = (name: string) =>
   name
     .split(/\s+/)
@@ -33,7 +33,12 @@ export const initialsOf = (name: string) =>
     .join("") || "?";
 
 export function Avatar({ name, index, className }: { name: string; index: number; className?: string }) {
-  return <span className={cn("grid shrink-0 place-items-center rounded-md text-xs font-bold", AVATARS[index % AVATARS.length], className ?? "size-8")}>{initialsOf(name)}</span>;
+  // the picked colour is also the app's colour (lib/accent), so the avatar paints it directly and stays that colour on every screen
+  return (
+    <span style={{ backgroundImage: accentGradient(index) }} className={cn("grid shrink-0 place-items-center rounded-md text-xs font-bold text-white", className ?? "size-8")}>
+      {initialsOf(name)}
+    </span>
+  );
 }
 
 export function TopNavbar() {

@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Activity, ArrowRight, BookOpen, CreditCard, Download, Eye, Film, Headphones, Sparkles, TrendingUp, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -25,6 +25,7 @@ const services = ["Website", "Streaming service", "eBook service", "Audiobook se
 
 /** Demo mode only: illustrative numbers and charts from the local sample store. */
 function DemoDashboard() {
+  const go = useNavigate();
   const demoMovies = useMovies();
   const demoEbooks = useEbooks();
   const demoAudiobooks = useAudiobooks();
@@ -82,12 +83,12 @@ function DemoDashboard() {
         }
       />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-        <MetricCard icon={Film} label="Total movies" value={String(moviesCount)} trend={12.4} />
-        <MetricCard icon={BookOpen} label="Total eBooks" value={String(ebooksCount)} trend={8.2} />
-        <MetricCard icon={Headphones} label="Total audiobooks" value={String(audiobooksCount)} trend={14.6} />
-        <MetricCard icon={Users} label="Total users" value={PLATFORM_USERS.toLocaleString()} trend={6.7} />
-        <MetricCard icon={CreditCard} label="Active subscriptions" value={subs.toLocaleString()} trend={4.3} />
-        <MetricCard icon={TrendingUp} label="Monthly revenue" value={`$${revenue.toLocaleString()}`} trend={9.8} />
+        <MetricCard icon={Film} label="Total movies" value={String(moviesCount)} trend={12.4} onClick={() => void go({ to: "/admin/movies" })} />
+        <MetricCard icon={BookOpen} label="Total eBooks" value={String(ebooksCount)} trend={8.2} onClick={() => void go({ to: "/admin/ebooks" })} />
+        <MetricCard icon={Headphones} label="Total audiobooks" value={String(audiobooksCount)} trend={14.6} onClick={() => void go({ to: "/admin/audiobooks" })} />
+        <MetricCard icon={Users} label="Total users" value={PLATFORM_USERS.toLocaleString()} trend={6.7} onClick={() => void go({ to: "/admin/users" })} />
+        <MetricCard icon={CreditCard} label="Active subscriptions" value={subs.toLocaleString()} trend={4.3} onClick={() => void go({ to: "/admin/subscriptions" })} />
+        <MetricCard icon={TrendingUp} label="Monthly revenue" value={`$${revenue.toLocaleString()}`} trend={9.8} onClick={() => void go({ to: "/admin/payments" })} />
       </div>
       <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_340px]">
         <Panel>

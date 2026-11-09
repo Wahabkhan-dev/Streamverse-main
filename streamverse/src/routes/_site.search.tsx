@@ -7,16 +7,15 @@ import { SearchField } from "@/components/sv/SearchField";
 import { Btn, EmptyState, Skel, useRovingTabs } from "@/components/sv/ui";
 import { itemAge, itemGenres, itemLanguage, type Item } from "@/lib/items";
 import { useLiveCatalog } from "@/hooks/useLiveCatalog";
-import { NO_FILTERS, filtersActive, peopleOf, searchItems, searchPeople, type Filters } from "@/lib/search";
+import { NO_FILTERS, filtersActive, matchesFilters, peopleOf, searchItems, searchPeople, type Filters } from "@/lib/search";
 import { useGenreCatalog } from "@/hooks/useGenreNames";
 import { addRecentSearch, clearRecentSearches, useRecentSearches } from "@/lib/user";
 import { cn } from "@/lib/utils";
 import { DEMO_MODE } from "@/lib/config";
 import { searchApi } from "@/api/search.api";
-import type { ApiMovie, ApiBook } from "@/api/types";
 import type { Movie, Book, Status } from "@/lib/data";
 import { toItem } from "@/lib/items";
-import { apiBookToLocal, apiMovieToLocal } from "@/lib/api-mappers";
+import { mixedCardToItem } from "@/lib/api-mappers";
 
 type Tab = "all" | "movies" | "ebooks" | "audiobooks" | "people";
 const TABS: { id: Tab; label: string }[] = [
@@ -56,9 +55,6 @@ const Select = ({ label, value, onChange, options }: { label: string; value: str
   </label>
 );
 
-const apiMovieToItem = (m: ApiMovie): Item => toItem("Movie", apiMovieToLocal(m));
-
-const apiBookToItem = (b: ApiBook, type: "eBook" | "Audiobook"): Item => toItem(type, apiBookToLocal(b));
 
 function SearchPage() {
   const { q = "", tab = "all" } = Route.useSearch();
@@ -103,13 +99,11 @@ function SearchPage() {
     if (!applied) return [];
     const apiData = apiSearchQuery.data;
     if (!apiData) return [];
-    const items: Item[] = [
-      ...(apiData.movies ?? []).map(apiMovieToItem),
-      ...(apiData.ebooks ?? []).map((b) => apiBookToItem(b, "eBook")),
-      ...(apiData.audiobooks ?? []).map((b) => apiBookToItem(b, "Audiobook")),
-    ];
-    // Apply local filters to API results
-    return searchItems(items, "", filters); // empty string = no text filter (API already filtered)
+    // the API answers one list of mixed cards (each carries its type), in its own relevance order
+    const items: Item[] = apiData.map(mixedCardToItem);
+    // the API already matched the text: only the on-page filters (genre, language, age...) apply here.
+    // (searchItems with an empty query returns nothing, which hid every live result.)
+    return items.filter((i) => matchesFilters(i, filters));
   }, [DEMO_MODE, cat.listed, applied, filters, apiSearchQuery.data]);
 
   // people come from the catalog of titles that exist (demo store, or the server's titles in live mode)
