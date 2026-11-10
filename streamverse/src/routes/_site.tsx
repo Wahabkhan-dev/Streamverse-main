@@ -39,7 +39,7 @@ function SiteLayout() {
     const d = publicSettings.data;
     if (DEMO_MODE || !d) return;
     const m = fromServer(d);
-    update((st) => ({ settings: { ...st.settings, ageGate: m.ageGate, autoplayNext: m.autoplayNext, autoplayPreview: m.autoplayPreview } }));
+    update((st) => ({ settings: { ...st.settings, ageGate: m.ageGate, autoplayNext: m.autoplayNext, autoplayPreview: m.autoplayPreview, socialYoutube: m.socialYoutube, socialInstagram: m.socialInstagram, socialX: m.socialX, socialFacebook: m.socialFacebook } }));
   }, [publicSettings.data]);
   const serverMaintenance = isApiError(publicSettings.error) ? publicSettings.error.code === "MAINTENANCE_MODE" : publicSettings.data?.["maintenanceMode"] === true;
   const maintenance = DEMO_MODE ? demoMaintenance : serverMaintenance && role !== "admin";

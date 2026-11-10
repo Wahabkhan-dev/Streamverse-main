@@ -12,6 +12,10 @@ export const SETTING_DEFINITIONS = {
   autoPublishContent: "BOOLEAN",
   autoplayNext: "BOOLEAN",
   autoplayPreview: "BOOLEAN",
+  socialYoutube: "STRING",
+  socialInstagram: "STRING",
+  socialX: "STRING",
+  socialFacebook: "STRING",
 } as const;
 export type SettingKey = keyof typeof SETTING_DEFINITIONS;
 export const SETTING_KEYS = Object.keys(SETTING_DEFINITIONS) as SettingKey[];

@@ -31,6 +31,10 @@ const typeOf = (v: unknown) => (typeof v === "boolean" ? "BOOLEAN" : typeof v ==
 /** Section 44: only known keys, and only the right JS type for that key — never an unchecked arbitrary string. */
 export function assertKnownSetting(key: string, value: unknown): asserts key is SettingKey {
   if (!SETTING_KEYS.includes(key as SettingKey)) throw new ValidationError([{ path: "key", message: `Unknown setting "${key}".` }]);
+  // the footer's social links: empty (hidden) or a web address, never anything else (they end up in an href)
+  if (/^social[A-Z]/.test(key) && !(typeof value === "string" && (value === "" || (value.length <= 300 && /^https?:\/\/[^\s]+$/.test(value))))) {
+    throw new ValidationError([{ path: "value", message: `"${key}" must be empty or a web address starting with https://.` }]);
+  }
   // every currently-known setting is BOOLEAN or STRING; this still protects a JSON-typed key added later
   const expected: string = SETTING_DEFINITIONS[key as SettingKey];
   if (expected !== "JSON" && typeOf(value) !== expected) throw new ValidationError([{ path: "value", message: `"${key}" expects a ${expected.toLowerCase()} value.` }]);

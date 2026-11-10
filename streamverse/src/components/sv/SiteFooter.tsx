@@ -5,16 +5,17 @@ import { toast } from "sonner";
 import { api } from "@/api/client";
 import { DEMO_MODE } from "@/lib/config";
 import { LEGAL_LINKS } from "@/lib/legal";
+import { useSettings } from "@/lib/store";
 import { Logo } from "./Logo";
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/** Social pages come from the environment (VITE_SOCIAL_YOUTUBE ...): an icon is shown only for a page that exists. */
-const SOCIAL: { label: string; icon: LucideIcon; url: string | undefined }[] = [
-  { label: "YouTube", icon: Youtube, url: import.meta.env["VITE_SOCIAL_YOUTUBE"] as string | undefined },
-  { label: "Instagram", icon: Instagram, url: import.meta.env["VITE_SOCIAL_INSTAGRAM"] as string | undefined },
-  { label: "X", icon: Twitter, url: import.meta.env["VITE_SOCIAL_X"] as string | undefined },
-  { label: "Facebook", icon: Facebook, url: import.meta.env["VITE_SOCIAL_FACEBOOK"] as string | undefined },
+/** The social pages the admin sets in Settings: an icon is shown only for a page that has an address. */
+const SOCIAL: { label: string; icon: LucideIcon; key: "socialYoutube" | "socialInstagram" | "socialX" | "socialFacebook" }[] = [
+  { label: "YouTube", icon: Youtube, key: "socialYoutube" },
+  { label: "Instagram", icon: Instagram, key: "socialInstagram" },
+  { label: "X", icon: Twitter, key: "socialX" },
+  { label: "Facebook", icon: Facebook, key: "socialFacebook" },
 ];
 
 /** One labelled column of footer links, with a short accent line under the heading. */
@@ -129,7 +130,8 @@ function FilmGlow() {
 
 /** The site footer: brand, link columns, the newsletter card, and the bottom bar with social pages. */
 export function SiteFooter() {
-  const social = SOCIAL.filter((s) => !!s.url);
+  const settings = useSettings();
+  const social = SOCIAL.map((s) => ({ ...s, url: settings[s.key] ?? "" })).filter((s) => /^https?:\/\//.test(s.url));
   return (
     <footer className="relative mt-16 overflow-hidden border-t border-border bg-gradient-to-b from-ink to-background">
       <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent" />

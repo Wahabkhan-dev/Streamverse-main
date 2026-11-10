@@ -136,6 +136,11 @@ export interface Settings {
   autoplayNext: boolean;
   autoplayPreview: boolean;
   defaultLanguage: string;
+  /** the footer's social pages (an https address; empty = no icon) */
+  socialYoutube: string;
+  socialInstagram: string;
+  socialX: string;
+  socialFacebook: string;
 }
 export type AdminNoteKind = "Users" | "Content" | "Payments" | "Platform";
 export interface AdminNote {
@@ -441,6 +446,10 @@ const seed: State = {
     autoplayNext: true,
     autoplayPreview: true,
     defaultLanguage: "English",
+    socialYoutube: "",
+    socialInstagram: "",
+    socialX: "",
+    socialFacebook: "",
   },
   adminNotes: [
     {

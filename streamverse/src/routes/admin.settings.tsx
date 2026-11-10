@@ -15,7 +15,7 @@ import { isApiError } from "@/api/client";
 
 export const Route = createFileRoute("/admin/settings")({ component: SettingsPage });
 
-type BoolKey = Exclude<keyof Settings, "defaultLanguage">;
+type BoolKey = Exclude<keyof Settings, "defaultLanguage" | "socialYoutube" | "socialInstagram" | "socialX" | "socialFacebook">;
 interface Row {
   group: string;
   key: BoolKey;
@@ -123,6 +123,7 @@ function SettingsPage() {
             </Panel>
           ))}
         </div>
+        <div className="space-y-6">
         <Panel className="h-fit p-5">
           <span className="grid size-10 place-items-center rounded-md bg-primary/12 text-primary-text">
             <ShieldCheck className="size-5" />
@@ -147,9 +148,70 @@ function SettingsPage() {
             View the customer site
           </Link>
         </Panel>
+        <SocialLinksPanel settings={s} save={set} />
+        </div>
         <ChangePasswordDialog open={passwordOpen} onClose={() => setPasswordOpen(false)} />
       </div>
     </>
+  );
+}
+
+const SOCIAL_FIELDS = [
+  { key: "socialYoutube", label: "YouTube", placeholder: "https://www.youtube.com/@yourchannel" },
+  { key: "socialInstagram", label: "Instagram", placeholder: "https://www.instagram.com/yourpage" },
+  { key: "socialX", label: "X", placeholder: "https://x.com/yourpage" },
+  { key: "socialFacebook", label: "Facebook", placeholder: "https://www.facebook.com/yourpage" },
+] as const;
+type SocialKey = (typeof SOCIAL_FIELDS)[number]["key"];
+
+/** The addresses of StreamVerse's social pages: shown as icons in the site footer. A blank box means no icon. */
+function SocialLinksPanel({ settings, save }: { settings: Settings; save: (patch: Partial<Settings>, okMessage: string) => Promise<void> }) {
+  const saved = Object.fromEntries(SOCIAL_FIELDS.map((f) => [f.key, settings[f.key] ?? ""])) as Record<SocialKey, string>;
+  const [draft, setDraft] = useState<Record<SocialKey, string>>(saved);
+  const [errors, setErrors] = useState<Partial<Record<SocialKey, string>>>({});
+  const [busy, setBusy] = useState(false);
+  const dirty = SOCIAL_FIELDS.some((f) => draft[f.key].trim() !== saved[f.key]);
+
+  const submit = async () => {
+    const next: Partial<Record<SocialKey, string>> = {};
+    for (const f of SOCIAL_FIELDS) {
+      const v = draft[f.key].trim();
+      if (v && !/^https?:\/\/[^\s]+$/.test(v)) next[f.key] = "Enter a full web address starting with https://";
+    }
+    setErrors(next);
+    if (Object.keys(next).length) return;
+    setBusy(true);
+    await save(Object.fromEntries(SOCIAL_FIELDS.map((f) => [f.key, draft[f.key].trim()])) as Partial<Settings>, "Social media links saved");
+    setBusy(false);
+  };
+
+  return (
+    <section data-testid="social-links" className="h-fit min-w-0 rounded-xl border border-border bg-surface p-5">
+      <h2 className="font-bold">Social media links</h2>
+      <p className="mt-1 text-sm text-muted-foreground">Shown as icons at the bottom of the customer site. Leave a box empty to hide that icon.</p>
+      <form
+        className="mt-4 space-y-3"
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submit();
+        }}
+      >
+        {SOCIAL_FIELDS.map((f) => (
+          <Field key={f.key} label={f.label}>
+            <TextInput type="url" value={draft[f.key]} placeholder={f.placeholder} aria-label={`${f.label} link`} aria-invalid={!!errors[f.key]} onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))} />
+            {errors[f.key] && (
+              <span role="alert" className="mt-1 block text-[11px] font-medium text-primary-text">
+                {errors[f.key]}
+              </span>
+            )}
+          </Field>
+        ))}
+        <Btn type="submit" variant="primary" className="w-full" disabled={busy || !dirty}>
+          {busy ? "Saving…" : "Save links"}
+        </Btn>
+      </form>
+    </section>
   );
 }
 

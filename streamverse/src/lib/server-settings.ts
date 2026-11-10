@@ -19,6 +19,10 @@ export const SETTING_KEY: Record<keyof Settings, string> = {
   autoplayNext: "autoplayNext",
   autoplayPreview: "autoplayPreview",
   defaultLanguage: "defaultLanguage",
+  socialYoutube: "socialYoutube",
+  socialInstagram: "socialInstagram",
+  socialX: "socialX",
+  socialFacebook: "socialFacebook",
 };
 
 /** What a setting is when the server has not stored a value for it yet (the same defaults the server applies). */
@@ -32,6 +36,10 @@ export const SETTING_DEFAULTS: Settings = {
   autoplayNext: true,
   autoplayPreview: true,
   defaultLanguage: "English",
+  socialYoutube: "",
+  socialInstagram: "",
+  socialX: "",
+  socialFacebook: "",
 };
 
 /** Older rows hold a language CODE ("en"); the screens work with names ("English"). */

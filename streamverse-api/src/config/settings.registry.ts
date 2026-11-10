@@ -83,6 +83,34 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     public: false,
     description: "Whether to send billing-related notification emails.",
   },
+  {
+    key: "socialYoutube",
+    type: "string",
+    default: "",
+    public: true,
+    description: "YouTube page address shown in the site footer (an https link). Empty hides the icon.",
+  },
+  {
+    key: "socialInstagram",
+    type: "string",
+    default: "",
+    public: true,
+    description: "Instagram page address shown in the site footer (an https link). Empty hides the icon.",
+  },
+  {
+    key: "socialX",
+    type: "string",
+    default: "",
+    public: true,
+    description: "X page address shown in the site footer (an https link). Empty hides the icon.",
+  },
+  {
+    key: "socialFacebook",
+    type: "string",
+    default: "",
+    public: true,
+    description: "Facebook page address shown in the site footer (an https link). Empty hides the icon.",
+  },
 ];
 
 export const PUBLIC_SETTING_KEYS = new Set(SETTINGS_REGISTRY.filter((s) => s.public).map((s) => s.key));
