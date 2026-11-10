@@ -198,16 +198,18 @@
 .sv-loader-ring {
   position: absolute;
   border-radius: 9999px;
-  border: 1px solid transparent;
-  border-top-color: var(--primary);
-  background: transparent; /* plain: no dark tint inside the rings */
-  animation: sv-loader-ripple 2s ease-in-out infinite;
+  /* soft red discs that stack into a glow: no outline, so no dark arc at the top */
+  background: radial-gradient(circle, color-mix(in oklab, var(--primary) 22%, transparent), color-mix(in oklab, var(--primary-deep) 12%, transparent) 70%, transparent);
+  animation: sv-loader-ripple 2.4s ease-in-out infinite;
 }
-/* rings shrink inward from the outer edge, so the ripple (scale up to 1.15) stays roughly inside the box */
-.sv-loader-ring:nth-child(1) { inset: 33%; animation-delay: 0s; }
-.sv-loader-ring:nth-child(2) { inset: 24%; animation-delay: 0.2s; border-top-color: color-mix(in oklab, var(--primary) 70%, transparent); }
-.sv-loader-ring:nth-child(3) { inset: 15%; animation-delay: 0.4s; border-top-color: color-mix(in oklab, var(--primary) 45%, transparent); }
-.sv-loader-ring:nth-child(4) { inset: 6%; animation-delay: 0.6s; border-top-color: color-mix(in oklab, var(--primary) 22%, transparent); }
+/* seven layers, from the outer edge in; the ripple (scale up to 1.08) stays roughly inside the box */
+.sv-loader-ring:nth-child(1) { inset: 34%; animation-delay: 0s; }
+.sv-loader-ring:nth-child(2) { inset: 28%; animation-delay: 0.1s; }
+.sv-loader-ring:nth-child(3) { inset: 22%; animation-delay: 0.2s; }
+.sv-loader-ring:nth-child(4) { inset: 16%; animation-delay: 0.3s; }
+.sv-loader-ring:nth-child(5) { inset: 10%; animation-delay: 0.4s; }
+.sv-loader-ring:nth-child(6) { inset: 4%; animation-delay: 0.5s; }
+.sv-loader-ring:nth-child(7) { inset: 0%; animation-delay: 0.6s; }
 .sv-loader-logo {
   position: relative;
   display: grid;
@@ -223,7 +225,7 @@
 }
 @keyframes sv-loader-ripple {
   0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.15); }
+  50% { transform: scale(1.08); }
 }
 @keyframes sv-loader-pulse {
   0%, 100% { opacity: 0.75; }
