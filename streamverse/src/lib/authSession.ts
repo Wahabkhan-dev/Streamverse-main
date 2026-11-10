@@ -10,7 +10,8 @@ import { clearAuthUser, setAuthError, setAuthLoading, setAuthUser, getAuthUser }
 import { DEMO_MODE } from "./config";
 import { removeAllDownloads } from "./offline/downloads";
 import { isUnreachable } from "./offline/shim";
-import { loadLook } from "./look";
+import { meApi } from "@/api/me.api";
+import { loadLook, saveLook } from "./look";
 import { resetUser, setRole, updateUser } from "./user";
 
 /* ───────────── cache isolation ───────────── */
@@ -86,7 +87,20 @@ export function mirrorAuthUser(user: ApiUser | null) {
     setRole("user");
     return;
   }
-  const look = loadLook(user.email); // the colour and photo this customer chose, kept across sign-outs
+  // The colour and photo are kept on the account (the server wins, so they are the same on every device). Anything chosen on this
+  // device before they were stored there is kept as a fallback, and sent up once.
+  const local = loadLook(user.email);
+  const look = {
+    avatar: user.accentColor ?? local.avatar,
+    avatarImage: user.avatarUrl || local.avatarImage,
+  };
+  if (!DEMO_MODE) {
+    const missing: { accentColor?: number; avatarUrl?: string } = {};
+    if (user.accentColor == null && local.avatar !== undefined) missing.accentColor = local.avatar;
+    if (!user.avatarUrl && local.avatarImage) missing.avatarUrl = local.avatarImage;
+    if (Object.keys(missing).length) void meApi.updateProfile(missing).catch(() => undefined);
+  }
+  if (user.accentColor != null || user.avatarUrl) saveLook(user.email, { ...(user.accentColor != null ? { avatar: user.accentColor } : {}), ...(user.avatarUrl ? { avatarImage: user.avatarUrl } : {}) });
   updateUser((s) => ({
     ...s,
     role: user.role,

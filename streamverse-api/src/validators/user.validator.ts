@@ -7,7 +7,11 @@ import { z } from "zod";
 export const profileUpdateSchema = z
   .object({
     fullName: z.string().trim().min(1).max(120),
-    avatarUrl: z.url().max(2048).nullable(),
+    // an https address, or the small photo the customer uploaded (data URL, a few tens of KB at most)
+    avatarUrl: z
+      .union([z.url().max(2048).regex(/^https?:\/\//), z.string().max(150_000).regex(/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/)])
+      .nullable(),
+    accentColor: z.number().int().min(0).max(5).nullable(),
     country: z.string().trim().length(2).toUpperCase().nullable(),
     preferredLanguage: z.string().trim().min(2).max(35).nullable(),
     subtitleLanguage: z.string().trim().min(2).max(35).nullable(),

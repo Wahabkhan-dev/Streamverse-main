@@ -24,6 +24,8 @@ export interface ApiUser {
   email: string;
   fullName: string;
   avatarUrl: string | null;
+  /** the colour picked on the profile (index into the app palette); null = default */
+  accentColor?: number | null;
   role: "user" | "admin";
   status: string;
   emailVerified: boolean;

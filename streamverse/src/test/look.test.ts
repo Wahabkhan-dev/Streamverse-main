@@ -24,3 +24,11 @@ it("signing in again (after a sign-out wiped the store) brings the colour and ph
   expect(getUser().profile.avatar).toBe(2);
   expect(getUser().profile.avatarImage).toBe("data:image/jpeg;base64,BB");
 });
+
+it("the colour and photo stored on the account win, so they are the same on every device", () => {
+  saveLook("ann@x.com", { avatar: 1, avatarImage: "data:image/jpeg;base64,OLD" });
+  mirrorAuthUser({ id: "u1", email: "ann@x.com", fullName: "Ann", role: "user", accentColor: 4, avatarUrl: "data:image/jpeg;base64,NEW", preferences: null } as unknown as ApiUser);
+  expect(getUser().profile.avatar).toBe(4);
+  expect(getUser().profile.avatarImage).toBe("data:image/jpeg;base64,NEW");
+  expect(loadLook("ann@x.com")).toEqual({ avatar: 4, avatarImage: "data:image/jpeg;base64,NEW" });
+});

@@ -9,6 +9,7 @@ export interface SafeUser {
   email: string;
   fullName: string;
   avatarUrl: string | null;
+  accentColor: number | null;
   role: User["role"];
   status: User["status"];
   emailVerified: boolean;
@@ -31,6 +32,7 @@ export function serializeUser(user: User): SafeUser {
     email: user.email,
     fullName: user.fullName,
     avatarUrl: user.avatarUrl,
+    accentColor: user.accentColor,
     role: user.role.toLowerCase() as SafeUser["role"],
     status: user.status,
     emailVerified: user.emailVerified,

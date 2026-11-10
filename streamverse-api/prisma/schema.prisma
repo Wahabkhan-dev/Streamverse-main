@@ -57,7 +57,10 @@ model User {
   email         String     @unique
   passwordHash  String
   fullName      String
-  avatarUrl     String?
+  /// An https address, or the customer's own small photo as a data URL (a ~192px JPEG, ~15-30 KB), hence MEDIUMTEXT.
+  avatarUrl     String?    @db.MediumText
+  /// The colour the customer picked on their profile (index into the app's palette; null = the default red).
+  accentColor   Int?
   role          Role       @default(USER)
   status        UserStatus @default(ACTIVE)
   emailVerified Boolean    @default(false)

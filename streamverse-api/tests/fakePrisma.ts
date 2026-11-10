@@ -347,7 +347,7 @@ class Table<T extends Row = Row> {
 export function createFakePrisma() {
   // Phase 2
   const user = new Table<Row>({
-    defaults: { role: "USER", status: "ACTIVE", emailVerified: false, avatarUrl: null, country: null, preferredLanguage: null, subtitleLanguage: null, audioLanguage: null, videoQuality: null, audiobookSpeed: null, lastLoginAt: null, deletedAt: null },
+    defaults: { role: "USER", status: "ACTIVE", emailVerified: false, avatarUrl: null, accentColor: null, country: null, preferredLanguage: null, subtitleLanguage: null, audioLanguage: null, videoQuality: null, audiobookSpeed: null, lastLoginAt: null, deletedAt: null },
     uniqueSets: [["email"]],
   });
   const authSession = new Table<Row>({ defaults: { revokedAt: null, lastUsedAt: null, ip: null, userAgent: null }, uniqueSets: [["tokenHash"]] });

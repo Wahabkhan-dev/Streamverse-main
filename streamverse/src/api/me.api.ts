@@ -25,7 +25,7 @@ export const meApi = {
     return api.get<ApiResponse<ApiUser>>("/me/profile");
   },
 
-  updateProfile(data: { fullName?: string; country?: string | null; preferredLanguage?: string | null; subtitleLanguage?: string | null; audioLanguage?: string | null; videoQuality?: string | null; audiobookSpeed?: number | null }) {
+  updateProfile(data: { fullName?: string; avatarUrl?: string | null; accentColor?: number | null; country?: string | null; preferredLanguage?: string | null; subtitleLanguage?: string | null; audioLanguage?: string | null; videoQuality?: string | null; audiobookSpeed?: number | null }) {
     return api.patch<ApiResponse<ApiUser>>("/me/profile", data);
   },
 

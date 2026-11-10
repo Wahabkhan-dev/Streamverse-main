@@ -46,6 +46,22 @@ describe("PATCH /api/v1/me/profile", () => {
     expect(res.body.data.preferences).toMatchObject({ country: "CA", preferredLanguage: "French", videoQuality: "4K", audiobookSpeed: 1.25 });
   });
 
+  it("keeps the chosen colour and a small uploaded photo, and refuses anything else as a photo", async () => {
+    const accessToken = await register();
+    const photo = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ==";
+    const res = await request(app).patch("/api/v1/me/profile").set("Authorization", `Bearer ${accessToken}`).send({ accentColor: 3, avatarUrl: photo });
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({ accentColor: 3, avatarUrl: photo });
+    const again = await request(app).get("/api/v1/me/profile").set("Authorization", `Bearer ${accessToken}`);
+    expect(again.body.data).toMatchObject({ accentColor: 3, avatarUrl: photo });
+    const bad = (body: object) => request(app).patch("/api/v1/me/profile").set("Authorization", `Bearer ${accessToken}`).send(body);
+    expect((await bad({ accentColor: 9 })).status).toBe(400);
+    expect((await bad({ avatarUrl: "data:text/html;base64,AAAA" })).status).toBe(400);
+    expect((await bad({ avatarUrl: "javascript:alert(1)" })).status).toBe(400);
+    expect((await bad({ avatarUrl: `data:image/jpeg;base64,${"A".repeat(160_000)}` })).status).toBe(400);
+    expect((await bad({ accentColor: null, avatarUrl: null })).status).toBe(200);
+  });
+
   it("ignores an attempt to change role through the generic profile update", async () => {
     const accessToken = await register();
     const res = await request(app).patch("/api/v1/me/profile").set("Authorization", `Bearer ${accessToken}`).send({ fullName: "Still Alex", role: "ADMIN" });

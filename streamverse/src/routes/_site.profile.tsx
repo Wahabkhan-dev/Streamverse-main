@@ -13,6 +13,8 @@ import { isApiError } from "@/api/client";
 import { DEMO_MODE } from "@/lib/demo";
 import { resetDrafts } from "@/lib/drafts";
 import { resetStore } from "@/lib/store";
+import { meApi } from "@/api/me.api";
+import { refreshAuthUser } from "@/lib/authSession";
 import { saveLook } from "@/lib/look";
 import { getUser, resetUser, setRole, updateUser, useUser, useUserHydrated, type UserState } from "@/lib/user";
 
@@ -52,6 +54,15 @@ function ProfileForm() {
     setP("avatar", i);
     updateUser((s) => ({ ...s, profile: { ...s.profile, avatar: i } }));
     saveLook(getUser().profile.email, { avatar: i });
+    saveToAccount({ accentColor: i });
+  };
+  /** Live mode: the colour and photo are also stored on the account, so they follow the customer to every device. */
+  const saveToAccount = (data: { accentColor?: number; avatarUrl?: string | null }) => {
+    if (DEMO_MODE) return;
+    meApi
+      .updateProfile(data)
+      .then(() => void refreshAuthUser())
+      .catch(() => toast.warning("Saved on this device, but we couldn't save it to your account yet."));
   };
   /** A photo is shrunk to a small square and kept on this device at once, like the colour. */
   const photoInput = useRef<HTMLInputElement>(null);
@@ -59,6 +70,7 @@ function ProfileForm() {
   const keepPhoto = (avatarImage: string | undefined) => {
     setP("avatarImage", avatarImage);
     updateUser((s) => ({ ...s, profile: { ...s.profile, avatarImage } }));
+    saveToAccount({ avatarUrl: avatarImage ?? null });
     if (!saveLook(getUser().profile.email, { avatarImage })) toast.warning("Your photo is showing, but this browser has no room to keep it. It may be gone next time.");
   };
   const uploadPhoto = async (f?: File) => {

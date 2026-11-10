@@ -417,7 +417,8 @@ export const openApiDocument = {
         description: "Every field is optional; only the ones present are changed.",
         properties: {
           fullName: { type: "string" },
-          avatarUrl: { type: "string", format: "uri", nullable: true },
+          avatarUrl: { type: "string", description: "An https address or a small data:image/(jpeg|png|webp);base64 photo (max ~150 KB)", nullable: true },
+          accentColor: { type: "integer", minimum: 0, maximum: 5, nullable: true },
           country: { type: "string", minLength: 2, maxLength: 2, example: "US" },
           preferredLanguage: { type: "string", nullable: true },
           subtitleLanguage: { type: "string", nullable: true },
@@ -434,6 +435,7 @@ export const openApiDocument = {
           email: { type: "string", format: "email" },
           fullName: { type: "string" },
           avatarUrl: { type: "string", nullable: true },
+          accentColor: { type: "integer", nullable: true },
           role: { type: "string", enum: ["USER", "ADMIN"] },
           status: { type: "string", enum: ["ACTIVE", "SUSPENDED", "DELETED"] },
           emailVerified: { type: "boolean" },

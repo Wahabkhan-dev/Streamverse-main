@@ -15,7 +15,7 @@ export const updatePasswordHash = (id: string, passwordHash: string): Promise<Us
 export const touchLastLogin = (id: string): Promise<User> => prisma.user.update({ where: { id }, data: { lastLoginAt: new Date() } });
 
 export type ProfileUpdateInput = Partial<
-  Pick<Prisma.UserUpdateInput, "fullName" | "avatarUrl" | "country" | "preferredLanguage" | "subtitleLanguage" | "audioLanguage" | "videoQuality" | "audiobookSpeed">
+  Pick<Prisma.UserUpdateInput, "fullName" | "avatarUrl" | "accentColor" | "country" | "preferredLanguage" | "subtitleLanguage" | "audioLanguage" | "videoQuality" | "audiobookSpeed">
 >;
 
 export const updateProfile = (id: string, data: ProfileUpdateInput): Promise<User> => prisma.user.update({ where: { id }, data });
