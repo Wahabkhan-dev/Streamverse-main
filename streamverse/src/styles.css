@@ -198,18 +198,19 @@
 .sv-loader-ring {
   position: absolute;
   border-radius: 9999px;
-  /* soft red discs that stack into a glow: no outline, so no dark arc at the top */
-  background: radial-gradient(circle, color-mix(in oklab, var(--primary) 22%, transparent), color-mix(in oklab, var(--primary-deep) 12%, transparent) 70%, transparent);
-  animation: sv-loader-ripple 2.4s ease-in-out infinite;
+  /* light, flat red discs: stacked, they read as clear layers. The edge is one even thin line all the way round (no dark arc). */
+  background: color-mix(in oklab, var(--primary) 9%, transparent);
+  border: 1px solid color-mix(in oklab, var(--primary) 22%, transparent);
+  animation: sv-loader-wave 2.1s ease-in-out infinite;
 }
-/* seven layers, from the outer edge in; the ripple (scale up to 1.08) stays roughly inside the box */
+/* seven layers, innermost first; each starts a little after the one inside it, so the pulse travels outward */
 .sv-loader-ring:nth-child(1) { inset: 34%; animation-delay: 0s; }
-.sv-loader-ring:nth-child(2) { inset: 28%; animation-delay: 0.1s; }
-.sv-loader-ring:nth-child(3) { inset: 22%; animation-delay: 0.2s; }
-.sv-loader-ring:nth-child(4) { inset: 16%; animation-delay: 0.3s; }
-.sv-loader-ring:nth-child(5) { inset: 10%; animation-delay: 0.4s; }
-.sv-loader-ring:nth-child(6) { inset: 4%; animation-delay: 0.5s; }
-.sv-loader-ring:nth-child(7) { inset: 0%; animation-delay: 0.6s; }
+.sv-loader-ring:nth-child(2) { inset: 28%; animation-delay: 0.12s; }
+.sv-loader-ring:nth-child(3) { inset: 22%; animation-delay: 0.24s; }
+.sv-loader-ring:nth-child(4) { inset: 16%; animation-delay: 0.36s; }
+.sv-loader-ring:nth-child(5) { inset: 10%; animation-delay: 0.48s; }
+.sv-loader-ring:nth-child(6) { inset: 4%; animation-delay: 0.6s; }
+.sv-loader-ring:nth-child(7) { inset: 0%; animation-delay: 0.72s; }
 .sv-loader-logo {
   position: relative;
   display: grid;
@@ -223,9 +224,10 @@
   line-height: 1;
   animation: sv-loader-pulse 2s ease-in-out infinite;
 }
-@keyframes sv-loader-ripple {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.08); }
+@keyframes sv-loader-wave {
+  0%, 100% { opacity: 0.25; transform: scale(0.96); }
+  35% { opacity: 1; transform: scale(1.03); }
+  70% { opacity: 0.25; transform: scale(0.96); }
 }
 @keyframes sv-loader-pulse {
   0%, 100% { opacity: 0.75; }
