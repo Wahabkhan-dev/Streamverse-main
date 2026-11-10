@@ -13,6 +13,7 @@ import { hlsDeliveryRouter } from "./hlsDelivery.routes";
 import { offlineDeliveryRouter } from "./offlineDelivery.routes";
 import { mediaAccessRouter } from "./mediaAccess.routes";
 import { movieCustomerRouter } from "./movieCustomer.routes";
+import { newsletterRouter } from "./newsletter.routes";
 import { planRouter } from "./plan.routes";
 import { searchRouter } from "./search.routes";
 import { userRouter } from "./user.routes";
@@ -38,6 +39,7 @@ apiV1Router.use("/collections", collectionCustomerRouter);
 apiV1Router.use("/banners", bannerCustomerRouter);
 apiV1Router.use("/genres", genreCustomerRouter);
 apiV1Router.use("/legal", legalCustomerRouter);
+apiV1Router.use("/newsletter", newsletterRouter);
 apiV1Router.use("/search", searchRouter);
 
 // Phase 6: protected-media-access foundation (Section 53) — requireAuth itself is inside the router.

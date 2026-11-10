@@ -352,6 +352,7 @@ export function createFakePrisma() {
   });
   const authSession = new Table<Row>({ defaults: { revokedAt: null, lastUsedAt: null, ip: null, userAgent: null }, uniqueSets: [["tokenHash"]] });
   const passwordResetToken = new Table<Row>({ defaults: { usedAt: null }, uniqueSets: [["tokenHash"]] });
+  const newsletterSubscriber = new Table<Row>({ uniqueSets: [["email"]] });
 
   // Phase 3
   const contentSequence = new Table<Row>({ keyOf: (d) => String(d.type) });
@@ -443,7 +444,7 @@ export function createFakePrisma() {
   });
 
   const tables = {
-    user, authSession, passwordResetToken,
+    user, authSession, passwordResetToken, newsletterSubscriber,
     contentSequence, content, movie, ebook, audiobook, movieCast, movieCrew, movieCaption, movieAudioTrack,
     ebookEdition, audiobookEdition, audiobookChapter, language, contentLanguage, genre, contentGenre, tag,
     contentTag, contentWarningType, contentWarning, contentTerritory, mediaAsset, legalDocument, legalDocumentVersion,

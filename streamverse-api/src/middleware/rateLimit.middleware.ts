@@ -26,6 +26,7 @@ export const RATE_POLICIES = {
   // Phase 7 (Section 83): billing actions that would otherwise let a script spam thousands of Stripe objects.
   billingWrite: { name: "billing-write", windowMs: MINUTE, limit: 10 },
   register: { name: "register", windowMs: 60 * MINUTE, limit: 20 },
+  newsletter: { name: "newsletter", windowMs: 60 * MINUTE, limit: 10 },
 } as const satisfies Record<string, Policy>;
 
 /** Builds a limiter keyed by client IP (the app sets `trust proxy` so this is the real client behind a proxy). */
@@ -70,6 +71,7 @@ export const forgotPasswordLimiter = () => createRateLimiter(RATE_POLICIES.passw
 // reset-password has no email in its body (only a token) — keyed by the token itself, so brute-forcing
 // one token is limited without one shared bucket collapsing every unrelated reset in the same window.
 export const resetPasswordLimiter = () => createRateLimiter(RATE_POLICIES.passwordReset, (req) => `${req.ip}:${String((req.body as { token?: string })?.token ?? "")}`);
+export const newsletterLimiter = () => createRateLimiter(RATE_POLICIES.newsletter);
 export const refreshLimiter = () => createRateLimiter(RATE_POLICIES.refresh);
 export const searchLimiter = () => createRateLimiter(RATE_POLICIES.search, visitorKey);
 export const uploadAuthorizationLimiter = () => createRateLimiter(RATE_POLICIES.uploadAuthorization);

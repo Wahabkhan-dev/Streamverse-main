@@ -2,7 +2,7 @@ import { createFileRoute, Outlet, useRouterState } from "@tanstack/react-router"
 import { AccountLayout, isAccountPath } from "@/components/sv/AccountNav";
 import { TopNavbar } from "@/components/sv/TopNavbar";
 import { Logo } from "@/components/sv/Logo";
-import { LEGAL_LINKS } from "@/lib/legal";
+import { SiteFooter } from "@/components/sv/SiteFooter";
 import { AuthGate } from "@/components/sv/AuthGate";
 import { SignInPromptHost } from "@/components/sv/SignInPrompt";
 import { InstallPrompt } from "@/components/sv/InstallPrompt";
@@ -19,24 +19,6 @@ import { Link } from "@tanstack/react-router";
 export const Route = createFileRoute("/_site")({
   component: SiteLayout,
 });
-
-/** One labelled column of footer links. */
-function FooterGroup({ title, links }: { title: string; links: readonly (readonly [string, string])[] }) {
-  return (
-    <nav aria-label={title}>
-      <h2 className="mb-3 text-xs font-semibold tracking-wider text-foreground uppercase">{title}</h2>
-      <ul className="space-y-2 text-sm">
-        {links.map(([to, label]) => (
-          <li key={to}>
-            <Link to={to as "/"} className="hover:text-foreground">
-              {label}
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </nav>
-  );
-}
 
 function SiteLayout() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -95,20 +77,7 @@ function SiteLayout() {
           )}
         </AuthGate>
       </main>
-      <footer className="mt-16 border-t border-border bg-ink">
-        <div className="mx-auto max-w-[1600px] px-4 py-10 text-sm text-muted-foreground md:px-8">
-          <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr_1fr]">
-            <div className="sm:col-span-2 lg:col-span-1">
-              <Logo />
-              <p className="mt-3 max-w-xs text-xs">Movies, eBooks and Audiobooks in one place.</p>
-            </div>
-            <FooterGroup title="Browse" links={[["/movies", "Movies"], ["/ebooks", "eBooks"], ["/audiobooks", "Audiobooks"], ["/collections", "Collections"]]} />
-            <FooterGroup title="Account" links={[["/my-list", "My List"], ["/my-library", "My Library"], ["/history", "History"], ["/profile", "Profile"], ["/subscription", "Subscription"], ["/payment-methods", "Payment methods"]]} />
-            <FooterGroup title="Legal" links={LEGAL_LINKS.map((l) => [l.to, l.label] as const)} />
-          </div>
-          <p className="mt-8 border-t border-border pt-6 text-xs">© 2026 StreamVerse</p>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }
