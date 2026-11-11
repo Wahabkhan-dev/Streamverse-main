@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
+import { storageReadError } from "../storage/storageErrors";
 import { posix } from "node:path";
 import type { Readable } from "node:stream";
 import jwt from "jsonwebtoken";
 import { env } from "../../config/env";
 import * as contentRepository from "../../repositories/content.repository";
 import * as mediaAccessRepository from "../../repositories/mediaAccess.repository";
-import { NotFoundError, UnauthorizedError, ValidationError } from "../../utils/errors";
+import * as userRepository from "../../repositories/user.repository";
+import { ForbiddenError, NotFoundError, UnauthorizedError, ValidationError } from "../../utils/errors";
 import { isCustomerVisible } from "../contentAccess.service";
 import { checkAccess, type AccessContext } from "../entitlement/entitlement.service";
 import { assertSafeRelativePath } from "../media/hlsDelivery.service";
@@ -195,8 +197,8 @@ export async function authorizeDownload(contentId: string, context: AccessContex
   if (title.type === "MOVIE") {
     const storage = getStorageProvider();
     const read = async (rel: string) => (await storage.getObjectRange(posix.join(title.hls!.root, rel), 0, MAX_PLAYLIST_BYTES - 1)).toString("utf8");
-    const master = await read(title.hls!.manifestName).catch(() => {
-      throw new NotFoundError("Movie not found");
+    const master = await read(title.hls!.manifestName).catch((err: unknown) => {
+      throw storageReadError(err, "Movie not found");
     });
     const variant = pickVariant(master);
     if (!variant) throw new ValidationError([{ path: "contentId", message: "This movie has no downloadable version yet." }]);
@@ -239,24 +241,31 @@ export async function renewDownload(contentId: string, context: AccessContext) {
 
 /** One file of an authorised download, as a stream (path/asset checked against what this title really consists of). */
 export async function openDownloadFile(contentId: string, fileId: string, token: string | undefined): Promise<{ stream: Readable; sizeBytes?: number; mime: string }> {
-  verifyOfflineToken(token, contentId);
+  const { sub } = verifyOfflineToken(token, contentId);
+  // The token alone is not enough: a suspended/deleted account, or one that has lost access to this title (cancelled or
+  // expired plan, age or region rule), stops getting files at once rather than when the 2-hour token runs out. The access
+  // decision is the same cached check the players use, so a long list of segments costs one decision per minute.
+  const user = await userRepository.findById(sub);
+  if (!user || user.status !== "ACTIVE") throw new UnauthorizedError("Download authorization is missing or expired.");
   const { title, visible } = await loadTitle(contentId);
   if (!visible || !title.mediaReady) throw new NotFoundError("Title not found");
+  const decision = await checkAccess({ userId: user.id, role: user.role as "USER" | "ADMIN", accountStatus: user.status, country: user.country ?? undefined }, contentId, accessType(title.type));
+  if (!decision.canConsume) throw new ForbiddenError("This title is no longer available to download on your account.");
   const storage = getStorageProvider();
 
   if (fileId.startsWith("h:")) {
     if (!title.hls) throw new NotFoundError("File not found");
     const rel = assertSafeRelativePath(fileId.slice(2));
     if (/\.m3u8$/i.test(rel)) throw new ValidationError([{ path: "f", message: "Playlists are not downloaded this way." }]);
-    const { stream, sizeBytes } = await storage.getObjectStream(posix.join(title.hls.root, rel)).catch(() => {
-      throw new NotFoundError("File not found");
+    const { stream, sizeBytes } = await storage.getObjectStream(posix.join(title.hls.root, rel)).catch((err: unknown) => {
+      throw storageReadError(err, "File not found");
     });
     return { stream, mime: mimeForSegment(rel), ...(sizeBytes !== undefined ? { sizeBytes } : {}) };
   }
   const a = title.assets.get(fileId);
   if (!a) throw new NotFoundError("File not found");
-  const { stream, sizeBytes } = await storage.getObjectStream(a.key).catch(() => {
-    throw new NotFoundError("File not found");
+  const { stream, sizeBytes } = await storage.getObjectStream(a.key).catch((err: unknown) => {
+    throw storageReadError(err, "File not found");
   });
   return { stream, mime: a.mime, ...(sizeBytes !== undefined ? { sizeBytes } : a.bytes ? { sizeBytes: a.bytes } : {}) };
 }

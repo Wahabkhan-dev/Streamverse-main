@@ -5,6 +5,8 @@ import { env, validateProductionEnv } from "./config/env";
 import { onShutdown, runShutdownHooks } from "./config/lifecycle";
 import { logger } from "./config/logger";
 import { HOMEPAGE_CACHE_PREFIX, getCustomerHomepage } from "./services/homepage.service";
+import { cleanupExpiredAuthData } from "./services/sessionCleanup.service";
+import { logReconciliationReport } from "./services/media/reconciliationReport.service";
 import { syncAllRuntimes } from "./services/movieRuntime.service";
 import { analyticsCache } from "./utils/analyticsCache";
 
@@ -42,8 +44,34 @@ if (env.QUEUE_DRIVER !== "bullmq") {
     .catch((err: unknown) => logger.error({ err }, "could not recover interrupted media processing"));
 }
 
+// Expired and long-revoked sign-in sessions and reset tokens are deleted once a day (every token refresh adds a session row, so
+// without this the table only ever grows). Idempotent, so several API instances running it is harmless.
+const AUTH_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const runAuthCleanup = () => void cleanupExpiredAuthData().catch((err: unknown) => logger.warn({ err }, "auth cleanup failed (will retry tomorrow)"));
+const authCleanupStart = setTimeout(runAuthCleanup, 5 * 60 * 1000);
+const authCleanupTimer = setInterval(runAuthCleanup, AUTH_CLEANUP_INTERVAL_MS);
+authCleanupStart.unref();
+authCleanupTimer.unref();
+
+// Read-only storage/database reconciliation once an hour: it only logs what needs attention (missing objects, unattached
+// objects, failed/stuck processing). It never deletes or changes anything; the destructive media cleanup is not scheduled.
+const RECONCILE_INTERVAL_MS = 60 * 60 * 1000;
+const runReconcileReport = () => void logReconciliationReport().catch((err: unknown) => logger.warn({ err }, "media reconciliation report failed"));
+const reconcileStart = setTimeout(runReconcileReport, 10 * 60 * 1000);
+const reconcileTimer = setInterval(runReconcileReport, RECONCILE_INTERVAL_MS);
+reconcileStart.unref();
+reconcileTimer.unref();
+
 // Registered in the order they are opened; closed in reverse (HTTP first, then workers/Redis, then the database).
 onShutdown("database", disconnectDatabase);
+onShutdown("reconcile-report-timer", () => {
+  clearTimeout(reconcileStart);
+  clearInterval(reconcileTimer);
+});
+onShutdown("auth-cleanup-timer", () => {
+  clearTimeout(authCleanupStart);
+  clearInterval(authCleanupTimer);
+});
 
 let shuttingDown = false;
 async function shutdown(signal: string, exitCode = 0) {

@@ -20,13 +20,13 @@ export async function summary(_req: Request, res: Response) {
 }
 
 export async function recentContent(req: Request, res: Response) {
-  const limit = Math.min(Number(req.query["limit"] ?? 10), 50);
+  const limit = Math.max(1, Math.min(Number(req.query["limit"] ?? 10), 50));
   const data = await analyticsService.getRecentContent(isNaN(limit) ? 10 : limit);
   sendSuccess(res, data, "Recent content");
 }
 
 export async function recentUsers(req: Request, res: Response) {
-  const limit = Math.min(Number(req.query["limit"] ?? 10), 50);
+  const limit = Math.max(1, Math.min(Number(req.query["limit"] ?? 10), 50));
   const data = await analyticsService.getRecentUsers(isNaN(limit) ? 10 : limit);
   // Strip sensitive fields from user rows
   const safe = data.map((u) => {

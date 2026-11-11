@@ -2,9 +2,10 @@ import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const sendPasswordReset = vi.fn();
+const sendWelcomeEmail = vi.fn();
 vi.mock("../../src/services/email.service", () => ({
   sendPasswordReset: (...args: unknown[]) => sendPasswordReset(...args),
-  sendWelcomeEmail: vi.fn(),
+  sendWelcomeEmail: (...args: unknown[]) => sendWelcomeEmail(...args),
   sendBillingNotification: vi.fn(),
 }));
 
@@ -113,5 +114,19 @@ describe("POST /api/v1/auth/reset-password", () => {
     expect((await request(app).post("/api/v1/auth/reset-password").send({ token, newPassword: "a-brand-new-passphrase" })).status).toBe(200);
     const res = await request(app).post("/api/v1/auth/reset-password").send({ token, newPassword: "yet-another-passphrase" });
     expect(res.status).toBe(400);
+  });
+});
+
+describe("email provider failures never break sign-up or password reset", () => {
+  it("a failing welcome email still completes the sign-up (account + session), and a failing reset email still answers 200", async () => {
+    sendWelcomeEmail.mockRejectedValueOnce(new Error("resend is down"));
+    const creds = { email: `mailfail-${Date.now()}@example.com`, password: "a-strong-passphrase", fullName: "Mail Fail" };
+    const reg = await request(app).post("/api/v1/auth/register").send(creds);
+    expect(reg.status).toBe(201);
+    expect(reg.body.data.accessToken).toBeTruthy();
+
+    sendPasswordReset.mockRejectedValueOnce(new Error("resend is down"));
+    const fp = await request(app).post("/api/v1/auth/forgot-password").send({ email: creds.email });
+    expect(fp.status).toBe(200);
   });
 });

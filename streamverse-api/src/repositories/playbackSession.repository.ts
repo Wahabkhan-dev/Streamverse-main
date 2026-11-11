@@ -37,5 +37,7 @@ export const endSession = (sessionId: string, userId: string) =>
     data: { status: "ENDED", endedAt: new Date() },
   });
 
+export const findOwned = (id: string, userId: string) => prisma.playbackSession.findFirst({ where: { id, userId }, select: { id: true } });
+
 export const findById = (id: string) =>
   prisma.playbackSession.findUnique({ where: { id } });

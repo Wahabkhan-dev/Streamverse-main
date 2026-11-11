@@ -68,11 +68,14 @@ export function createApp(options: AppOptions = {}): Express {
     app.use("/dev/storage", localStorageRouter);
   }
 
-  app.use(options.limiter ?? generalLimiter());
-
   // Phase 7 (Section 19): Stripe's webhook needs the RAW body for signature verification — mounted here,
   // with its own raw-body parser, strictly before the app's normal express.json() below ever touches it.
+  // Mounted BEFORE the general per-address limit: Stripe delivers every customer's events from a small set of shared
+  // addresses, so a busy hour (renewals) must not be cut off at 300 per 15 minutes. It has its own, much higher limit, and
+  // nothing is processed without a valid Stripe signature.
   app.use("/api/v1/webhooks", webhookRouter);
+
+  app.use(options.limiter ?? generalLimiter());
 
   // Body limits: 1 MB covers all valid API payloads; large media never flows through Express (Phase 6: presigned uploads).
   app.use(express.json({ limit: "1mb" }));

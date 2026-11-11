@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { BookOpen, Check, Clock3, CreditCard, Download, Eye, LockKeyhole, UserX } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { MetricStrip, SearchBox, SelectBox, Toolbar, td, th, tr } from "@/components/sv/admin";
 import { Btn, EmptyState, PageHeader, Panel, PlanBadge, Skel, StatusBadge, TabBar } from "@/components/sv/ui";
@@ -11,7 +11,8 @@ import { itemTitle, useCatalog } from "@/lib/items";
 import { seeded } from "@/lib/runtime";
 import { update, usePlans, useUsers, type User } from "@/lib/store";
 import { DEMO_MODE } from "@/lib/config";
-import { useAdminUsersQuery, useAdminUserMutation, useAdminUserActivityQuery, useAdminSubscriptionsQuery } from "@/hooks/useAdminApi";
+import { useAdminUsersQuery, useAdminUserMutation, useAdminUserActivityQuery, useAdminSubscriptionsQuery, useAdminUserQuery } from "@/hooks/useAdminApi";
+import { adminUsersApi } from "@/api/admin.api";
 import type { ApiAdminUser } from "@/api/types";
 
 export const Route = createFileRoute("/admin/users")({
@@ -37,9 +38,47 @@ const icon = "grid size-8 place-items-center rounded-md text-soft hover:bg-surfa
 const money = (n: number) => `$${n.toFixed(2)}`;
 const date = (iso: string) => new Date(iso).toLocaleDateString(undefined, { dateStyle: "medium" });
 
+/** Rows per page of the live Users table: the server returns exactly this page, never the whole user base. */
+export const USERS_PAGE_SIZE = 25;
+const STATUS_TO_SERVER: Record<string, "ACTIVE" | "SUSPENDED" | undefined> = { All: undefined, Active: "ACTIVE", Suspended: "SUSPENDED" };
+const SORTS = { "Newest first": "newest", "Oldest first": "oldest", "Name A-Z": "name", "Email A-Z": "email", "Last active": "lastLogin" } as const;
+type SortLabel = keyof typeof SORTS;
+
 function Users() {
   const demoUsers = useUsers();
-  const apiQuery = useAdminUsersQuery();
+  const [q, setQ] = useState("");
+  const [status, setStatus] = useState("All");
+  const [sort, setSort] = useState<SortLabel>("Newest first");
+  const [page, setPage] = useState(1);
+  // the search box asks the server only once typing pauses
+  const [search, setSearch] = useState("");
+  const searchRef = useRef("");
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const next = q.trim();
+      // a new filter starts again at page 1, in the same update (no request for the old page with the new filter)
+      if (next === searchRef.current) return;
+      searchRef.current = next;
+      setSearch(next);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [q]);
+  const changeStatus = (v: string) => {
+    setStatus(v);
+    setPage(1);
+  };
+  const changeSort = (v: SortLabel) => {
+    setSort(v);
+    setPage(1);
+  };
+  const apiQuery = useAdminUsersQuery(
+    { page, limit: USERS_PAGE_SIZE, ...(search ? { search } : {}), ...(STATUS_TO_SERVER[status] ? { status: STATUS_TO_SERVER[status] } : {}), sort: SORTS[sort] },
+    { keepPrevious: true },
+  );
+  // whole-platform counts for the tiles (one bounded request each, never the full list)
+  const allUsers = useAdminUsersQuery({ limit: 1 });
+  const suspendedUsers = useAdminUsersQuery({ status: "SUSPENDED", limit: 1 });
   const apiMutation = useAdminUserMutation();
   // real counts for the tiles (the demo figures below only make sense for the sample accounts)
   const activeSubs = useAdminSubscriptionsQuery({ status: "ACTIVE", limit: 1 });
@@ -55,14 +94,18 @@ function Users() {
 
   const { u: openId } = Route.useSearch();
   const navigate = useNavigate();
-  const [q, setQ] = useState("");
-  const [status, setStatus] = useState("All");
   const [tab, setTab] = useState<Tab>("overview");
-  const list = users.filter((u) => (status === "All" || u.status === status) && `${u.name} ${u.email}`.toLowerCase().includes(q.toLowerCase()));
+  // demo: filter the sample accounts here; live: the server already filtered, sorted and paged
+  const list = DEMO_MODE ? users.filter((u) => (status === "All" || u.status === status) && `${u.name} ${u.email}`.toLowerCase().includes(q.toLowerCase())) : users;
+  const pagination = (apiQuery.data as { pagination?: { page: number; totalPages: number; total: number } } | undefined)?.pagination;
+  const matching = DEMO_MODE ? list.length : (pagination?.total ?? list.length);
+  const totalPages = Math.max(1, pagination?.totalPages ?? 1);
+  // a user opened by link who is not on this page is fetched on their own
+  const linked = useAdminUserQuery(!DEMO_MODE && openId && !users.some((u) => u.id === openId) ? openId : undefined);
   const plans = usePlans();
   const totals = planTotals(plans);
   const premiumMembers = plans.filter((p) => p.name.startsWith("Premium") && p.active).reduce((n, p) => n + p.subs, 0);
-  const selected = users.find((u) => u.id === openId);
+  const selected = users.find((u) => u.id === openId) ?? (linked.data?.data ? apiUserToUser(linked.data.data) : undefined);
   const open = (u: User, t: Tab) => {
     setTab(t);
     navigate({ to: "/admin/users", search: { u: u.id } });
@@ -91,9 +134,12 @@ function Users() {
         sub="A considered view of the people who make StreamVerse."
         actions={
           <Btn
-            onClick={() => {
-              const ok = downloadCsv("streamverse-users.csv", [["Name", "Email", "Plan", "Status", "Joined", "Country"], ...list.map((u) => [u.name, u.email, u.plan, u.status, u.joined, u.country])]);
-              if (ok) toast.success(`Exported ${list.length} users`);
+            onClick={async () => {
+              // the only place that reads every account, and only when the admin asks for the file
+              const rows = DEMO_MODE ? list : (await adminUsersApi.listAll().catch(() => null))?.data.map(apiUserToUser);
+              if (!rows) return void toast.error("The export could not be prepared. Please try again.");
+              const ok = downloadCsv("streamverse-users.csv", [["Name", "Email", "Plan", "Status", "Joined", "Country"], ...rows.map((u) => [u.name, u.email, u.plan, u.status, u.joined, u.country])]);
+              if (ok) toast.success(`Exported ${rows.length} users`);
               else toast.error("Your browser blocked the download.");
             }}
           >
@@ -111,13 +157,13 @@ function Users() {
                 { label: "Suspended (in this list)", value: String(users.filter((u) => u.status === "Suspended").length), note: "Needs review", tone: "warn" as const },
               ]
             : (() => {
-                const all = totalOf(apiQuery) || users.length;
+                const all = totalOf(allUsers);
                 const paying = totalOf(activeSubs);
                 return [
                   { label: "Registered users", value: all.toLocaleString(), note: "All accounts", tone: "good" as const },
                   { label: "Paying subscribers", value: paying.toLocaleString(), note: all ? `${Math.round((paying / all) * 100)}% of accounts` : "None yet" },
                   { label: "Payment problems", value: totalOf(pastDueSubs).toLocaleString(), note: "Renewals that failed", tone: "warn" as const },
-                  { label: "Suspended (in this list)", value: String(users.filter((u) => u.status === "Suspended").length), note: "Needs review", tone: "warn" as const },
+                  { label: "Suspended", value: totalOf(suspendedUsers).toLocaleString(), note: "Needs review", tone: "warn" as const },
                 ];
               })()
         }
@@ -125,15 +171,16 @@ function Users() {
       <Panel>
         <Toolbar>
           <SearchBox value={q} onChange={setQ} placeholder="Search by name or email..." />
-          <SelectBox aria-label="User Status" value={status} onChange={setStatus} options={["All", "Active", "Inactive", "Suspended"]} />
-          <span className="ml-auto text-xs text-muted-foreground">{list.length} members</span>
+          <SelectBox aria-label="User Status" value={status} onChange={changeStatus} options={DEMO_MODE ? ["All", "Active", "Inactive", "Suspended"] : ["All", "Active", "Suspended"]} />
+          {!DEMO_MODE && <SelectBox aria-label="Sort users" value={sort} onChange={(v) => changeSort(v as SortLabel)} options={Object.keys(SORTS)} />}
+          <span className="ml-auto text-xs text-muted-foreground">{matching.toLocaleString()} members</span>
         </Toolbar>
         {list.length === 0 ? (
           <div className="p-5">
-            <EmptyState icon={UserX} title="No users found" sub="Try a different name, email or status." action={<Btn onClick={() => { setQ(""); setStatus("All"); }}>Clear filters</Btn>} />
+            <EmptyState icon={UserX} title="No users found" sub="Try a different name, email or status." action={<Btn onClick={() => { setQ(""); changeStatus("All"); }}>Clear filters</Btn>} />
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className={`overflow-x-auto ${apiQuery.isPlaceholderData ? "opacity-60" : ""}`}>
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border">
@@ -193,6 +240,19 @@ function Users() {
               </tbody>
             </table>
           </div>
+        )}
+        {!DEMO_MODE && totalPages > 1 && (
+          <nav aria-label="Users pages" className="flex items-center justify-end gap-2 border-t border-border px-5 py-3 text-xs text-muted-foreground">
+            <span>
+              Page {page} of {totalPages}
+            </span>
+            <Btn size="sm" disabled={page <= 1 || apiQuery.isFetching} onClick={() => setPage((n) => Math.max(1, n - 1))}>
+              Previous
+            </Btn>
+            <Btn size="sm" disabled={page >= totalPages || apiQuery.isFetching} onClick={() => setPage((n) => Math.min(totalPages, n + 1))}>
+              Next
+            </Btn>
+          </nav>
         )}
       </Panel>
 

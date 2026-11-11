@@ -72,6 +72,10 @@ const schema = z
     // Phase 6: background jobs. "inline" runs a job's handler in-process immediately (an explicit,
     // documented dev/test fallback — Section 60), "bullmq" uses Redis via REDIS_URL for real queuing.
     QUEUE_DRIVER: z.enum(["inline", "bullmq"]).default("inline"),
+    /** inline driver only: how many jobs of one queue (e.g. video conversions) run at the same time inside the API process. */
+    INLINE_QUEUE_CONCURRENCY: z.coerce.number().int().min(1).max(8).default(1),
+    /** Worker threads that hash/verify passwords. Unset = min(4, CPUs - 1). Each running hash holds ~19 MB plus its thread. */
+    PASSWORD_HASH_THREADS: optional(z.coerce.number().int().min(1).max(16)),
     REDIS_URL: optional(z.string().regex(/^rediss?:\/\//, "REDIS_URL must start with redis:// or rediss://")),
 
     /** Section 22: override if ffmpeg/ffprobe aren't on PATH. */
@@ -83,6 +87,13 @@ const schema = z
     SUBSCRIPTION_PAST_DUE_GRACE_DAYS: z.coerce.number().int().min(0).default(0),
     /** Seconds an entitlement decision is cached in memory per (user, content, type) triple. 0 = disabled. */
     ENTITLEMENT_CACHE_TTL_SECONDS: z.coerce.number().int().min(0).default(60),
+    /**
+     * Accounts with no plan can still play free titles. This caps how many streams they run at once (a closed player ends its
+     * session at once, and an abandoned one expires after 2 minutes), so free titles cannot pile up unlimited active sessions.
+     * 4, not 1-2: a tab closed abruptly may not report its end, and must not lock the customer out for those 2 minutes.
+     * A plan's own limit replaces it.
+     */
+    FREE_ACCOUNT_MAX_STREAMS: z.coerce.number().int().min(1).max(20).default(4),
 
     // Phase 9: analytics cache TTL.
     /** Seconds expensive analytics queries are cached in memory. 0 = disabled. */

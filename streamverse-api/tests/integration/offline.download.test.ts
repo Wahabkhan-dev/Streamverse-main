@@ -120,6 +120,17 @@ describe("movie download", () => {
     expect((await request(app).get(url("a:not-an-asset-of-this-title"))).status).toBe(404);
   });
 
+  it("stops handing out files at once when the account is suspended, even with a still-valid token", async () => {
+    const content = await movie();
+    const { accessToken, userId } = await createUser(app);
+    const headers = { Authorization: `Bearer ${accessToken}` };
+    const { download } = (await request(app).post(`/api/v1/media/offline/${content.id}/authorize`).set(headers)).body.data;
+    const url = `/api/v1/media/offline-file/${content.id}?f=${encodeURIComponent("h:t720/seg_000.ts")}&t=${encodeURIComponent(download.token)}`;
+    expect((await request(app).get(url)).status).toBe(200);
+    await (prisma as unknown as { user: { update: (a: unknown) => Promise<unknown> } }).user.update({ where: { id: userId }, data: { status: "SUSPENDED" } });
+    expect((await request(app).get(url)).status).toBe(401);
+  });
+
   it("is not available without a session or when the movie is not ready", async () => {
     const content = await movie();
     expect((await request(app).post(`/api/v1/media/offline/${content.id}/authorize`)).status).toBe(401);

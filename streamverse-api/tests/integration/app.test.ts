@@ -89,6 +89,9 @@ describe("security headers and CORS", () => {
   it("sends no CORS headers to other origins, and never a wildcard", async () => {
     const res = await request(app).get("/health").set("Origin", "https://evil.example");
     expect(res.headers["access-control-allow-origin"]).toBeUndefined();
+    // refused as a 403, not reported as a server failure (500): another site calling the API is not our error
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("FORBIDDEN");
     const pre = await request(app).options("/api/v1/anything").set("Origin", "http://localhost:5173").set("Access-Control-Request-Method", "POST");
     expect(pre.status).toBe(204);
     expect(pre.headers["access-control-allow-origin"]).toBe("http://localhost:5173");

@@ -2,8 +2,9 @@ import * as playbackSessionRepository from "../repositories/playbackSession.repo
 import { streamLimitMessage } from "./entitlement/accessMessages";
 import * as subscriptionRepository from "../repositories/subscription.repository";
 import { runLockedForUser } from "../repositories/userLock.repository";
+import { env } from "../config/env";
 import { ERROR_CODES } from "../constants/errors";
-import { AppError } from "../utils/errors";
+import { AppError, NotFoundError } from "../utils/errors";
 import type { ContentType } from "@prisma/client";
 
 export async function startPlaybackSession(
@@ -23,7 +24,8 @@ export async function startPlaybackSession(
 
   // Plan read happens before the lock (a second pooled connection inside the transaction could exhaust the pool).
   const subscription = await (planRead ?? subscriptionRepository.findByUserId(userId));
-  const maxStreams = subscription?.plan?.maxConcurrentStreams;
+  // no plan at all (free titles): the free-account cap; with a plan, the plan's own limit (null there = unlimited)
+  const maxStreams = subscription?.plan ? subscription.plan.maxConcurrentStreams : env.FREE_ACCOUNT_MAX_STREAMS;
 
   return runLockedForUser(userId, async (tx) => {
     if (maxStreams !== null && maxStreams !== undefined) {
@@ -47,10 +49,17 @@ export function readStreamPlan(userId: string) {
   return read;
 }
 
+/**
+ * Keeps one of the caller's own ACTIVE sessions alive. Someone else's session, a made-up id and an ended session all get the
+ * same 404, so the answer never reveals whether a session id belongs to another account.
+ */
 export async function heartbeatSession(sessionId: string, userId: string): Promise<void> {
-  await playbackSessionRepository.heartbeat(sessionId, userId);
+  const { count } = await playbackSessionRepository.heartbeat(sessionId, userId);
+  if (count === 0) throw new NotFoundError("Playback session not found or no longer active");
 }
 
+/** Ending your own session twice is fine (200); an id that is not one of your sessions is a 404. */
 export async function endPlaybackSession(sessionId: string, userId: string): Promise<void> {
-  await playbackSessionRepository.endSession(sessionId, userId);
+  const { count } = await playbackSessionRepository.endSession(sessionId, userId);
+  if (count === 0 && !(await playbackSessionRepository.findOwned(sessionId, userId))) throw new NotFoundError("Playback session not found");
 }

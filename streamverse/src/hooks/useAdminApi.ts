@@ -2,7 +2,7 @@
  * TanStack Query hooks for all admin API endpoints.
  * Each hook is disabled when DEMO_MODE=true so local admin state is used instead.
  */
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   adminMoviesApi,
   adminEbooksApi,
@@ -172,8 +172,18 @@ export const useAdminPlanMutation = () => {
 };
 
 /* ─────────── Users ─────────── */
-export const useAdminUsersQuery = (p?: AdminListParams, opts?: { enabled?: boolean }) =>
-  useQuery({ queryKey: ["admin", "users", p], queryFn: () => (p ? adminUsersApi.list(p) : adminUsersApi.listAll()), enabled: E && (opts?.enabled ?? true) });
+export const useAdminUsersQuery = (p?: AdminListParams, opts?: { enabled?: boolean; keepPrevious?: boolean }) =>
+  useQuery({
+    queryKey: ["admin", "users", p],
+    queryFn: () => (p ? adminUsersApi.list(p) : adminUsersApi.listAll()),
+    enabled: E && (opts?.enabled ?? true),
+    // paging through the Users table: keep showing the current page until the next one arrives (no flash of a loader)
+    ...(opts?.keepPrevious ? { placeholderData: keepPreviousData } : {}),
+  });
+
+/** One account, for a user opened by link (?u=) who is not on the page currently shown. */
+export const useAdminUserQuery = (id: string | undefined) =>
+  useQuery({ queryKey: ["admin", "users", "one", id], queryFn: () => adminUsersApi.get(id!), enabled: E && !!id });
 
 export const useAdminUserMutation = () => {
   const qc = useQueryClient();

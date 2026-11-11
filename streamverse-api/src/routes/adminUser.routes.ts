@@ -8,9 +8,11 @@ const idParam = z.object({ id: z.string().min(1) });
 const listQuery = z.object({
   page: z.coerce.number().int().min(1).optional().default(1),
   limit: z.coerce.number().int().min(1).max(100).optional().default(20),
-  search: z.string().optional(),
+  search: z.string().trim().max(100).optional(),
   role: z.enum(["USER", "ADMIN"]).optional(),
   status: z.enum(["ACTIVE", "SUSPENDED", "DELETED"]).optional(),
+  // allowlisted sort orders (never a raw column name from the client)
+  sort: z.enum(["newest", "oldest", "name", "email", "lastLogin"]).optional().default("newest"),
 });
 const updateBody = z.object({
   fullName: z.string().min(1).optional(),

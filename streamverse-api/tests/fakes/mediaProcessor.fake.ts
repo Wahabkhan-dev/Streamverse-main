@@ -25,7 +25,8 @@ export function createFakeMediaProcessor(opts: { probe?: Partial<ProbeResult>; f
       return {
         spec,
         playlist: Buffer.from(`#EXTM3U\n#EXT-X-VERSION:3\n${spec.name}_000.ts\n#EXT-X-ENDLIST\n`),
-        segments: [{ name: `${spec.name}_000.ts`, data: Buffer.from("fake-segment-data") }],
+        segments: [{ name: `${spec.name}_000.ts`, read: async () => Buffer.from("fake-segment-data") }],
+        dispose: async () => undefined,
       };
     },
   };

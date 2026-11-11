@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import type { Request, Response } from "express";
 import { prisma } from "../config/database";
 import * as subscriptionRepository from "../repositories/subscription.repository";
@@ -30,9 +31,18 @@ function serialize(u: {
 
 const WITH_SUB = { subscription: { select: { status: true } } } as const;
 
+/** Sort orders the Users page can ask for; the id tiebreak keeps paging stable when values repeat. */
+const USER_SORTS = {
+  newest: [{ createdAt: "desc" }, { id: "desc" }],
+  oldest: [{ createdAt: "asc" }, { id: "asc" }],
+  name: [{ fullName: "asc" }, { id: "asc" }],
+  email: [{ email: "asc" }, { id: "asc" }],
+  lastLogin: [{ lastLoginAt: { sort: "desc", nulls: "last" } }, { id: "desc" }],
+} satisfies Record<string, Prisma.UserOrderByWithRelationInput[]>;
+
 export async function list(req: Request, res: Response) {
-  const { page, limit, search, role, status } = req.query as {
-    page?: string; limit?: string; search?: string; role?: string; status?: string;
+  const { page, limit, search, role, status, sort } = req.query as {
+    page?: string; limit?: string; search?: string; role?: string; status?: string; sort?: keyof typeof USER_SORTS;
   };
   const p = Number(page ?? 1);
   const l = Number(limit ?? 20);
@@ -46,7 +56,7 @@ export async function list(req: Request, res: Response) {
   };
 
   const [users, total] = await Promise.all([
-    prisma.user.findMany({ where, skip, take, orderBy: { createdAt: "desc" }, include: WITH_SUB }),
+    prisma.user.findMany({ where, skip, take, orderBy: USER_SORTS[sort ?? "newest"] ?? USER_SORTS.newest, include: WITH_SUB }),
     prisma.user.count({ where }),
   ]);
 

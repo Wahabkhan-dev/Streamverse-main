@@ -1,5 +1,6 @@
 import express, { Router } from "express";
 import { handleStripeWebhook } from "../controllers/webhook.controller";
+import { webhookLimiter } from "../middleware/rateLimit.middleware";
 import { asyncHandler } from "../utils/asyncHandler";
 
 /**
@@ -9,4 +10,4 @@ import { asyncHandler } from "../utils/asyncHandler";
  * never documented alongside the customer/admin API in Swagger (Section 111), only separately.
  */
 export const webhookRouter = Router();
-webhookRouter.post("/stripe", express.raw({ type: "application/json", limit: "1mb" }), asyncHandler(handleStripeWebhook));
+webhookRouter.post("/stripe", webhookLimiter(), express.raw({ type: "application/json", limit: "1mb" }), asyncHandler(handleStripeWebhook));

@@ -6,7 +6,14 @@ import tsConfigPaths from "vite-tsconfig-paths";
 import { nitro } from "nitro/vite";
 
 export default defineConfig(({ command }) => ({
-  server: { host: "::", port: 8080, allowedHosts: true },
+  server: {
+    host: "::",
+    port: 8080,
+    allowedHosts: true,
+    // Playwright writes traces/screenshots into the project while tests run; watching them made the dev server send a full
+    // page reload to the browser under test (seen as pages stuck on "Checking your session…" in long live runs).
+    watch: { ignored: ["**/test-results/**", "**/test-results-live/**", "**/playwright-report/**", "**/playwright-report-live/**"] },
+  },
   resolve: {
     alias: { "@": `${process.cwd()}/src` },
     dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime", "@tanstack/react-query", "@tanstack/query-core"],

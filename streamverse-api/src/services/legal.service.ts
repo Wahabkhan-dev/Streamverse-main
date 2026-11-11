@@ -1,4 +1,5 @@
 import type { LegalDocType } from "@prisma/client";
+import { sanitizeLegalHtml } from "../utils/legalHtml";
 import * as legalRepository from "../repositories/legal.repository";
 import type { LegalVersionMetadataInput } from "../validators/legal.validator";
 import { NotFoundError, ValidationError } from "../utils/errors";
@@ -38,7 +39,8 @@ export function getPublishedDocument(type: LegalDocType) {
       const doc = await legalRepository.findByType(type);
       const v = doc?.currentPublishedVersion;
       if (!doc || !v) return null;
-      return { type: doc.type, title: v.title, slug: doc.slug, content: v.content, version: v.version, effectiveAt: v.effectiveAt, publishedAt: v.publishedAt };
+      // cleaned again on the way out too, so content stored before server-side cleaning existed is safe as well
+      return { type: doc.type, title: v.title, slug: doc.slug, content: sanitizeLegalHtml(v.content), version: v.version, effectiveAt: v.effectiveAt, publishedAt: v.publishedAt };
     },
     ttl,
     stale,
@@ -54,6 +56,8 @@ export const listVersions = legalRepository.listVersionsForType;
 export async function saveDraft(type: LegalDocType, input: LegalVersionMetadataInput, ctx: AuditContext = NO_ACTOR) {
   const doc = await legalRepository.findByType(type);
   if (!doc) throw new NotFoundError(`No legal document is configured for ${type}`);
+  // the stored HTML is always the cleaned HTML (scripts, event handlers, javascript: links and embeds removed)
+  input = { ...input, content: sanitizeLegalHtml(input.content) };
 
   const version = await legalRepository.runInTransaction(async (tx) => {
     if (doc.currentDraftVersionId) return legalRepository.updateVersion(tx, doc.currentDraftVersionId, { ...input, status: "DRAFT" });

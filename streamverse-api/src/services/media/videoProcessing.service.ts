@@ -85,10 +85,15 @@ export async function processVideoAsset(assetId: string): Promise<void> {
         onProgress: (f) => progress.write(at(i, 0.85 * f), `Converting to ${spec.name} (${of})`),
       });
       const playlistKey = renditionPlaylistKey(asset.storageKey, spec.name);
-      await storage.putObject(playlistKey, output.playlist, "application/vnd.apple.mpegurl");
-      for (const [j, segment] of output.segments.entries()) {
-        await storage.putObject(renditionSegmentKey(asset.storageKey, spec.name, segment.name), segment.data, "video/mp2t");
-        progress.write(at(i, 0.85 + (0.15 * (j + 1)) / output.segments.length), `Saving ${spec.name} to storage (${of})`);
+      try {
+        await storage.putObject(playlistKey, output.playlist, "application/vnd.apple.mpegurl");
+        // one segment in memory at a time: a whole rendition of a feature film would not fit
+        for (const [j, segment] of output.segments.entries()) {
+          await storage.putObject(renditionSegmentKey(asset.storageKey, spec.name, segment.name), await segment.read(), "video/mp2t");
+          progress.write(at(i, 0.85 + (0.15 * (j + 1)) / output.segments.length), `Saving ${spec.name} to storage (${of})`);
+        }
+      } finally {
+        await output.dispose();
       }
       await mediaAssetRepository.create({
         contentId: asset.contentId,

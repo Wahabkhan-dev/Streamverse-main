@@ -77,6 +77,47 @@ describe("Movie master video processing (Section 20-26, 96)", () => {
     expect(variantNames).not.toContain("4K"); // Section 24: never upscale past the source
   });
 
+  it("uploads a rendition one segment at a time and always frees its temporary files, even when saving fails", async () => {
+    const reads: string[] = [];
+    let disposed = 0;
+    let failSave = false;
+    fakeProcessorState.current = {
+      probe: createFakeMediaProcessor().probe,
+      async transcodeRendition(_url, spec) {
+        const names = [0, 1, 2].map((i) => `${spec.name}_00${i}.ts`);
+        return {
+          spec,
+          playlist: Buffer.from("#EXTM3U\n"),
+          segments: names.map((name) => ({
+            name,
+            read: async () => {
+              if (failSave) throw new Error("disk read failed");
+              reads.push(name);
+              return Buffer.from(name);
+            },
+          })),
+          dispose: async () => void disposed++,
+        };
+      },
+    };
+    const headers = await admin();
+    const { content } = await makeDraftMovie();
+    const assetId = await presignAndUpload(headers, content.id, "MOVIE_MASTER", "video/mp4", Buffer.from("fake-movie-bytes"));
+    await request(app).post(`/api/v1/admin/uploads/${assetId}/complete`).set(headers);
+    expect(await waitForStatus(assetId, ["READY", "FAILED"])).toBe("READY");
+    // 1080p source: three renditions, three segments each, every one read lazily and every temp folder removed
+    expect(reads).toHaveLength(9);
+    expect(disposed).toBe(3);
+
+    failSave = true;
+    disposed = 0;
+    const { content: second } = await makeDraftMovie();
+    const failing = await presignAndUpload(headers, second.id, "MOVIE_MASTER", "video/mp4", Buffer.from("fake-movie-bytes"));
+    await request(app).post(`/api/v1/admin/uploads/${failing}/complete`).set(headers);
+    expect(await waitForStatus(failing, ["READY", "FAILED"])).toBe("FAILED");
+    expect(disposed).toBe(1);
+  });
+
   it("marks FAILED on a processing error and supports retry (Section 27)", async () => {
     fakeProcessorState.current = createFakeMediaProcessor({ failProbe: true });
     const headers = await admin();

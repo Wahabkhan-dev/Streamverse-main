@@ -30,7 +30,13 @@ export interface RenditionSpec {
 export interface RenditionOutput {
   spec: RenditionSpec;
   playlist: Buffer; // this rendition's own .m3u8
-  segments: { name: string; data: Buffer }[];
+  /**
+   * Read ONE segment at a time (a whole rendition of a feature film is gigabytes: holding every segment in memory at once
+   * would crash the process). The caller must call `dispose()` when done, uploaded or not.
+   */
+  segments: { name: string; read: () => Promise<Buffer> }[];
+  /** Removes the temporary files behind `segments`. Safe to call more than once. */
+  dispose: () => Promise<void>;
 }
 
 export interface TranscodeOptions {

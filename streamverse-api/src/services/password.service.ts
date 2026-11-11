@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import path from "node:path";
 import { Piscina } from "piscina";
+import { env } from "../config/env";
 import { onShutdown } from "../config/lifecycle";
 import runPasswordTask, { type PasswordTask } from "./password.worker";
 
@@ -29,7 +30,8 @@ const ARGON2_PARAMS = {
 // scripts) there is no .js worker to start, so the same function runs in-process, exactly as before.
 const workerFile = path.join(__dirname, "password.worker.js");
 // At most 4 threads: each running hash holds ~19 MB, and more threads than cores only makes every sign-in slower.
-const threads = Math.max(1, Math.min(4, availableParallelism() - 1));
+// PASSWORD_HASH_THREADS caps it on small hosts (a container can report the machine's cores, not its own share).
+const threads = env.PASSWORD_HASH_THREADS ?? Math.max(1, Math.min(4, availableParallelism() - 1));
 // Started on the first sign-in, so code that merely imports this module never starts a thread.
 let pool: Piscina | null | undefined;
 function workerPool(): Piscina | null {

@@ -22,7 +22,9 @@ export const registerSchema = z.object({
 
 export const loginSchema = z.object({
   email,
-  password: z.string().min(1, "Password is required"),
+  // capped well above the 128-character rule for new passwords: nothing longer can be a real password, and nobody needs to make
+  // the server hash a 1 MB string
+  password: z.string().min(1, "Password is required").max(1024, "Password is too long"),
 });
 
 export const forgotPasswordSchema = z.object({
@@ -35,6 +37,6 @@ export const resetPasswordSchema = z.object({
 });
 
 export const changePasswordSchema = z.object({
-  currentPassword: z.string().min(1, "Current password is required"),
+  currentPassword: z.string().min(1, "Current password is required").max(1024, "Password is too long"),
   newPassword: password,
 });

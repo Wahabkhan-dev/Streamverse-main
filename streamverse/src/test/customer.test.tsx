@@ -248,7 +248,8 @@ describe("notifications, profile and subscription", () => {
 
   it("the profile validates and saves", async () => {
     renderAt("/profile");
-    const email = await screen.findByLabelText(/Email/);
+    // the profile's own field (the footer's newsletter box is labelled "Email address")
+    const email = await screen.findByLabelText(/^Email\s*\*?$/);
     fireEvent.change(email, { target: { value: "not-an-email" } });
     fireEvent.click(screen.getAllByRole("button", { name: /Save Changes/ })[0]!);
     expect(await screen.findByText("Enter a valid email address.")).toBeTruthy();

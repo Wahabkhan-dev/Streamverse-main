@@ -9,6 +9,10 @@ import type { AudioStreamInfo, MediaProcessor, ProbeResult, RenditionOutput, Ren
 const run = promisify(execFile);
 const FFMPEG = env.FFMPEG_PATH ?? "ffmpeg";
 const FFPROBE = env.FFPROBE_PATH ?? "ffprobe";
+/** ffprobe only reads headers: two minutes is generous even over a slow link. */
+const PROBE_TIMEOUT_MS = 2 * 60 * 1000;
+/** A conversion that writes nothing at all (no progress, no log) for this long is stuck (e.g. the source stopped sending). */
+const FFMPEG_STALL_MS = 10 * 60 * 1000;
 
 /** Section 22/83: fail clearly at worker startup if ffmpeg/ffprobe aren't available — never fall back to pretending. */
 export async function assertFfmpegAvailable(): Promise<void> {
@@ -38,7 +42,13 @@ interface FfprobeOutput {
 export function createFfmpegMediaProcessor(): MediaProcessor {
   return {
     async probe(sourceUrl: string): Promise<ProbeResult> {
-      const { stdout } = await run(FFPROBE, ["-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", sourceUrl]);
+      // bounded: a source that never answers (or a pathological file) must fail the job, not hold the worker forever
+      const { stdout } = await run(FFPROBE, ["-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", sourceUrl], { timeout: PROBE_TIMEOUT_MS, maxBuffer: 10 * 1024 * 1024 }).catch(
+        (err: { code?: number | string; killed?: boolean }) => {
+          // the raw error repeats the whole command line, including the signed source link: never store or show that
+          throw new Error(err.killed ? "ffprobe timed out reading the file" : `ffprobe could not read the file (exit ${String(err.code ?? "unknown")}) — it may not be a valid video/audio file`);
+        },
+      );
       const parsed = JSON.parse(stdout) as FfprobeOutput;
       const video = parsed.streams?.find((s) => s.codec_type === "video");
       const audioStreams: AudioStreamInfo[] = (parsed.streams ?? [])
@@ -63,6 +73,7 @@ export function createFfmpegMediaProcessor(): MediaProcessor {
       const playlistPath = path.join(dir, `${spec.name}.m3u8`);
       const duration = opts.durationSeconds && opts.durationSeconds > 0 ? opts.durationSeconds : null;
       const onTime = duration && opts.onProgress ? (seconds: number) => opts.onProgress!(Math.min(1, seconds / duration)) : undefined;
+      const dispose = () => rm(dir, { recursive: true, force: true });
       try {
         await runFfmpeg([
           // machine-readable "how far" lines on stdout; the human log stays on stderr for the error message
@@ -89,12 +100,15 @@ export function createFfmpegMediaProcessor(): MediaProcessor {
           playlistPath,
         ], onTime);
         const files = await readdir(dir);
-        const segmentFiles = files.filter((f) => f.endsWith(".ts"));
+        const segmentFiles = files.filter((f) => f.endsWith(".ts")).sort();
         const playlist = await readFile(playlistPath);
-        const segments = await Promise.all(segmentFiles.map(async (name) => ({ name, data: await readFile(path.join(dir, name)) })));
-        return { spec, playlist, segments };
-      } finally {
-        await rm(dir, { recursive: true, force: true });
+        // Segments stay on disk and are read one at a time by the caller (a feature film's rendition is gigabytes); the caller
+        // removes the folder with dispose() once they are uploaded.
+        const segments = segmentFiles.map((name) => ({ name, read: () => readFile(path.join(dir, name)) }));
+        return { spec, playlist, segments, dispose };
+      } catch (err) {
+        await dispose();
+        throw err;
       }
     },
   };
@@ -109,7 +123,19 @@ function runFfmpeg(args: string[], onTime?: (seconds: number) => void): Promise<
     const child = spawn(FFMPEG, args, { windowsHide: true });
     let pending = "";
     let log = "";
+    let stalled = false;
+    let watchdog: NodeJS.Timeout | undefined;
+    const alive = () => {
+      clearTimeout(watchdog);
+      watchdog = setTimeout(() => {
+        stalled = true;
+        child.kill("SIGKILL");
+      }, FFMPEG_STALL_MS);
+      watchdog.unref();
+    };
+    alive();
     child.stdout.on("data", (chunk: Buffer) => {
+      alive();
       pending += chunk.toString();
       const lines = pending.split(/\r?\n/);
       pending = lines.pop() ?? "";
@@ -120,16 +146,25 @@ function runFfmpeg(args: string[], onTime?: (seconds: number) => void): Promise<
       }
     });
     child.stderr.on("data", (chunk: Buffer) => {
+      alive();
       log = (log + chunk.toString()).slice(-8000);
     });
-    child.on("error", reject);
+    child.on("error", (err) => {
+      clearTimeout(watchdog);
+      reject(err);
+    });
     child.on("close", (code) => {
+      clearTimeout(watchdog);
+      if (stalled) return reject(new Error(`ffmpeg made no progress for ${FFMPEG_STALL_MS / 60000} minutes and was stopped`));
       if (code === 0) return resolve();
-      const last = log.trim().split(/\r?\n/).slice(-6).join(" | ");
+      const last = redactUrls(log.trim().split(/\r?\n/).slice(-6).join(" | "));
       reject(new Error(`ffmpeg stopped with code ${code}: ${last}`));
     });
   });
 }
+
+/** ffmpeg's log names its input, which is a signed storage link: replace any link before the text is stored or shown. */
+export const redactUrls = (text: string) => text.replace(/[a-z][a-z0-9+.-]*:\/\/[^\s'"|]+/gi, "<source>");
 
 function evalFrameRate(raw: string): number | null {
   const [num, den] = raw.split("/").map(Number);

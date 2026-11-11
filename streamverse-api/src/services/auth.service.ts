@@ -46,7 +46,11 @@ export async function register(input: { email: string; password: string; fullNam
   const passwordHash = await hashPassword(input.password);
   const user = await userRepository.create({ email, passwordHash, fullName: input.fullName });
   logAuthEvent("register.success", req, { userId: user.id });
-  await sendWelcomeEmail({ to: user.email, subject: "Welcome to StreamVerse", name: user.fullName });
+  // Not awaited: the account exists at this point, so an email provider that is down or slow must not turn a successful sign-up
+  // into an error (the customer would then be told the address is taken when they try again) or keep them waiting.
+  void Promise.resolve()
+    .then(() => sendWelcomeEmail({ to: user.email, subject: "Welcome to StreamVerse", name: user.fullName }))
+    .catch((err: unknown) => logger.warn({ userId: user.id, err: (err as Error).message }, "auth: welcome email delivery failed"));
 
   const session = await issueSession(user.id, user.role, req);
   return { user: serializeUser(user), ...session };
@@ -130,12 +134,11 @@ export async function forgotPassword(email: string, req: Request): Promise<void>
   const reset = issuePasswordResetToken();
   await passwordResetRepository.create({ userId: user.id, tokenHash: reset.tokenHash, expiresAt: reset.expiresAt });
   logAuthEvent("password.reset_requested", req, { userId: user.id });
-  // Swallow email errors — caller always gets the same generic response for anti-enumeration.
-  try {
-    await sendPasswordReset({ to: user.email, subject: "Reset your StreamVerse password", resetToken: reset.token, expiresInMinutes: env.PASSWORD_RESET_TOKEN_TTL_MINUTES });
-  } catch (err) {
-    logger.warn({ userId: user.id, err: (err as Error).message }, "auth: forgot-password email delivery failed");
-  }
+  // Sent in the background: the caller always gets the same generic response, and in about the same time whether or not the
+  // address has an account (waiting for the email provider here would make known addresses measurably slower).
+  void Promise.resolve()
+    .then(() => sendPasswordReset({ to: user.email, subject: "Reset your StreamVerse password", resetToken: reset.token, expiresInMinutes: env.PASSWORD_RESET_TOKEN_TTL_MINUTES }))
+    .catch((err: unknown) => logger.warn({ userId: user.id, err: (err as Error).message }, "auth: forgot-password email delivery failed"));
 }
 
 export async function resetPassword(token: string, newPassword: string, req: Request): Promise<void> {

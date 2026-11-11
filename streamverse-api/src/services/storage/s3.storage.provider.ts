@@ -32,6 +32,10 @@ export function createS3StorageProvider(): StorageProvider {
     // body, so R2/B2/Spaces reject the real file. Only send checksums when an operation requires them.
     requestChecksumCalculation: "WHEN_REQUIRED",
     responseChecksumValidation: "WHEN_REQUIRED",
+    // Without these a storage outage holds every request that touches it for a minute or more (measured: ~63 s). Connecting
+    // must succeed within 5 s; an open connection that goes quiet for 60 s is dropped (long uploads keep sending, so they are
+    // unaffected). The SDK's own retries (3 attempts, backoff) still apply to transient errors.
+    requestHandler: { connectionTimeout: 5_000, requestTimeout: 60_000 },
   });
   const bucket = env.AWS_BUCKET!;
 

@@ -13,6 +13,8 @@ export async function registerDevice(
   // The plan is read BEFORE taking the lock: reading it inside the transaction would need a second pooled
   // connection while this one is held, which can exhaust the pool when many requests for one user queue up.
   const subscription = await subscriptionRepository.findByUserId(userId);
+  // No plan: no device cap. Every new browser or private window is a new device, so a cap here would lock free customers out
+  // of free titles; their device rows are bounded by the rate limit and re-registering the same browser reuses its row.
   const maxDevices = subscription?.plan?.maxDevices;
 
   // check + insert under a per-user lock: two simultaneous registrations must not both pass the limit check

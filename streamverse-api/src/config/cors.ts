@@ -1,4 +1,5 @@
 import type { CorsOptions } from "cors";
+import { ForbiddenError } from "../utils/errors";
 import { env } from "./env";
 
 /**
@@ -12,7 +13,8 @@ export function buildCorsOptions(allowedOrigins: readonly string[] = env.allowed
       // Allow requests with no origin (server-to-server, health checks, Stripe webhooks)
       if (!origin) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, true);
-      callback(new Error(`Origin ${origin} not allowed by CORS`));
+      // a 403 (and a debug-level log), not a 500: a page on another site calling the API is not a server failure
+      callback(new ForbiddenError("This origin is not allowed to call the StreamVerse API"));
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],

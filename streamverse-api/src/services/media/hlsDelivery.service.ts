@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { storageReadError } from "../storage/storageErrors";
 import { posix } from "node:path";
 import jwt from "jsonwebtoken";
 import { env } from "../../config/env";
@@ -166,8 +167,8 @@ async function loadAuthorizedHls(contentId: string, token: string | undefined) {
         getStorageProvider()
           .getObjectRange(posix.join(hlsRoot, name), 0, MAX_PLAYLIST_BYTES - 1)
           .then((buf) => buf.toString("utf8"))
-          .catch(() => {
-            throw new NotFoundError("Playlist not found");
+          .catch((err: unknown) => {
+            throw storageReadError(err, "Playlist not found");
           }),
       PLAYLIST_CACHE_SECONDS,
     );

@@ -3,6 +3,8 @@ import { pingDatabase } from "../repositories/health.repository";
 
 type CheckStatus = "ok" | "unavailable" | "disabled";
 
+const READY_DB_TIMEOUT_MS = 3_000;
+
 export interface QueueStats {
   waiting: number;
   active: number;
@@ -25,9 +27,14 @@ export const getLiveness = () => ({
 export async function getReadiness(): Promise<Readiness> {
   const checks: Record<string, CheckStatus> = {};
 
-  // Database check — always required
+  // Database check — always required. Bounded: during an outage the ping can otherwise wait for the pool's own timeouts
+  // (measured: 17 s), which outlasts any monitor's patience and keeps a request open per probe.
   try {
-    await pingDatabase();
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error("database ping timed out")), READY_DB_TIMEOUT_MS);
+    });
+    await Promise.race([pingDatabase(), timeout]).finally(() => clearTimeout(timer));
     checks["database"] = "ok";
   } catch {
     checks["database"] = "unavailable";
