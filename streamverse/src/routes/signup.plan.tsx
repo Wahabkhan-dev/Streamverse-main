@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePlans } from "@/lib/store";
-import { useProfile, useSubscription, useUserHydrated } from "@/lib/user";
+import { useSignupGate } from "@/hooks/useSignupGate";
 import { SignupStepper } from "@/components/sv/SignupStepper";
 import type { Plan } from "@/lib/store";
 import { DEMO_MODE } from "@/lib/config";
@@ -65,12 +65,7 @@ function PlanStep() {
   const navigate = useNavigate();
   const localPlans = usePlans();
   const apiPlansQuery = useApiPlansQuery();
-  const profile = useProfile();
-  const sub = useSubscription();
-  const isGuest = profile.email === "alex@streamverse.tv" && profile.name === "Alex Morgan";
-  const isActive = !isGuest && sub.status === "active";
-
-  const hydrated = useUserHydrated();
+  const { ready, isActive } = useSignupGate();
 
   // Live mode: the backend's plans only — never the demo cards, not even while loading or after an error
   const plans: Plan[] = DEMO_MODE ? localPlans : (apiPlansQuery.data?.map(apiPlanToLocal) ?? []);
@@ -79,8 +74,8 @@ function PlanStep() {
   const [selected, setSelected] = useState<string>(() => readSessionPlan());
 
   useEffect(() => {
-    if (hydrated && isActive) void navigate({ to: "/", replace: true });
-  }, [hydrated, isActive, navigate]);
+    if (ready && isActive) void navigate({ to: "/", replace: true });
+  }, [ready, isActive, navigate]);
 
   function selectPlan(name: string) {
     setSelected(name);

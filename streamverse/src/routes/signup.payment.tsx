@@ -2,7 +2,8 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { ArrowLeft, CreditCard, RefreshCcw, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { updateUser, useProfile, useSubscription, useUserHydrated } from "@/lib/user";
+import { updateUser, useProfile } from "@/lib/user";
+import { useSignupGate } from "@/hooks/useSignupGate";
 import { usePlans } from "@/lib/store";
 import { SignupStepper } from "@/components/sv/SignupStepper";
 import { SIGNUP_PLAN_KEY } from "./signup.plan";
@@ -10,7 +11,6 @@ import type { Plan } from "@/lib/store";
 import { DEMO_MODE } from "@/lib/config";
 import { useApiPlansQuery, planPriceDollars, planInterval } from "@/hooks/useApiPlans";
 import { meApi } from "@/api/me.api";
-import { useApiSubscriptionQuery } from "@/hooks/useApiSubscription";
 import { isApiError } from "@/api/client";
 import type { ApiPlan } from "@/api/types";
 import { StripePayBox } from "@/components/sv/billing/StripePayBox";
@@ -27,23 +27,16 @@ type PayState = "idle" | "processing" | "canceled" | "failed";
 function PaymentStep() {
   const navigate = useNavigate();
   const profile = useProfile();
-  const sub = useSubscription();
   const localPlans = usePlans();
   const apiPlansQuery = useApiPlansQuery();
-  const isGuest = profile.email === "alex@streamverse.tv" && profile.name === "Alex Morgan";
-  // Live: the server says whether this customer already has a membership (the browser store only holds demo data)
-  const serverSub = useApiSubscriptionQuery();
-  const serverActive = ["ACTIVE", "TRIALING"].includes(String((serverSub.data as { status?: string } | undefined)?.status ?? ""));
-  const isActive = DEMO_MODE ? !isGuest && sub.status === "active" : serverActive;
-  const subKnown = DEMO_MODE || !serverSub.isLoading;
-
-  const hydrated = useUserHydrated();
+  // Live: the real session and the server's subscription decide (the browser store only holds demo data)
+  const { ready, isGuest, isActive } = useSignupGate();
   const [planName, setPlanName] = useState<string>("");
   const [payState, setPayState] = useState<PayState>("idle");
   const [apiError, setApiError] = useState<string>("");
 
   useEffect(() => {
-    if (!hydrated || !subKnown) return;
+    if (!ready) return;
     if (isActive) {
       void navigate({ to: "/", replace: true });
       return;
@@ -64,7 +57,7 @@ function PaymentStep() {
       return;
     }
     setPlanName(saved);
-  }, [hydrated, subKnown, isActive, isGuest, navigate]);
+  }, [ready, isActive, isGuest, navigate]);
 
   // In real-API mode resolve plan from backend data (keyed by name for now; ID stored in sessionStorage once we switch to ID-based selection)
   const apiPlans: ApiPlan[] = apiPlansQuery.data ?? [];

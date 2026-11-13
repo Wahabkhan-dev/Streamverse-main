@@ -1,4 +1,5 @@
-import { execFile, spawn } from "node:child_process";
+import { execFile, execFileSync, spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -7,8 +8,41 @@ import { env } from "../../config/env";
 import type { AudioStreamInfo, MediaProcessor, ProbeResult, RenditionOutput, RenditionSpec, TranscodeOptions } from "./mediaProcessor.provider";
 
 const run = promisify(execFile);
-const FFMPEG = env.FFMPEG_PATH ?? "ffmpeg";
-const FFPROBE = env.FFPROBE_PATH ?? "ffprobe";
+
+/** True when `cmd` runs (a system ffmpeg/ffprobe on PATH). */
+function runs(cmd: string): boolean {
+  try {
+    execFileSync(cmd, ["-version"], { stdio: "ignore", timeout: 10_000, windowsHide: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The binary shipped by the ffmpeg-static / ffprobe-static packages, when they are installed and their file exists. */
+function bundled(pkg: "ffmpeg-static" | "ffprobe-static"): string | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require(pkg) as string | { path?: string } | null;
+    const p = typeof mod === "string" ? mod : mod?.path;
+    return p && existsSync(p) ? p : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Which ffmpeg/ffprobe to run, decided once on first use: FFMPEG_PATH/FFPROBE_PATH when set, else the system one on PATH
+ * (the Docker image installs it), else the copy bundled with the npm packages (hosts without a system ffmpeg, e.g. Hostinger).
+ */
+let binaries: { ffmpeg: string; ffprobe: string } | null = null;
+function bin(): { ffmpeg: string; ffprobe: string } {
+  binaries ??= {
+    ffmpeg: env.FFMPEG_PATH ?? (runs("ffmpeg") ? "ffmpeg" : (bundled("ffmpeg-static") ?? "ffmpeg")),
+    ffprobe: env.FFPROBE_PATH ?? (runs("ffprobe") ? "ffprobe" : (bundled("ffprobe-static") ?? "ffprobe")),
+  };
+  return binaries;
+}
 /** ffprobe only reads headers: two minutes is generous even over a slow link. */
 const PROBE_TIMEOUT_MS = 2 * 60 * 1000;
 /** A conversion that writes nothing at all (no progress, no log) for this long is stuck (e.g. the source stopped sending). */
@@ -16,11 +50,12 @@ const FFMPEG_STALL_MS = 10 * 60 * 1000;
 
 /** Section 22/83: fail clearly at worker startup if ffmpeg/ffprobe aren't available — never fall back to pretending. */
 export async function assertFfmpegAvailable(): Promise<void> {
+  const { ffmpeg, ffprobe } = bin();
   try {
-    await run(FFPROBE, ["-version"]);
-    await run(FFMPEG, ["-version"]);
+    await run(ffprobe, ["-version"]);
+    await run(ffmpeg, ["-version"]);
   } catch {
-    throw new Error(`ffmpeg/ffprobe not found (looked for "${FFMPEG}" / "${FFPROBE}" on PATH). Set FFMPEG_PATH/FFPROBE_PATH or install ffmpeg.`);
+    throw new Error(`ffmpeg/ffprobe not found (looked for "${ffmpeg}" / "${ffprobe}"). Set FFMPEG_PATH/FFPROBE_PATH or install ffmpeg.`);
   }
 }
 
@@ -43,9 +78,10 @@ export function createFfmpegMediaProcessor(): MediaProcessor {
   return {
     async probe(sourceUrl: string): Promise<ProbeResult> {
       // bounded: a source that never answers (or a pathological file) must fail the job, not hold the worker forever
-      const { stdout } = await run(FFPROBE, ["-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", sourceUrl], { timeout: PROBE_TIMEOUT_MS, maxBuffer: 10 * 1024 * 1024 }).catch(
+      const { stdout } = await run(bin().ffprobe, ["-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", sourceUrl], { timeout: PROBE_TIMEOUT_MS, maxBuffer: 10 * 1024 * 1024 }).catch(
         (err: { code?: number | string; killed?: boolean }) => {
           // the raw error repeats the whole command line, including the signed source link: never store or show that
+          if (err.code === "ENOENT") throw new Error("FFmpeg is not installed on the server, so videos and audio cannot be processed. Your file is fine; retry once FFmpeg is installed.");
           throw new Error(err.killed ? "ffprobe timed out reading the file" : `ffprobe could not read the file (exit ${String(err.code ?? "unknown")}) — it may not be a valid video/audio file`);
         },
       );
@@ -120,7 +156,7 @@ export function createFfmpegMediaProcessor(): MediaProcessor {
  */
 function runFfmpeg(args: string[], onTime?: (seconds: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(FFMPEG, args, { windowsHide: true });
+    const child = spawn(bin().ffmpeg, args, { windowsHide: true });
     let pending = "";
     let log = "";
     let stalled = false;

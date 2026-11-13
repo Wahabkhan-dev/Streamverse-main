@@ -2,7 +2,8 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Eye, EyeOff } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
-import { updateUser, useProfile, useSubscription, useUserHydrated } from "@/lib/user";
+import { updateUser } from "@/lib/user";
+import { useSignupGate } from "@/hooks/useSignupGate";
 import { useSettings } from "@/lib/store";
 import { SignupStepper } from "@/components/sv/SignupStepper";
 import { SIGNUP_PLAN_KEY } from "./signup.plan";
@@ -30,13 +31,8 @@ function passwordStrength(pw: string): { score: number; label: string; color: st
 
 function AccountStep() {
   const navigate = useNavigate();
-  const profile = useProfile();
-  const sub = useSubscription();
   const { registration } = useSettings();
-  const isGuest = profile.email === "alex@streamverse.tv" && profile.name === "Alex Morgan";
-  const isActive = !isGuest && sub.status === "active";
-
-  const hydrated = useUserHydrated();
+  const { ready, isGuest, isActive } = useSignupGate();
   const [form, setForm] = useState({ name: "", email: "", password: "", confirm: "" });
   const [showPw, setShowPw] = useState(false);
   const [showCf, setShowCf] = useState(false);
@@ -44,7 +40,7 @@ function AccountStep() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!ready) return;
     if (isActive) {
       void navigate({ to: "/", replace: true });
       return;
@@ -65,7 +61,7 @@ function AccountStep() {
     if (!plan) {
       void navigate({ to: "/signup/plan", replace: true });
     }
-  }, [hydrated, isActive, isGuest, navigate]);
+  }, [ready, isActive, isGuest, navigate]);
 
   function field(id: keyof typeof form, v: string) {
     setForm((f) => ({ ...f, [id]: v }));
