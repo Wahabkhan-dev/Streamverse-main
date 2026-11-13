@@ -3,11 +3,22 @@ import { existsSync } from "node:fs";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { promisify } from "node:util";
 import { env } from "../../config/env";
 import type { AudioStreamInfo, MediaProcessor, ProbeResult, RenditionOutput, RenditionSpec, TranscodeOptions } from "./mediaProcessor.provider";
 
-const run = promisify(execFile);
+/**
+ * execFile as a promise of { stdout, stderr }. Written out with the callback instead of util.promisify(execFile): under
+ * Hostinger's LiteSpeed runner (lsnode) the promisified form resolved without `stdout`, so every probe failed with
+ * '"undefined" is not valid JSON' although ffprobe itself had answered.
+ */
+function run(cmd: string, args: string[], opts: { timeout?: number; maxBuffer?: number } = {}): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    execFile(cmd, args, { ...opts, encoding: "utf8", windowsHide: true }, (err, stdout, stderr) => {
+      if (err) reject(Object.assign(err, { stdout: String(stdout ?? ""), stderr: String(stderr ?? "") }));
+      else resolve({ stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
+    });
+  });
+}
 
 /** True when `cmd` runs (a system ffmpeg/ffprobe on PATH). */
 function runs(cmd: string): boolean {
@@ -85,7 +96,12 @@ export function createFfmpegMediaProcessor(): MediaProcessor {
           throw new Error(err.killed ? "ffprobe timed out reading the file" : `ffprobe could not read the file (exit ${String(err.code ?? "unknown")}) — it may not be a valid video/audio file`);
         },
       );
-      const parsed = JSON.parse(stdout) as FfprobeOutput;
+      let parsed: FfprobeOutput;
+      try {
+        parsed = JSON.parse(stdout) as FfprobeOutput;
+      } catch {
+        throw new Error("ffprobe returned no readable details for this file — it may not be a valid video/audio file");
+      }
       const video = parsed.streams?.find((s) => s.codec_type === "video");
       const audioStreams: AudioStreamInfo[] = (parsed.streams ?? [])
         .filter((s) => s.codec_type === "audio")
