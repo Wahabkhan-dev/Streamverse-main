@@ -81,6 +81,11 @@ const schema = z
     /** Section 22: override if ffmpeg/ffprobe aren't on PATH. */
     FFMPEG_PATH: optional(z.string().min(1)),
     FFPROBE_PATH: optional(z.string().min(1)),
+    /**
+     * Threads one ffmpeg conversion may use. Unset = min(4, CPUs). Never "all CPUs": shared hosts (CloudLinux, e.g. Hostinger)
+     * report 64 cores but cap the account's threads, so ffmpeg's own default failed to start its encoder there.
+     */
+    FFMPEG_THREADS: optional(z.coerce.number().int().min(1).max(32)),
 
     // Phase 8: content access / entitlement.
     /** Days PAST_DUE before access is cut off. 0 = deny immediately on PAST_DUE (safe default). */

@@ -53,6 +53,7 @@
 | API_DOCS_ENABLED | false | Defaults to false in production |
 | FFMPEG_PATH | /usr/bin/ffmpeg | Only if ffmpeg is not on PATH |
 | FFPROBE_PATH | /usr/bin/ffprobe | Only if ffprobe is not on PATH |
+| FFMPEG_THREADS | 4 | Threads per video conversion; empty = min(4, CPUs). Shared hosts cap threads, so keep it small there |
 | MEDIA_BASE_URL | https://cdn.streamverse.com | Public CDN base URL; falls back to signed URLs |
 
 ## Frontend (streamverse)

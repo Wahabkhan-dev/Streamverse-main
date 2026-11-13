@@ -1,7 +1,7 @@
 import { execFile, execFileSync, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { availableParallelism, tmpdir } from "node:os";
 import path from "node:path";
 import { env } from "../../config/env";
 import type { AudioStreamInfo, MediaProcessor, ProbeResult, RenditionOutput, RenditionSpec, TranscodeOptions } from "./mediaProcessor.provider";
@@ -54,6 +54,12 @@ function bin(): { ffmpeg: string; ffprobe: string } {
   };
   return binaries;
 }
+/**
+ * Threads for one conversion. ffmpeg's default is "one per CPU" (x264 even 1.5x), and on Hostinger's CloudLinux the machine
+ * reports 64 CPUs while the account may only start a limited number of threads: the scaler and encoder then failed to start
+ * ("Resource temporarily unavailable" → libx264 "Invalid argument", nothing written). A small fixed count works everywhere.
+ */
+export const ffmpegThreads = () => env.FFMPEG_THREADS ?? Math.max(1, Math.min(4, availableParallelism()));
 /** ffprobe only reads headers: two minutes is generous even over a slow link. */
 const PROBE_TIMEOUT_MS = 2 * 60 * 1000;
 /** A conversion that writes nothing at all (no progress, no log) for this long is stuck (e.g. the source stopped sending). */
@@ -126,14 +132,19 @@ export function createFfmpegMediaProcessor(): MediaProcessor {
       const duration = opts.durationSeconds && opts.durationSeconds > 0 ? opts.durationSeconds : null;
       const onTime = duration && opts.onProgress ? (seconds: number) => opts.onProgress!(Math.min(1, seconds / duration)) : undefined;
       const dispose = () => rm(dir, { recursive: true, force: true });
+      const threads = String(ffmpegThreads());
       try {
         await runFfmpeg([
           // machine-readable "how far" lines on stdout; the human log stays on stderr for the error message
           "-progress",
           "pipe:1",
           "-nostats",
+          "-filter_threads",
+          threads,
           "-i",
           sourceUrl,
+          "-threads",
+          threads,
           // h264 needs even dimensions: a 1920x1080 source scaled into 854x480 would otherwise become 853x480 and fail to encode
           "-vf",
           `scale=w=${spec.width}:h=${spec.height}:force_original_aspect_ratio=decrease:force_divisible_by=2`,
